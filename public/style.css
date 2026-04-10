@@ -145,23 +145,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .search-result-name { font-size: 14px; font-weight: 500; }
 .search-result-sub { font-size: 11px; color: var(--muted2); margin-top: 1px; }
 
-/* ── STAP 3: Scrollbare tabs ── */
+/* ── Tabs ── */
 .tabs {
   display: flex;
   gap: 5px;
   margin-bottom: 1rem;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
-.tabs::-webkit-scrollbar { display: none; }
 .tab {
   padding: 7px 14px; font-size: 13px; font-weight: 500;
   border: 1px solid var(--border); border-radius: 8px;
   cursor: pointer; background: var(--surface); color: var(--muted2);
-  transition: all 0.18s var(--ease); user-select: none; flex-shrink: 0; white-space: nowrap;
+  transition: all 0.18s var(--ease); user-select: none; white-space: nowrap;
 }
 .tab:hover { color: var(--text); border-color: var(--border-hover); background: var(--surface2); }
 .tab.active {
