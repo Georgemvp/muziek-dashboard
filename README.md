@@ -9,16 +9,30 @@ Een persoonlijke muziekdashboard op basis van Last.fm, draaiend als Docker-conta
 ## Mappenstructuur
 
 ```
-lastfm-app/
-├── server.js           ← Node/Express backend + alle API-logica
+muziek-dashboard/
 ├── public/
-│   └── index.html      ← Frontend (HTML/CSS/JS in één bestand)
-├── Dockerfile          ← Hoe de container wordt gebouwd
-├── docker-compose.yml  ← Hoe de container wordt gestart
+│   ├── index.html      ← Frontend HTML
+│   ├── style.css       ← Alle styling
+│   └── app.js          ← Frontend JavaScript
+├── services/
+│   ├── lastfm.js       ← Last.fm API-calls
+│   ├── plex.js         ← Plex-integratie & bibliotheeksync
+│   ├── musicbrainz.js  ← MusicBrainz metadata
+│   ├── deezer.js       ← Deezer artiestfoto's
+│   ├── discover.js     ← Ontdek-logica (nieuwe artiesten)
+│   ├── gaps.js         ← Ontbrekende albums detectie
+│   └── releases.js     ← Nieuwe releases van je artiesten
+├── server.js           ← Express backend + API-routes
+├── db.js               ← SQLite cache & verlanglijst
+├── Dockerfile
+├── docker-compose.yml
 ├── .env                ← Jouw API-sleutels (nooit committen!)
 ├── .env.example        ← Leeg sjabloon voor .env
-├── .dockerignore       ← Bestanden die niet in de Docker image gaan
+├── .dockerignore
+├── .gitignore
+├── package.json
 └── README.md           ← Dit bestand
+
 ```
 
 ---
