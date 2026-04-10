@@ -37,6 +37,7 @@
     <button class="tab" data-tab="toptracks">Top nummers</button>
     <button class="tab" data-tab="loved">♥ Geliefd</button>
     <button class="tab" data-tab="stats">📊 Statistieken</button>
+    <button class="tab" data-tab="releases">🆕 Nieuwe releases</button>
     <button class="tab" data-tab="wishlist">🔖 Mijn lijst <span class="tab-badge" id="badge-wishlist">0</span></button>
   </div>
 
@@ -63,6 +64,16 @@
     <button class="tool-btn" data-dfilter="partial">▶ Gedeeltelijk in Plex</button>
     <span class="toolbar-sep"></span>
     <button class="tool-btn refresh-btn" id="btn-refresh-discover">↻ Vernieuwen</button>
+  </div>
+
+  <!-- Releases filter toolbar -->
+  <div class="toolbar" id="tb-releases">
+    <button class="tool-btn sel-def" data-rtype="all">Alle</button>
+    <button class="tool-btn" data-rtype="album">Albums</button>
+    <button class="tool-btn" data-rtype="single">Singles</button>
+    <button class="tool-btn" data-rtype="ep">EP's</button>
+    <span class="toolbar-sep"></span>
+    <button class="tool-btn refresh-btn" id="btn-refresh-releases">↻ Vernieuwen</button>
   </div>
 
   <!-- Gaps filter toolbar -->

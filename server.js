@@ -16,6 +16,7 @@ const { getMBZArtist }                                              = require('.
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
+const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist } = require('./db');
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -102,17 +103,18 @@ app.get('/api/artist/:name/info', async (req, res) => {
 app.get('/api/recs', async (req, res) => {
   try {
     await syncPlexLibrary();
-    const top        = await lfm({ method: 'user.gettopartists', period: '1month', limit: 5 });
+    const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 15 });
     const topArtists = (top.topartists?.artist || []).map(a => a.name);
 
+    // ── Artiest-aanbevelingen ─────────────────────────────────────────────
     let recs = [];
-    const results = await Promise.all(
-      topArtists.slice(0, 3).map(async artist => {
-        try { return { artist, similar: await getSimilarArtists(artist, 8) }; }
+    const simResults = await Promise.all(
+      topArtists.slice(0, 10).map(async artist => {
+        try { return { artist, similar: await getSimilarArtists(artist, 15) }; }
         catch { return { artist, similar: [] }; }
       })
     );
-    for (const { artist, similar } of results) {
+    for (const { artist, similar } of simResults) {
       for (const s of similar) {
         if (!topArtists.includes(s.name) && !recs.find(x => x.name === s.name)) {
           const inPlex = artistInPlex(s.name);
@@ -121,9 +123,65 @@ app.get('/api/recs', async (req, res) => {
       }
     }
     recs.sort((a, b) => b.adjustedMatch - a.adjustedMatch);
+    const topRecs = recs.slice(0, 30);
+
+    // ── Album-aanbevelingen ───────────────────────────────────────────────
+    const top8 = topRecs.slice(0, 8);
+    const albumResults = await Promise.allSettled(
+      top8.map(async rec => {
+        try {
+          const data = await lfm({ method: 'artist.gettopalbums', artist: rec.name, limit: 3 }, { includeUser: false });
+          const albums = (data.topalbums?.album || [])
+            .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
+            .map(a => {
+              const img = a.image?.find(i => i.size === 'large')?.['#text'] || a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+              return {
+                album:  a.name,
+                artist: rec.name,
+                reason: rec.reason,
+                image:  (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
+                inPlex: albumInPlex(rec.name, a.name)
+              };
+            });
+          return albums;
+        } catch { return []; }
+      })
+    );
+    const albumRecs = albumResults
+      .filter(r => r.status === 'fulfilled')
+      .flatMap(r => r.value)
+      .slice(0, 20);
+
+    // ── Track-aanbevelingen ───────────────────────────────────────────────
+    const trackResults = await Promise.allSettled(
+      top8.map(async rec => {
+        try {
+          const data = await lfm({ method: 'artist.gettoptracks', artist: rec.name, limit: 3 }, { includeUser: false });
+          const tracks = (data.toptracks?.track || []).map(t => ({
+            track:     t.name,
+            artist:    rec.name,
+            reason:    rec.reason,
+            playcount: parseInt(t.playcount) || 0,
+            url:       t.url || null
+          }));
+          return tracks;
+        } catch { return []; }
+      })
+    );
+    const trackRecs = trackResults
+      .filter(r => r.status === 'fulfilled')
+      .flatMap(r => r.value)
+      .slice(0, 20);
 
     const { ok, artistCount } = getPlexStatus();
-    res.json({ recommendations: recs.slice(0, 12), basedOn: topArtists, plexConnected: ok, plexArtistCount: artistCount });
+    res.json({
+      recommendations:  topRecs,
+      albumRecs,
+      trackRecs,
+      basedOn:          topArtists,
+      plexConnected:    ok,
+      plexArtistCount:  artistCount
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -133,8 +191,10 @@ app.get('/api/recs', async (req, res) => {
 
 app.get('/api/discover',          (req, res) => res.json(getDiscover()));
 app.get('/api/gaps',              (req, res) => res.json(getGaps()));
+app.get('/api/releases',          (req, res) => res.json(getReleases()));
 app.post('/api/discover/refresh', (req, res) => res.json(refreshDiscover()));
 app.post('/api/gaps/refresh',     (req, res) => res.json(refreshGaps()));
+app.post('/api/releases/refresh', (req, res) => res.json(refreshReleases()));
 
 // ── API: Plex ──────────────────────────────────────────────────────────────
 
@@ -297,4 +357,5 @@ app.listen(PORT, () => {
   syncPlexLibrary(true).catch(() => {});
   initDiscover();
   initGaps();
+  initReleases();
 });

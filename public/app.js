@@ -411,7 +411,9 @@ async function loadRecs() {
   showLoading();
   try {
     const d = await apiFetch('/api/recs');
-    const recs = d.recommendations || [];
+    const recs      = d.recommendations || [];
+    const albumRecs = d.albumRecs        || [];
+    const trackRecs = d.trackRecs        || [];
     plexOk = d.plexConnected || plexOk;
     if (d.plexConnected && d.plexArtistCount) {
       document.getElementById('plex-pill').className = 'plex-pill on';
@@ -421,6 +423,8 @@ async function loadRecs() {
 
     const newC  = recs.filter(r => !r.inPlex).length;
     const plexC = recs.filter(r =>  r.inPlex).length;
+
+    // ── Artiest-aanbevelingen ─────────────────────────────────────────────
     let html = `<div class="section-title">Gebaseerd op jouw smaak: ${(d.basedOn||[]).slice(0,3).join(', ')}
       ${plexOk ? ` &nbsp;·&nbsp; <span style="color:var(--new)">${newC} nieuw</span> · <span style="color:var(--plex)">${plexC} in Plex</span>` : ''}
       </div><div class="rec-grid">`;
@@ -447,7 +451,62 @@ async function loadRecs() {
           </div>
         </div>`;
     }
-    setContent(html + '</div>');
+    html += '</div>';
+
+    // ── Aanbevolen Albums ───────────────────────────────────────────────
+    if (albumRecs.length) {
+      html += `<div class="section-title" style="margin-top:2rem">Aanbevolen Albums</div>
+        <div class="albrec-grid">`;
+      for (const a of albumRecs) {
+        const imgEl = a.image
+          ? `<img class="albrec-img" src="${esc(a.image)}" alt="" loading="lazy"
+               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="albrec-ph" style="display:none;background:${gradientFor(a.album)}">${initials(a.album)}</div>`
+          : `<div class="albrec-ph" style="background:${gradientFor(a.album)}">${initials(a.album)}</div>`;
+        const badge = plexOk
+          ? (a.inPlex
+            ? `<span class="badge plex" style="font-size:9px;margin-top:4px">▶ In Plex</span>`
+            : `<span class="badge new" style="font-size:9px;margin-top:4px">✦ Nieuw</span>`)
+          : '';
+        html += `
+          <div class="albrec-card">
+            <div class="albrec-cover">${imgEl}</div>
+            <div class="albrec-info">
+              <div class="albrec-title">${esc(a.album)}</div>
+              <div class="albrec-artist artist-link" data-artist="${esc(a.artist)}">${esc(a.artist)}</div>
+              <div class="albrec-reason">via ${esc(a.reason)}</div>
+              ${badge}
+            </div>
+          </div>`;
+      }
+      html += '</div>';
+    }
+
+    // ── Aanbevolen Nummers ──────────────────────────────────────────────
+    if (trackRecs.length) {
+      html += `<div class="section-title" style="margin-top:2rem">Aanbevolen Nummers</div>
+        <div class="trackrec-list">`;
+      for (const t of trackRecs) {
+        const playsHtml = t.playcount > 0
+          ? `<span class="trackrec-plays">${fmt(t.playcount)}×</span>`
+          : '';
+        const linkHtml = t.url
+          ? `<a class="trackrec-link" href="${esc(t.url)}" target="_blank" rel="noopener">Last.fm ↗</a>`
+          : '';
+        html += `
+          <div class="trackrec-row">
+            <div class="trackrec-info">
+              <div class="trackrec-title">${esc(t.track)}</div>
+              <div class="trackrec-artist artist-link" data-artist="${esc(t.artist)}">${esc(t.artist)}</div>
+              <div class="trackrec-reason">via ${esc(t.reason)}</div>
+            </div>
+            <div class="trackrec-meta">${playsHtml}${linkHtml}</div>
+          </div>`;
+      }
+      html += '</div>';
+    }
+
+    setContent(html);
     applyRecsFilter();
 
     recs.forEach(async (r, i) => {
@@ -492,6 +551,84 @@ function applyRecsFilter() {
     if (recsFilter === 'plex') show = inPlex;
     card.classList.toggle('hidden', !show);
   });
+}
+
+// ── Nieuwe Releases ────────────────────────────────────────────────────────
+let releasesFilter = 'all';
+let lastReleases   = null;
+
+async function loadReleases() {
+  showLoading('Releases ophalen...');
+  try {
+    const d = await apiFetch('/api/releases');
+    if (d.status === 'building') {
+      setContent(`<div class="loading"><div class="spinner"></div>
+        <div>${esc(d.message)}</div>
+        <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
+      setTimeout(() => { if (currentTab === 'releases') loadReleases(); }, 5_000);
+      return;
+    }
+    lastReleases = d.releases || [];
+    renderReleases();
+  } catch (e) { showError(e.message); }
+}
+
+function renderReleases() {
+  const releases = lastReleases || [];
+  if (!releases.length) {
+    setContent('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>');
+    return;
+  }
+  let filtered = releases;
+  if (releasesFilter !== 'all') {
+    filtered = releases.filter(r => (r.type || 'album').toLowerCase() === releasesFilter);
+  }
+  if (!filtered.length) {
+    setContent(`<div class="empty">Geen ${releasesFilter === 'ep' ? "EP's" : releasesFilter + 's'} gevonden voor dit filter.</div>`);
+    return;
+  }
+  const typeLabel = t => ({ album: 'Album', single: 'Single', ep: 'EP' })[t?.toLowerCase()] || (t || 'Album');
+  const typeBadgeClass = t => ({ album: 'rel-type-album', single: 'rel-type-single', ep: 'rel-type-ep' })[t?.toLowerCase()] || 'rel-type-album';
+
+  let html = `<div class="section-title">${filtered.length} release${filtered.length !== 1 ? 's' : ''} in de afgelopen 30 dagen</div>
+    <div class="releases-grid">`;
+
+  for (const r of filtered) {
+    const imgEl = r.image
+      ? `<img class="rel-img" src="${esc(r.image)}" alt="" loading="lazy"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="rel-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</div>`
+      : `<div class="rel-ph" style="background:${gradientFor(r.album)}">${initials(r.album)}</div>`;
+
+    const dateStr = r.releaseDate
+      ? new Date(r.releaseDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })
+      : '';
+
+    const plexStatus = plexOk
+      ? (r.inPlex
+        ? `<span class="badge plex" style="font-size:9px">▶ In Plex</span>`
+        : (r.artistInPlex
+          ? `<span class="badge new" style="font-size:9px">✦ Artiest in Plex</span>`
+          : ''))
+      : '';
+
+    const deezerLink = r.deezerUrl
+      ? `<a class="rel-deezer-link" href="${esc(r.deezerUrl)}" target="_blank" rel="noopener">Deezer ↗</a>`
+      : '';
+
+    html += `
+      <div class="rel-card">
+        <div class="rel-cover">${imgEl}</div>
+        <div class="rel-info">
+          <span class="rel-type-badge ${typeBadgeClass(r.type)}">${typeLabel(r.type)}</span>
+          <div class="rel-album">${esc(r.album)}</div>
+          <div class="rel-artist artist-link" data-artist="${esc(r.artist)}">${esc(r.artist)}</div>
+          ${dateStr ? `<div class="rel-date">${dateStr}</div>` : ''}
+          <div class="rel-footer">${plexStatus}${deezerLink}</div>
+        </div>
+      </div>`;
+  }
+  setContent(html + '</div>');
 }
 
 // ── Discover (deep: MBZ + album grid) ─────────────────────────────────────
@@ -778,6 +915,7 @@ const tabLoaders = {
   gaps:       () => loadGaps(),
   recent:     () => loadRecent(),
   recs:       () => loadRecs(),
+  releases:   () => loadReleases(),
   topartists: () => loadTopArtists(currentPeriod),
   toptracks:  () => loadTopTracks(currentPeriod),
   loved:      () => loadLoved(),
@@ -792,6 +930,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     currentTab = btn.dataset.tab;
     document.getElementById('tb-period').classList.toggle('visible', ['topartists','toptracks'].includes(currentTab));
     document.getElementById('tb-recs').classList.toggle('visible', currentTab === 'recs');
+    document.getElementById('tb-releases').classList.toggle('visible', currentTab === 'releases');
     document.getElementById('tb-discover').classList.toggle('visible', currentTab === 'discover');
     document.getElementById('tb-gaps').classList.toggle('visible', currentTab === 'gaps');
     tabLoaders[currentTab]?.();
@@ -832,6 +971,21 @@ document.querySelectorAll('[data-gsort]').forEach(btn => {
     gapsSort = btn.dataset.gsort;
     renderGaps();
   });
+});
+
+document.querySelectorAll('[data-rtype]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
+    btn.classList.add('sel-def');
+    releasesFilter = btn.dataset.rtype;
+    renderReleases();
+  });
+});
+
+document.getElementById('btn-refresh-releases').addEventListener('click', async () => {
+  lastReleases = null;
+  await fetch('/api/releases/refresh', { method: 'POST' });
+  loadReleases();
 });
 
 document.getElementById('btn-refresh-discover').addEventListener('click', async () => {
