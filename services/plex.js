@@ -10,6 +10,7 @@ let plexAlbums     = new Set();
 let plexAlbumsNorm = new Set();
 let plexLastSync   = 0;
 let plexSyncOk     = false;
+let plexLibrary    = []; // [{artist, album}] originele casing, gesorteerd op artiest
 
 // ── Herstel vanuit SQLite bij opstarten ────────────────────────────────────
 const cached = getCache('plex', 3_600_000);
@@ -18,9 +19,10 @@ if (cached) {
   plexArtistMap  = new Map(Object.entries(cached.artistMap || {}));
   plexAlbums     = new Set(cached.albums     || []);
   plexAlbumsNorm = new Set(cached.albumsNorm || []);
+  plexLibrary    = cached.library  || [];
   plexLastSync   = cached.lastSync || 0;
   plexSyncOk     = cached.syncOk   || false;
-  console.log(`Plex: ${plexArtists.size} artiesten geladen uit SQLite-cache`);
+  console.log(`Plex: ${plexArtists.size} artiesten, ${plexLibrary.length} albums geladen uit SQLite-cache`);
 }
 
 /** Normaliseer albumtitels voor fuzzy matching (Plex vs MusicBrainz). */
@@ -61,6 +63,10 @@ async function syncPlexLibrary(force = false) {
     const albumMeta = albumData?.MediaContainer?.Metadata || [];
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
+    plexLibrary    = albumMeta
+      .map(a => ({ artist: a.parentTitle || '', album: a.title || '' }))
+      .filter(x => x.artist && x.album)
+      .sort((a, b) => a.artist.localeCompare(b.artist, 'nl', { sensitivity: 'base' }));
     plexLastSync   = Date.now();
     plexSyncOk     = true;
 
@@ -69,6 +75,7 @@ async function syncPlexLibrary(force = false) {
       artistMap:  Object.fromEntries(plexArtistMap),
       albums:     [...plexAlbums],
       albumsNorm: [...plexAlbumsNorm],
+      library:    plexLibrary,
       lastSync:   plexLastSync,
       syncOk:     plexSyncOk
     });
@@ -102,4 +109,12 @@ function getPlexArtistNames() {
   return new Map(plexArtistMap); // kopie zodat externe code de interne Map niet muteert
 }
 
-module.exports = { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, PLEX_TOKEN };
+/**
+ * Geeft alle albums uit de Plex-bibliotheek terug als array van
+ * { artist, album } objecten, gesorteerd op artiestNaam.
+ */
+function getPlexLibrary() {
+  return plexLibrary;
+}
+
+module.exports = { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, PLEX_TOKEN };

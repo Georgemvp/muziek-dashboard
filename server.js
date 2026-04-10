@@ -11,7 +11,7 @@ const PORT    = process.env.PORT || 80;
 
 // ── Services ───────────────────────────────────────────────────────────────
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -245,6 +245,22 @@ app.get('/api/plex/nowplaying', async (req, res) => {
   } catch { res.json({ playing: false }); }
 });
 
+app.post('/api/plex/refresh', async (req, res) => {
+  if (!PLEX_TOKEN) return res.json({ connected: false, reason: 'Geen PLEX_TOKEN' });
+  try {
+    await syncPlexLibrary(true);
+    const { ok, artistCount, albumCount, lastSync } = getPlexStatus();
+    res.json({ connected: ok, artists: artistCount, albums: albumCount, lastSync: new Date(lastSync).toISOString() });
+  } catch (e) { res.json({ connected: false, reason: e.message }); }
+});
+
+app.get('/api/plex/library', (req, res) => {
+  if (!PLEX_TOKEN) return res.json({ connected: false, artistCount: 0, albumCount: 0, library: [] });
+  const { ok, artistCount, albumCount } = getPlexStatus();
+  const library = getPlexLibrary();
+  res.json({ connected: ok, artistCount, albumCount: library.length, library });
+});
+
 // ── API: Zoeken ────────────────────────────────────────────────────────────
 
 app.get('/api/search', async (req, res) => {
@@ -386,4 +402,8 @@ app.listen(PORT, () => {
   initDiscover();
   initGaps();
   initReleases();
+  // Automatische Plex achtergrond-sync elke 30 minuten
+  setInterval(() => {
+    syncPlexLibrary(true).catch(e => console.warn('Plex achtergrond-sync mislukt:', e.message));
+  }, 30 * 60 * 1_000);
 });

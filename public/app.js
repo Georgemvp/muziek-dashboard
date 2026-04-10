@@ -8,6 +8,7 @@ let releasesSort  = 'listening';  // STAP 2
 let plexOk        = false;
 let lastDiscover  = null;
 let lastGaps      = null;
+let plexLibData   = null;         // gecachede Plex-bibliotheek data
 let wishlistMap   = new Map();   // key "type:name" → id
 let searchTimeout = null;
 
@@ -108,7 +109,8 @@ const showLoading = msg => {
     topartists: 'grid', releases: 'grid', recs: 'grid',
     discover: 'grid', gaps: 'grid',
     stats: 'stats',
-    wishlist: 'grid'
+    wishlist: 'grid',
+    plexlib: 'cards'
   };
   const skType = skeletonMap[currentTab];
   if (skType && !msg) {
@@ -215,6 +217,70 @@ async function loadWishlist() {
         </div>`;
     }
     setContent(html + '</div>');
+  } catch (e) { showError(e.message); }
+}
+
+// ── Plex Bibliotheek ──────────────────────────────────────────────────────
+
+/**
+ * Bouwt de HTML voor de Plex-bibliotheekweergave. Groepeert albums per artiest
+ * en filtert optioneel op `query`. Retourneert HTML-string (geen DOM-aanpassing).
+ */
+function buildPlexLibraryHtml(library, query) {
+  const q = (query || '').toLowerCase().trim();
+  let filtered = library;
+  if (q) {
+    filtered = library.filter(x =>
+      x.artist.toLowerCase().includes(q) || x.album.toLowerCase().includes(q)
+    );
+  }
+  if (!filtered.length) {
+    return `<div class="empty">Geen resultaten voor "<strong>${esc(query)}</strong>".</div>`;
+  }
+
+  // Groepeer op artiest (originele volgorde is al gesorteerd op artiest)
+  const byArtist = new Map();
+  for (const x of filtered) {
+    if (!byArtist.has(x.artist)) byArtist.set(x.artist, []);
+    byArtist.get(x.artist).push(x.album);
+  }
+
+  let html = `<div class="section-title">${byArtist.size} artiesten · ${fmt(filtered.length)} albums</div>
+    <div class="plib-list">`;
+
+  for (const [artist, albums] of byArtist) {
+    html += `
+      <div class="plib-artist-block">
+        <div class="plib-artist-header artist-link" data-artist="${esc(artist)}">
+          <div class="plib-avatar" style="background:${gradientFor(artist)}">${initials(artist)}</div>
+          <span class="plib-artist-name">${esc(artist)}</span>
+          <span class="plib-album-count">${albums.length}</span>
+        </div>
+        <div class="plib-albums">
+          ${albums.map(a => `<div class="plib-album-row">
+            <span class="plib-album-badge">▶</span>
+            <span class="plib-album-title" title="${esc(a)}">${esc(a)}</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+  }
+  return html + '</div>';
+}
+
+/** Haalt de Plex-bibliotheek op van de server en rendert hem. */
+async function loadPlexLibrary() {
+  showLoading();
+  try {
+    const d = await apiFetch('/api/plex/library');
+    plexLibData = d.library || [];
+    // Reset zoekbalk
+    const searchEl = document.getElementById('plib-search');
+    if (searchEl) searchEl.value = '';
+    if (!plexLibData.length) {
+      setContent('<div class="empty">Plex bibliotheek is leeg of nog niet gesynchroniseerd.<br>Klik ↻ Sync Plex om te beginnen.</div>');
+      return;
+    }
+    setContent(buildPlexLibraryHtml(plexLibData, ''));
   } catch (e) { showError(e.message); }
 }
 
@@ -338,7 +404,8 @@ async function loadPlexStatus() {
     if (d.connected) {
       plexOk = true;
       pill.className = 'plex-pill on';
-      text.textContent = `Plex · ${fmt(d.artists)} artiesten`;
+      const albumPart = d.albums ? ` · ${fmt(d.albums)} albums` : '';
+      text.textContent = `Plex · ${fmt(d.artists)} artiesten${albumPart}`;
     } else {
       pill.className = 'plex-pill off';
       text.textContent = 'Plex offline';
@@ -1001,7 +1068,8 @@ const tabLoaders = {
   toptracks:  () => loadTopTracks(currentPeriod),
   loved:      () => loadLoved(),
   stats:      () => loadStats(),
-  wishlist:   () => loadWishlist()
+  wishlist:   () => loadWishlist(),
+  plexlib:    () => loadPlexLibrary()
 };
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1014,6 +1082,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById('tb-releases').classList.toggle('visible', currentTab === 'releases');
     document.getElementById('tb-discover').classList.toggle('visible', currentTab === 'discover');
     document.getElementById('tb-gaps').classList.toggle('visible', currentTab === 'gaps');
+    document.getElementById('tb-plexlib').classList.toggle('visible', currentTab === 'plexlib');
     tabLoaders[currentTab]?.();
   });
 });
@@ -1089,6 +1158,46 @@ document.getElementById('btn-refresh-gaps').addEventListener('click', async () =
   lastGaps = null;
   await fetch('/api/gaps/refresh', { method: 'POST' });
   loadGaps();
+});
+
+// ── Plex bibliotheek: live zoeken ─────────────────────────────────────────
+document.getElementById('plib-search').addEventListener('input', e => {
+  if (!plexLibData || currentTab !== 'plexlib') return;
+  contentEl.innerHTML = buildPlexLibraryHtml(plexLibData, e.target.value);
+});
+
+// ── Plex sync knop in toolbar ─────────────────────────────────────────────
+document.getElementById('btn-sync-plex').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-sync-plex');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '↻ Bezig…';
+  try {
+    await fetch('/api/plex/refresh', { method: 'POST' });
+    await loadPlexStatus();
+    plexLibData = null;
+    if (currentTab === 'plexlib') await loadPlexLibrary();
+  } catch (e) { /* stil falen */ }
+  finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// ── Plex refresh-knop in de pill ──────────────────────────────────────────
+document.getElementById('plex-refresh-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('plex-refresh-btn');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  try {
+    await fetch('/api/plex/refresh', { method: 'POST' });
+    await loadPlexStatus();
+    plexLibData = null; // forceer verse load volgende keer de tab wordt geopend
+  } catch (e) { /* stil falen */ }
+  finally {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+  }
 });
 
 // ── Globale event delegation ───────────────────────────────────────────────
