@@ -18,7 +18,7 @@ async function buildDiscoverCache() {
     // Gelijkaardige artiesten parallel ophalen
     const candidateMap = new Map();
     const similar = await Promise.all(
-      topArtists.slice(0, 15).map(async artist => {
+      topArtists.slice(0, 20).map(async artist => {
         try { return { artist, similar: await getSimilarArtists(artist, 15) }; }
         catch { return { artist, similar: [] }; }
       })
@@ -33,7 +33,7 @@ async function buildDiscoverCache() {
 
     const sorted = Array.from(candidateMap.values())
       .sort((a, b) => (b.match * (b.inPlex ? 0.8 : 1.2)) - (a.match * (a.inPlex ? 0.8 : 1.2)))
-      .slice(0, 30);
+      .slice(0, 50);
 
     // Verrijken met MBZ + Deezer — parallel (mbzEnqueue regelt rate limiting)
     const enriched = await Promise.all(sorted.map(async c => {

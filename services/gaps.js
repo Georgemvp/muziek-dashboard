@@ -12,9 +12,9 @@ async function buildGapsCache() {
   console.log('Gaps cache bouwen...');
   try {
     await syncPlexLibrary();
-    const topData    = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 20 });
+    const topData    = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 40 });
     const topArtists = (topData.topartists?.artist || []).map(a => a.name);
-    const plexTop    = topArtists.filter(name => artistInPlex(name)).slice(0, 8);
+    const plexTop    = topArtists.filter(name => artistInPlex(name)).slice(0, 20);
 
     const gapArtists = [];
     for (const name of plexTop) {
