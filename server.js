@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 80;
 const API_KEY  = process.env.LASTFM_API_KEY;
-const USERNAME = process.env.LASTFM_USER || 'cjjansen13';
+const USERNAME = process.env.LASTFM_USER;
 const LASTFM   = 'https://ws.audioscrobbler.com/2.0/';
 const PLEX_URL   = (process.env.PLEX_URL || 'http://localhost:32400').replace(/\/$/, '');
 const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
@@ -198,26 +198,31 @@ async function buildDiscoverCache() {
     const topData = await lfm({ method: 'user.gettopartists', period: '3month', limit: 10 });
     const topArtists = (topData.topartists?.artist || []).map(a => a.name);
 
-    // Gelijkaardige artiesten verzamelen via Last.fm
+    // Gelijkaardige artiesten verzamelen via Last.fm (parallel)
     const candidateMap = new Map();
-    for (const artist of topArtists.slice(0, 5)) {
-      try {
-        const url = new URL(LASTFM);
-        url.searchParams.set('method', 'artist.getsimilar');
-        url.searchParams.set('artist', artist);
-        url.searchParams.set('api_key', API_KEY);
-        url.searchParams.set('format', 'json');
-        url.searchParams.set('limit', '8');
-        const d = await fetch(url.toString()).then(r => r.json());
-        for (const s of (d.similarartists?.artist || [])) {
-          if (!topArtists.includes(s.name) && !candidateMap.has(s.name)) {
-            candidateMap.set(s.name, {
-              name: s.name, match: parseFloat(s.match), reason: artist,
-              inPlex: artistInPlex(s.name)
-            });
-          }
+    const discoverSimilar = await Promise.all(
+      topArtists.slice(0, 5).map(async artist => {
+        try {
+          const url = new URL(LASTFM);
+          url.searchParams.set('method', 'artist.getsimilar');
+          url.searchParams.set('artist', artist);
+          url.searchParams.set('api_key', API_KEY);
+          url.searchParams.set('format', 'json');
+          url.searchParams.set('limit', '8');
+          const d = await fetch(url.toString()).then(r => r.json());
+          return { artist, similar: d.similarartists?.artist || [] };
+        } catch (e) { return { artist, similar: [] }; }
+      })
+    );
+    for (const { artist, similar } of discoverSimilar) {
+      for (const s of similar) {
+        if (!topArtists.includes(s.name) && !candidateMap.has(s.name)) {
+          candidateMap.set(s.name, {
+            name: s.name, match: parseFloat(s.match), reason: artist,
+            inPlex: artistInPlex(s.name)
+          });
         }
-      } catch (e) {}
+      }
     }
 
     // Sorteer: nieuwe artiesten (niet in Plex) eerst, dan match-score
@@ -402,27 +407,32 @@ app.get('/api/recs', async (req, res) => {
     const topArtists = (top.topartists?.artist || []).map(a => a.name);
 
     let recs = [];
-    for (const artist of topArtists.slice(0, 3)) {
-      try {
-        const url = new URL(LASTFM);
-        url.searchParams.set('method', 'artist.getsimilar');
-        url.searchParams.set('artist', artist);
-        url.searchParams.set('api_key', API_KEY);
-        url.searchParams.set('format', 'json');
-        url.searchParams.set('limit', '8');
-        const d = await fetch(url.toString()).then(r => r.json());
-        for (const s of (d.similarartists?.artist || [])) {
-          if (!topArtists.includes(s.name) && !recs.find(x => x.name === s.name)) {
-            const inPlex = artistInPlex(s.name);
-            recs.push({
-              name: s.name, reason: artist,
-              match: parseFloat(s.match),
-              adjustedMatch: parseFloat(s.match) * (inPlex ? 0.9 : 1.15),
-              inPlex
-            });
-          }
+    const similarResults = await Promise.all(
+      topArtists.slice(0, 3).map(async artist => {
+        try {
+          const url = new URL(LASTFM);
+          url.searchParams.set('method', 'artist.getsimilar');
+          url.searchParams.set('artist', artist);
+          url.searchParams.set('api_key', API_KEY);
+          url.searchParams.set('format', 'json');
+          url.searchParams.set('limit', '8');
+          const d = await fetch(url.toString()).then(r => r.json());
+          return { artist, similar: d.similarartists?.artist || [] };
+        } catch (e) { return { artist, similar: [] }; }
+      })
+    );
+    for (const { artist, similar } of similarResults) {
+      for (const s of similar) {
+        if (!topArtists.includes(s.name) && !recs.find(x => x.name === s.name)) {
+          const inPlex = artistInPlex(s.name);
+          recs.push({
+            name: s.name, reason: artist,
+            match: parseFloat(s.match),
+            adjustedMatch: parseFloat(s.match) * (inPlex ? 0.9 : 1.15),
+            inPlex
+          });
         }
-      } catch (e) {}
+      }
     }
 
     recs.sort((a, b) => b.adjustedMatch - a.adjustedMatch);
@@ -440,14 +450,14 @@ app.get('/api/recs', async (req, res) => {
 // ── API: Discovery & Gaps ──────────────────────────────────────────────────
 
 app.get('/api/discover', async (req, res) => {
-  const stale = Date.now() - discoverCacheTime > 7_200_000;
+  const stale = Date.now() - discoverCacheTime > 86_400_000;
   if (stale && !discoverBuilding) buildDiscoverCache().catch(() => {});
   if (!discoverCache) return res.json({ status: 'building', message: 'Muziekontdekkingen worden geanalyseerd (ca. 30 sec)...' });
   res.json({ status: 'ok', ...discoverCache, plexConnected: plexSyncOk });
 });
 
 app.get('/api/gaps', async (req, res) => {
-  const stale = Date.now() - gapsCacheTime > 7_200_000;
+  const stale = Date.now() - gapsCacheTime > 86_400_000;
   if (stale && !gapsBuilding) buildGapsCache().catch(() => {});
   if (!gapsCache) return res.json({ status: 'building', message: 'Collectiegaten worden gezocht...' });
   res.json({ status: 'ok', ...gapsCache, plexConnected: plexSyncOk });
