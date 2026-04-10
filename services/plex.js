@@ -5,6 +5,7 @@ const PLEX_URL   = (process.env.PLEX_URL || 'http://localhost:32400').replace(/\
 const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
 
 let plexArtists    = new Set();
+let plexArtistMap  = new Map(); // lowercase → originele naam
 let plexAlbums     = new Set();
 let plexAlbumsNorm = new Set();
 let plexLastSync   = 0;
@@ -14,6 +15,7 @@ let plexSyncOk     = false;
 const cached = getCache('plex', 3_600_000);
 if (cached) {
   plexArtists    = new Set(cached.artists    || []);
+  plexArtistMap  = new Map(Object.entries(cached.artistMap || {}));
   plexAlbums     = new Set(cached.albums     || []);
   plexAlbumsNorm = new Set(cached.albumsNorm || []);
   plexLastSync   = cached.lastSync || 0;
@@ -53,7 +55,9 @@ async function syncPlexLibrary(force = false) {
       plexGet(`/library/sections/${music.key}/all?type=9`)
     ]);
 
-    plexArtists    = new Set((artistData?.MediaContainer?.Metadata || []).map(a => a.title.toLowerCase()));
+    const artistMeta = artistData?.MediaContainer?.Metadata || [];
+    plexArtists   = new Set(artistMeta.map(a => a.title.toLowerCase()));
+    plexArtistMap = new Map(artistMeta.map(a => [a.title.toLowerCase(), a.title]));
     const albumMeta = albumData?.MediaContainer?.Metadata || [];
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
@@ -62,6 +66,7 @@ async function syncPlexLibrary(force = false) {
 
     setCache('plex', {
       artists:    [...plexArtists],
+      artistMap:  Object.fromEntries(plexArtistMap),
       albums:     [...plexAlbums],
       albumsNorm: [...plexAlbumsNorm],
       lastSync:   plexLastSync,
@@ -89,4 +94,12 @@ function getPlexStatus() {
   return { ok: plexSyncOk, artistCount: plexArtists.size, albumCount: plexAlbums.size, lastSync: plexLastSync };
 }
 
-module.exports = { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, PLEX_TOKEN };
+/**
+ * Geeft een Map terug van lowercase artiestNaam → originele naam voor alle
+ * artiesten in de Plex-bibliotheek. Gebruikt voor de artiestenbron in releases.js.
+ */
+function getPlexArtistNames() {
+  return new Map(plexArtistMap); // kopie zodat externe code de interne Map niet muteert
+}
+
+module.exports = { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, PLEX_TOKEN };
