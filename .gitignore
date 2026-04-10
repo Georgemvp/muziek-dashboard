@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables (bevat API keys!)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS bestanden
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+data/
+
+# IDE bestanden
+.vscode/
+.idea/
