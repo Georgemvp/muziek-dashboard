@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Muziekontdekkingen</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -21,6 +22,12 @@
   <div id="plex-np-wrap"></div>
   <div id="user-wrap"></div>
 
+  <!-- Zoekbalk -->
+  <div class="search-wrap" id="search-wrap">
+    <input class="search-input" id="search-input" type="text" placeholder="🔍  Zoek een artiest..." autocomplete="off">
+    <div class="search-results" id="search-results"></div>
+  </div>
+
   <div class="tabs" id="tabs">
     <button class="tab" data-tab="discover">Ontdek <span class="tab-badge" id="badge-discover">✦</span></button>
     <button class="tab" data-tab="gaps">Collectiegaten <span class="tab-badge" id="badge-gaps">?</span></button>
@@ -29,6 +36,8 @@
     <button class="tab" data-tab="topartists">Top artiesten</button>
     <button class="tab" data-tab="toptracks">Top nummers</button>
     <button class="tab" data-tab="loved">♥ Geliefd</button>
+    <button class="tab" data-tab="stats">📊 Statistieken</button>
+    <button class="tab" data-tab="wishlist">🔖 Mijn lijst <span class="tab-badge" id="badge-wishlist">0</span></button>
   </div>
 
   <!-- Period toolbar -->
@@ -69,6 +78,17 @@
   </div>
 
 </div>
+
+<!-- Artiest detail panel -->
+<div class="panel-overlay" id="panel-overlay">
+  <div class="artist-panel" id="artist-panel">
+    <button class="panel-close" id="panel-close">✕</button>
+    <div id="panel-content">
+      <div class="loading"><div class="spinner"></div>Laden...</div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js" defer></script>
 </body>
 </html>

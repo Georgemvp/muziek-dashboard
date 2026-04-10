@@ -7,6 +7,8 @@ let gapsSort      = 'missing';
 let plexOk        = false;
 let lastDiscover  = null;
 let lastGaps      = null;
+let wishlistMap   = new Map();   // key "type:name" → id
+let searchTimeout = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const getImg = (imgs, size = 'medium') => {
@@ -14,7 +16,7 @@ const getImg = (imgs, size = 'medium') => {
   const i = imgs.find(x => x.size === size);
   return (i && i['#text'] && !i['#text'].includes('2a96cbd8b46e442fc41c2b86b821562f')) ? i['#text'] : null;
 };
-const initials = n => n.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+const initials = n => String(n || '?').split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 const fmt  = n => parseInt(n).toLocaleString('nl-NL');
 const esc  = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 const periodLabel = p => ({ '7day':'week','1month':'maand','3month':'3 maanden','12month':'jaar','overall':'alles' }[p] || p);
@@ -51,25 +53,49 @@ function plexBadge(inPlex) {
     : `<span class="badge new">✦ Nieuw</span>`;
 }
 
+function bookmarkBtn(type, name, artist = '', image = '') {
+  const saved = wishlistMap.has(`${type}:${name}`);
+  return `<button class="bookmark-btn${saved ? ' saved' : ''}"
+    data-btype="${esc(type)}" data-bname="${esc(name)}"
+    data-bartist="${esc(artist)}" data-bimage="${esc(image)}"
+    title="${saved ? 'Verwijder uit lijst' : 'Sla op in lijst'}">🔖</button>`;
+}
+
 async function apiFetch(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Serverfout ${res.status}`);
   return res.json();
 }
-const setContent  = html => { document.getElementById('content').innerHTML = html; };
+
+const contentEl = document.getElementById('content');
+function setContent(html, callback) {
+  contentEl.innerHTML = html;
+  contentEl.style.opacity = '0';
+  contentEl.style.transform = 'translateY(6px)';
+  requestAnimationFrame(() => {
+    void contentEl.offsetHeight; // force reflow
+    contentEl.style.opacity = '1';
+    contentEl.style.transform = '';
+    if (callback) requestAnimationFrame(callback);
+  });
+}
 const showLoading = msg  => setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);
 const showError   = msg  => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
-const trackImg    = imgs => {
+
+// Track image with proper fallback (6b)
+const trackImg = imgs => {
   const src = getImg(imgs);
-  return src ? `<img class="card-img" src="${src}" alt="" loading="lazy">` : `<div class="card-ph">♪</div>`;
+  if (src) return `<img class="card-img" src="${src}" alt="" loading="lazy"
+    onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="card-ph" style="display:none">♪</div>`;
+  return `<div class="card-ph">♪</div>`;
 };
 
 // ── Album card ─────────────────────────────────────────────────────────────
-function albumCard(album, showBadge = true, small = false) {
+function albumCard(album, showBadge = true) {
   const owned = album.inPlex;
   const bg = gradientFor(album.title || '');
   const year = album.year || '—';
-  const grid = small ? 'gaps-album-grid' : '';
   return `
     <div class="album-card ${owned ? 'owned' : 'missing'}" title="${esc(album.title)}${year !== '—' ? ' ('+year+')' : ''}">
       <div class="album-cover" style="background:${bg}">
@@ -85,6 +111,187 @@ function albumCard(album, showBadge = true, small = false) {
       </div>
     </div>`;
 }
+
+// ── Wishlist ───────────────────────────────────────────────────────────────
+async function loadWishlistState() {
+  try {
+    const items = await apiFetch('/api/wishlist');
+    wishlistMap.clear();
+    for (const item of items) wishlistMap.set(`${item.type}:${item.name}`, item.id);
+    updateWishlistBadge();
+  } catch {}
+}
+
+function updateWishlistBadge() {
+  const badge = document.getElementById('badge-wishlist');
+  if (badge) badge.textContent = wishlistMap.size || '0';
+}
+
+async function toggleWishlist(type, name, artist, image) {
+  const key = `${type}:${name}`;
+  if (wishlistMap.has(key)) {
+    await fetch(`/api/wishlist/${wishlistMap.get(key)}`, { method: 'DELETE' });
+    wishlistMap.delete(key);
+    updateWishlistBadge();
+    return false;
+  } else {
+    const res = await fetch('/api/wishlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, name, artist, image })
+    });
+    const data = await res.json();
+    wishlistMap.set(key, data.id);
+    updateWishlistBadge();
+    return true;
+  }
+}
+
+async function loadWishlist() {
+  showLoading();
+  await loadWishlistState();
+  try {
+    const items = await apiFetch('/api/wishlist');
+    if (!items.length) {
+      setContent('<div class="empty">Je lijst is leeg.<br>Voeg artiesten toe via het 🔖 icoon in Ontdek en Collectiegaten.</div>');
+      return;
+    }
+    let html = `<div class="section-title">${items.length} opgeslagen</div><div class="wishlist-grid">`;
+    for (const item of items) {
+      const imgHtml = item.image
+        ? `<img src="${esc(item.image)}" alt="" loading="lazy"
+            onerror="this.onerror=null;this.style.display='none'">`
+        : '';
+      html += `
+        <div class="wish-card">
+          <div class="wish-photo" style="background:${gradientFor(item.name)}">
+            ${imgHtml}
+            <div class="wish-ph">${initials(item.name)}</div>
+          </div>
+          <div class="wish-body">
+            <div class="wish-info">
+              <div class="wish-name artist-link" data-artist="${esc(item.name)}">${esc(item.name)}</div>
+              ${item.artist ? `<div class="wish-sub">${esc(item.artist)}</div>` : ''}
+              <div class="wish-type">${item.type === 'artist' ? 'Artiest' : 'Album'}</div>
+            </div>
+            <button class="wish-remove" data-wid="${item.id}" title="Verwijder">✕</button>
+          </div>
+        </div>`;
+    }
+    setContent(html + '</div>');
+  } catch (e) { showError(e.message); }
+}
+
+// ── Artiest panel (5b) ─────────────────────────────────────────────────────
+function openArtistPanel(name) {
+  const overlay  = document.getElementById('panel-overlay');
+  const panelContent = document.getElementById('panel-content');
+  panelContent.innerHTML = `<div style="height:260px;background:var(--surface2)"></div>
+    <div class="panel-body"><div class="loading" style="padding:2rem 0"><div class="spinner"></div>Laden...</div></div>`;
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  Promise.allSettled([
+    apiFetch(`/api/artist/${encodeURIComponent(name)}/info`),
+    apiFetch(`/api/artist/${encodeURIComponent(name)}/similar`)
+  ]).then(([infoR, simR]) => {
+    const info    = infoR.status === 'fulfilled' ? infoR.value : {};
+    const similar = simR.status === 'fulfilled' ? (simR.value.similar || []) : [];
+
+    const photoHtml = info.image
+      ? `<img src="${esc(info.image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="panel-photo-ph" style="background:${gradientFor(name)};display:none">${initials(name)}</div>`
+      : `<div class="panel-photo-ph" style="background:${gradientFor(name)}">${initials(name)}</div>`;
+
+    const meta = [
+      info.country ? countryFlag(info.country) + ' ' + info.country : null,
+      info.startYear ? `Actief vanaf ${info.startYear}` : null,
+      plexOk && info.inPlex !== undefined ? (info.inPlex ? '▶ In Plex' : '✦ Nieuw voor jou') : null
+    ].filter(Boolean).join(' · ');
+
+    let albumsHtml = '';
+    if (info.albums?.length) {
+      albumsHtml = `<div class="panel-section">Albums</div><div class="panel-albums">`;
+      for (const a of info.albums) {
+        const imgEl = a.image
+          ? `<img class="panel-album-img" src="${esc(a.image)}" alt="" loading="lazy" onerror="this.onerror=null;this.remove()">`
+          : `<div class="panel-album-ph">♪</div>`;
+        const plexMark = plexOk && a.inPlex ? `<span class="badge plex" style="font-size:9px">▶</span>` : '';
+        albumsHtml += `<div class="panel-album-row">${imgEl}
+          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}</div>`;
+      }
+      albumsHtml += `</div>`;
+    }
+
+    let simHtml = '';
+    if (similar.length) {
+      simHtml = `<div class="panel-section">Vergelijkbare artiesten</div><div class="panel-similar">`;
+      for (const s of similar) {
+        simHtml += `<button class="panel-similar-chip artist-link" data-artist="${esc(s.name)}">${esc(s.name)}</button>`;
+      }
+      simHtml += `</div>`;
+    }
+
+    panelContent.innerHTML = `
+      <div class="panel-photo-wrap">${photoHtml}</div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div class="panel-artist-name">${esc(name)}</div>
+          ${bookmarkBtn('artist', name, '', info.image || '')}
+        </div>
+        ${meta ? `<div class="panel-meta">${esc(meta)}</div>` : ''}
+        ${tagsHtml(info.tags, 6)}
+        ${albumsHtml}
+        ${simHtml}
+      </div>`;
+  });
+}
+
+function closeArtistPanel() {
+  document.getElementById('panel-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── Zoekbalk (5a) ──────────────────────────────────────────────────────────
+async function doSearch(q) {
+  const results = document.getElementById('search-results');
+  if (q.length < 2) { results.classList.remove('open'); return; }
+  try {
+    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+    if (!data.results?.length) {
+      results.innerHTML = `<div style="padding:12px 14px;color:var(--muted2);font-size:13px">Geen resultaten</div>`;
+    } else {
+      results.innerHTML = data.results.map(a => {
+        const imgEl = a.image
+          ? `<img class="search-result-img" src="${esc(a.image)}" alt="" loading="lazy"
+               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="search-result-ph" style="background:${gradientFor(a.name)};display:none">${initials(a.name)}</div>`
+          : `<div class="search-result-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
+        const listeners = a.listeners ? `${fmt(a.listeners)} luisteraars` : '';
+        return `<button class="search-result-item" data-artist="${esc(a.name)}">
+          ${imgEl}
+          <div><div class="search-result-name">${esc(a.name)}</div>
+          ${listeners ? `<div class="search-result-sub">${listeners}</div>` : ''}</div>
+        </button>`;
+      }).join('');
+    }
+    results.classList.add('open');
+  } catch {}
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimeout);
+  const q = e.target.value.trim();
+  if (!q) { document.getElementById('search-results').classList.remove('open'); return; }
+  searchTimeout = setTimeout(() => doSearch(q), 320);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#search-wrap')) {
+    document.getElementById('search-results').classList.remove('open');
+  }
+});
 
 // ── Plex status ────────────────────────────────────────────────────────────
 async function loadPlexStatus() {
@@ -130,10 +337,12 @@ async function loadRecent() {
       const artwork = trackImg(t.image);
       if (isNow) {
         html += `<div class="now-playing">${artwork}<div class="np-dot"></div><span class="np-label">NU</span>
-          <div class="card-info"><div class="card-title">${esc(t.name)}</div><div class="card-sub">${esc(art)}</div></div></div>`;
+          <div class="card-info"><div class="card-title">${esc(t.name)}</div>
+          <div class="card-sub artist-link" data-artist="${esc(art)}">${esc(art)}</div></div></div>`;
       } else {
         html += `<div class="card">${artwork}<div class="card-info">
-          <div class="card-title">${esc(t.name)}</div><div class="card-sub">${esc(art)}</div>
+          <div class="card-title">${esc(t.name)}</div>
+          <div class="card-sub artist-link" data-artist="${esc(art)}">${esc(art)}</div>
           </div><div class="card-meta">${when}</div></div>`;
       }
     }
@@ -159,7 +368,7 @@ async function loadTopArtists(period) {
           + `<div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
         : `<div class="ag-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
       html += `<div class="ag-card"><div class="ag-photo" id="agp-${i}">${photoHtml}</div>
-        <div class="ag-info"><div class="ag-name">${esc(a.name)}</div>
+        <div class="ag-info"><div class="ag-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
         <div class="ag-plays">${fmt(a.playcount)} plays</div></div></div>`;
     }
@@ -188,7 +397,8 @@ async function loadTopTracks(period) {
     for (const t of tracks) {
       const pct = Math.round(parseInt(t.playcount) / max * 100);
       html += `<div class="card">${trackImg(t.image)}<div class="card-info">
-        <div class="card-title">${esc(t.name)}</div><div class="card-sub">${esc(t.artist?.name || '')}</div>
+        <div class="card-title">${esc(t.name)}</div>
+        <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name || '')}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
         </div><div class="card-meta">${fmt(t.playcount)}×</div></div>`;
     }
@@ -196,7 +406,7 @@ async function loadTopTracks(period) {
   } catch (e) { showError(e.message); }
 }
 
-// ── Aanbevelingen (snelle versie + Plex + MBZ tags) ───────────────────────
+// ── Aanbevelingen ──────────────────────────────────────────────────────────
 async function loadRecs() {
   showLoading();
   try {
@@ -225,7 +435,10 @@ async function loadRecs() {
           </div>
           <div class="rec-body">
             <div class="rec-header">
-              <div class="rec-title-row"><span class="rec-name">${esc(r.name)}</span>${plexBadge(r.inPlex)}</div>
+              <div class="rec-title-row">
+                <span class="rec-name artist-link" data-artist="${esc(r.name)}">${esc(r.name)}</span>
+                ${plexBadge(r.inPlex)}
+              </div>
               <span class="rec-match">${pct}%</span>
             </div>
             <div class="rec-reason">Vergelijkbaar met ${esc(r.reason)}</div>
@@ -334,7 +547,10 @@ function renderDiscover() {
         <div class="discover-artist-card">
           ${photo}
           <div class="discover-info">
-            <div class="discover-name">${esc(a.name)} ${plexBadge(a.inPlex)}</div>
+            <div class="discover-name">
+              <span class="artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</span>
+              ${plexBadge(a.inPlex)}
+            </div>
             <div class="discover-meta">${esc(meta)}</div>
             ${tagsHtml(a.tags, 5)}
             <div class="discover-reason" style="margin-top:6px">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div>
@@ -342,7 +558,10 @@ function renderDiscover() {
               ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
               : `<div style="font-size:12px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
           </div>
-          <span class="discover-match">${matchPct}%</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+            <span class="discover-match">${matchPct}%</span>
+            ${bookmarkBtn('artist', a.name, '', a.image || '')}
+          </div>
         </div>`;
 
     if (a.albums?.length) {
@@ -354,7 +573,6 @@ function renderDiscover() {
     }
     html += `</div>`;
   }
-
   setContent(html);
 }
 
@@ -380,7 +598,6 @@ function renderGaps() {
   let artists = [...(lastGaps.artists || [])];
   if (!artists.length) {
     setContent('<div class="empty">Geen collectiegaten gevonden — je hebt alles al! 🎉</div>');
-    // Update badge
     document.getElementById('badge-gaps').textContent = '0';
     return;
   }
@@ -406,7 +623,10 @@ function renderGaps() {
         <div class="gaps-header">
           ${photo}
           <div style="flex:1;min-width:0">
-            <div class="gaps-artist-name">${esc(a.name)}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+              <div class="gaps-artist-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
+              ${bookmarkBtn('artist', a.name, '', a.image || '')}
+            </div>
             <div class="gaps-artist-meta">${esc(meta)}</div>
             ${tagsHtml(a.tags, 3)}
             <div style="height:8px"></div>
@@ -421,7 +641,6 @@ function renderGaps() {
     for (const alb of a.missingAlbums) html += albumCard(alb, false);
     html += `</div>`;
 
-    // Show owned albums collapsed
     if (a.allAlbums?.filter(x => x.inPlex).length > 0) {
       html += `<details style="margin-top:12px">
         <summary style="font-size:11px;color:var(--muted2);cursor:pointer;user-select:none">
@@ -432,7 +651,6 @@ function renderGaps() {
         </div>
       </details>`;
     }
-
     html += `</div>`;
   }
   setContent(html);
@@ -449,11 +667,109 @@ async function loadLoved() {
     for (const t of tracks) {
       const when = t.date?.uts ? timeAgo(parseInt(t.date.uts)) : '';
       html += `<div class="card">${trackImg(t.image)}<div class="card-info">
-        <div class="card-title">${esc(t.name)}</div><div class="card-sub">${esc(t.artist?.name||'')}</div>
+        <div class="card-title">${esc(t.name)}</div>
+        <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name||'')}</div>
         </div><div class="card-meta" style="color:var(--red)">♥ ${when}</div></div>`;
     }
     setContent(html + '</div>');
   } catch (e) { showError(e.message); }
+}
+
+// ── Statistieken (5c) ──────────────────────────────────────────────────────
+async function loadStats() {
+  showLoading('Statistieken ophalen...');
+  try {
+    const d = await apiFetch('/api/stats');
+    const chartHtml = `
+      <div class="stats-grid">
+        <div class="stats-card full">
+          <div class="stats-card-title">Scrobbles afgelopen 7 dagen</div>
+          <div class="chart-wrap"><canvas id="chart-daily"></canvas></div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-title">Top artiesten deze maand</div>
+          <div class="chart-wrap" style="max-height:320px"><canvas id="chart-top"></canvas></div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-title">Genre verdeling</div>
+          <div class="chart-wrap"><canvas id="chart-genres"></canvas></div>
+        </div>
+      </div>`;
+    setContent(chartHtml, () => renderStatsCharts(d));
+  } catch (e) { showError(e.message); }
+}
+
+function renderStatsCharts(d) {
+  if (typeof Chart === 'undefined') return;
+
+  const isDark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+  const gridColor   = isDark ? '#2c2c2c' : '#ddd';
+  const tickColor   = isDark ? '#888' : '#777';
+  const labelColor  = isDark ? '#efefef' : '#111';
+
+  Chart.defaults.color = tickColor;
+  Chart.defaults.borderColor = gridColor;
+
+  // Daily scrobbles bar chart
+  const dc = document.getElementById('chart-daily');
+  if (dc) {
+    new Chart(dc, {
+      type: 'bar',
+      data: {
+        labels: d.dailyScrobbles.map(x => {
+          const dt = new Date(x.date + 'T12:00:00');
+          return dt.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric' });
+        }),
+        datasets: [{ data: d.dailyScrobbles.map(x => x.count), backgroundColor: 'rgba(213,16,7,0.75)', borderRadius: 4 }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw} scrobbles` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: tickColor } },
+          y: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Top artists horizontal bar
+  const tc = document.getElementById('chart-top');
+  if (tc && d.topArtists?.length) {
+    new Chart(tc, {
+      type: 'bar',
+      data: {
+        labels: d.topArtists.map(a => a.name),
+        datasets: [{ data: d.topArtists.map(a => a.playcount), backgroundColor: 'rgba(229,160,13,0.75)', borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw} plays` } } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { color: labelColor, font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // Genre donut
+  const gc = document.getElementById('chart-genres');
+  if (gc && d.genres?.length) {
+    const colors = ['#d51007','#e5a00d','#6c5ce7','#00b894','#fd79a8','#0984e3','#e17055','#a29bfe'];
+    new Chart(gc, {
+      type: 'doughnut',
+      data: {
+        labels: d.genres.map(g => g.name),
+        datasets: [{ data: d.genres.map(g => g.count), backgroundColor: colors.slice(0, d.genres.length), borderWidth: 0 }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'right', labels: { color: tickColor, boxWidth: 12, padding: 10, font: { size: 11 } } } }
+      }
+    });
+  }
 }
 
 // ── Navigatie ──────────────────────────────────────────────────────────────
@@ -464,7 +780,9 @@ const tabLoaders = {
   recs:       () => loadRecs(),
   topartists: () => loadTopArtists(currentPeriod),
   toptracks:  () => loadTopTracks(currentPeriod),
-  loved:      () => loadLoved()
+  loved:      () => loadLoved(),
+  stats:      () => loadStats(),
+  wishlist:   () => loadWishlist()
 };
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -528,6 +846,69 @@ document.getElementById('btn-refresh-gaps').addEventListener('click', async () =
   loadGaps();
 });
 
+// ── Globale event delegation ───────────────────────────────────────────────
+document.addEventListener('click', async e => {
+  // Artiest-link → open panel
+  const link = e.target.closest('[data-artist]');
+  if (link?.dataset.artist && !link.classList.contains('bookmark-btn')) {
+    // Skip search result items (handled separately)
+    if (link.classList.contains('search-result-item')) {
+      document.getElementById('search-results').classList.remove('open');
+      document.getElementById('search-input').value = '';
+    }
+    openArtistPanel(link.dataset.artist);
+    return;
+  }
+
+  // Bookmark toggle
+  const bBtn = e.target.closest('.bookmark-btn');
+  if (bBtn) {
+    e.stopPropagation();
+    const { btype, bname, bartist, bimage } = bBtn.dataset;
+    const added = await toggleWishlist(btype, bname, bartist, bimage);
+    bBtn.classList.toggle('saved', added);
+    bBtn.title = added ? 'Verwijder uit lijst' : 'Sla op in lijst';
+    // Sync bookmark buttons elsewhere that have same key
+    document.querySelectorAll(`.bookmark-btn[data-bname="${CSS.escape(bname)}"][data-btype="${btype}"]`).forEach(b => {
+      b.classList.toggle('saved', added);
+    });
+    return;
+  }
+
+  // Verlanglijst verwijderen
+  const wRemove = e.target.closest('.wish-remove[data-wid]');
+  if (wRemove) {
+    await fetch(`/api/wishlist/${wRemove.dataset.wid}`, { method: 'DELETE' });
+    wishlistMap.forEach((v, k) => { if (String(v) === wRemove.dataset.wid) wishlistMap.delete(k); });
+    updateWishlistBadge();
+    loadWishlist();
+    return;
+  }
+
+  // Soortgelijke artiest chip → nieuwe panel
+  const chip = e.target.closest('.panel-similar-chip[data-artist]');
+  if (chip) {
+    openArtistPanel(chip.dataset.artist);
+    return;
+  }
+
+  // Panel overlay backdrop click → sluiten
+  if (e.target === document.getElementById('panel-overlay')) {
+    closeArtistPanel();
+    return;
+  }
+});
+
+document.getElementById('panel-close').addEventListener('click', closeArtistPanel);
+
+// Escape key sluit panel
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeArtistPanel();
+    document.getElementById('search-results').classList.remove('open');
+  }
+});
+
 // ── Gebruikersprofiel ──────────────────────────────────────────────────────
 async function loadUser() {
   try {
@@ -550,5 +931,6 @@ async function loadUser() {
 loadPlexStatus();
 loadPlexNP();
 loadUser();
+loadWishlistState();
 loadRecent();
 setInterval(loadPlexNP, 30_000);

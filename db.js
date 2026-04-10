@@ -14,6 +14,17 @@ db.exec(`
     updated_at INTEGER NOT NULL
   )
 `);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wishlist (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    type     TEXT    NOT NULL,
+    name     TEXT    NOT NULL,
+    artist   TEXT,
+    image    TEXT,
+    added_at INTEGER NOT NULL,
+    UNIQUE(type, name)
+  )
+`);
 
 /** Haal een gecachede waarde op. Geeft null terug als niet aanwezig of verlopen. */
 function getCache(key, maxAgeMs = Infinity) {
@@ -40,4 +51,31 @@ function getCacheAge(key) {
   return row ? Date.now() - row.updated_at : Infinity;
 }
 
-module.exports = { getCache, setCache, clearCache, getCacheAge };
+/** Geeft alle verlanglijst-items terug, nieuwste eerst. */
+function getWishlist() {
+  return db.prepare('SELECT * FROM wishlist ORDER BY added_at DESC').all();
+}
+
+/** Voeg een item toe aan de verlanglijst. Geeft het id terug (ook als het al bestond). */
+function addToWishlist(type, name, artist, image) {
+  const res = db.prepare(
+    'INSERT OR IGNORE INTO wishlist (type, name, artist, image, added_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(type, name, artist || null, image || null, Date.now());
+  if (res.changes === 0) {
+    return db.prepare('SELECT id FROM wishlist WHERE type = ? AND name = ?').get(type, name).id;
+  }
+  return res.lastInsertRowid;
+}
+
+/** Verwijder een verlanglijst-item op id. */
+function removeFromWishlist(id) {
+  db.prepare('DELETE FROM wishlist WHERE id = ?').run(id);
+}
+
+/** Geeft het id terug als het item in de verlanglijst staat, anders null. */
+function isInWishlist(type, name) {
+  const row = db.prepare('SELECT id FROM wishlist WHERE type = ? AND name = ?').get(type, name);
+  return row ? row.id : null;
+}
+
+module.exports = { getCache, setCache, clearCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, isInWishlist };
