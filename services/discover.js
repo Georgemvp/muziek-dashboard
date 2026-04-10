@@ -10,6 +10,8 @@ let buildPromise = null;
 
 async function buildDiscoverCache() {
   console.log('Discover cache bouwen...');
+  // STAP 12: Bewaar oude cache voor error recovery
+  const oldCache = getCache('discover');
   try {
     await syncPlexLibrary();
     const topData    = await lfm({ method: 'user.gettopartists', period: '6month', limit: 20 });
@@ -67,6 +69,11 @@ async function buildDiscoverCache() {
     console.log(`Discover cache klaar: ${enriched.length} artiesten`);
   } catch (e) {
     console.error('Discover cache mislukt:', e.message);
+    // STAP 12: Error recovery — bewaar oude cache bij fout
+    if (oldCache) {
+      setCache('discover', oldCache);
+      console.log('Discover: oude cache hersteld na fout.');
+    }
   }
 }
 

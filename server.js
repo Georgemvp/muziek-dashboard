@@ -30,23 +30,47 @@ app.get('/api/user', async (req, res) => {
 });
 
 app.get('/api/recent', async (req, res) => {
-  try { res.json(await lfm({ method: 'user.getrecenttracks', limit: 20 })); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const cached = getCache('api:recent', 120_000); // STAP 11: 2 min TTL
+    if (cached) return res.json(cached);
+    const data = await lfm({ method: 'user.getrecenttracks', limit: 20 });
+    setCache('api:recent', data);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/topartists', async (req, res) => {
-  try { res.json(await lfm({ method: 'user.gettopartists', period: req.query.period || '7day', limit: 20 })); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const period = req.query.period || '7day';
+    const cacheKey = `api:topartists:${period}`;
+    const cached = getCache(cacheKey, 300_000); // STAP 11: 5 min TTL
+    if (cached) return res.json(cached);
+    const data = await lfm({ method: 'user.gettopartists', period, limit: 20 });
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/toptracks', async (req, res) => {
-  try { res.json(await lfm({ method: 'user.gettoptracks', period: req.query.period || '7day', limit: 20 })); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const period = req.query.period || '7day';
+    const cacheKey = `api:toptracks:${period}`;
+    const cached = getCache(cacheKey, 300_000); // STAP 11: 5 min TTL
+    if (cached) return res.json(cached);
+    const data = await lfm({ method: 'user.gettoptracks', period, limit: 20 });
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/loved', async (req, res) => {
-  try { res.json(await lfm({ method: 'user.getlovedtracks', limit: 20 })); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const cached = getCache('api:loved', 600_000); // STAP 11: 10 min TTL
+    if (cached) return res.json(cached);
+    const data = await lfm({ method: 'user.getlovedtracks', limit: 20 });
+    setCache('api:loved', data);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── API: Artiest info ──────────────────────────────────────────────────────
@@ -102,6 +126,8 @@ app.get('/api/artist/:name/info', async (req, res) => {
 
 app.get('/api/recs', async (req, res) => {
   try {
+    const cached = getCache('api:recs', 900_000); // STAP 11: 15 min TTL
+    if (cached) return res.json(cached);
     await syncPlexLibrary();
     const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 15 });
     const topArtists = (top.topartists?.artist || []).map(a => a.name);
@@ -174,14 +200,16 @@ app.get('/api/recs', async (req, res) => {
       .slice(0, 20);
 
     const { ok, artistCount } = getPlexStatus();
-    res.json({
+    const result = {
       recommendations:  topRecs,
       albumRecs,
       trackRecs,
       basedOn:          topArtists,
       plexConnected:    ok,
       plexArtistCount:  artistCount
-    });
+    };
+    setCache('api:recs', result); // STAP 11: sla op in cache
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -44,24 +44,41 @@ async function getDeezerAlbums(artistId) {
 
 /**
  * Bouw de releases-cache op door:
- * 1. Top artiesten op te halen (3m + 12m) → unieke set
- * 2. Per artiest Deezer te bevragen
- * 3. Albums te filteren op release_date ≥ CUTOFF_DAYS geleden
+ * 1. Top artiesten op te halen (3m + 12m met hogere limieten) → unieke set
+ * 2. Recente tracks ophalen voor extra artiesten die niet in top staan
+ * 3. Per artiest Deezer te bevragen (met rate limiting)
+ * 4. Albums te filteren op release_date ≥ CUTOFF_DAYS geleden
+ * 5. Sorteren op artistPlaycount (desc), dan datum (desc)
  */
 async function buildReleasesCache() {
   console.log('Releases cache bouwen...');
+
+  // Bewaar oude cache voor error recovery (STAP 12)
+  const oldCache = getCache('releases');
+
   try {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - CUTOFF_DAYS);
 
-    // Haal top-artiesten op uit twee periodes
-    const [r3m, r12m] = await Promise.allSettled([
-      lfm({ method: 'user.gettopartists', period: '3month',  limit: 30 }),
-      lfm({ method: 'user.gettopartists', period: '12month', limit: 50 })
+    // STAP 1.1: Hogere limieten voor top-artiesten
+    const [r3m, r12m, rRecent] = await Promise.allSettled([
+      lfm({ method: 'user.gettopartists', period: '3month',  limit: 50 }),
+      lfm({ method: 'user.gettopartists', period: '12month', limit: 200 }),
+      lfm({ method: 'user.getrecenttracks', limit: 200 })
     ]);
 
-    const names3m  = r3m.status  === 'fulfilled' ? (r3m.value.topartists?.artist  || []).map(a => a.name) : [];
-    const names12m = r12m.status === 'fulfilled' ? (r12m.value.topartists?.artist || []).map(a => a.name) : [];
+    // STAP 1.3: Bouw playcountMap uit top-artiesten responses
+    const playcountMap = new Map();
+    const artists3m  = r3m.status  === 'fulfilled' ? (r3m.value.topartists?.artist  || []) : [];
+    const artists12m = r12m.status === 'fulfilled' ? (r12m.value.topartists?.artist || []) : [];
+    for (const a of [...artists3m, ...artists12m]) {
+      if (!playcountMap.has(a.name)) {
+        playcountMap.set(a.name, parseInt(a.playcount) || 0);
+      }
+    }
+
+    const names3m  = artists3m.map(a => a.name);
+    const names12m = artists12m.map(a => a.name);
 
     // Unieke set (behoud volgorde, 3m eerst)
     const seen    = new Set();
@@ -70,7 +87,23 @@ async function buildReleasesCache() {
       if (!seen.has(n)) { seen.add(n); artists.push(n); }
     }
 
-    // Batch in groepen van 5 om Deezer niet te overbelasten
+    // STAP 1.2: Voeg artiesten uit recenttracks toe die nog niet in de set staan
+    if (rRecent.status === 'fulfilled') {
+      const recentTracks = rRecent.value.recenttracks?.track || [];
+      for (const t of recentTracks) {
+        const name = t.artist?.['#text'];
+        if (name && !seen.has(name)) {
+          seen.add(name);
+          artists.push(name);
+          // STAP 1.3: Artiesten uit recenttracks die niet in top staan krijgen playcount 1
+          if (!playcountMap.has(name)) {
+            playcountMap.set(name, 1);
+          }
+        }
+      }
+    }
+
+    // STAP 1.5: Batch in groepen van 5 met 1500ms vertraging tussen batches
     const releases = [];
 
     for (let i = 0; i < artists.length; i += 5) {
@@ -87,29 +120,51 @@ async function buildReleasesCache() {
               return rel >= cutoff;
             })
             .map(a => ({
-              album:       a.title,
-              artist:      name,
-              releaseDate: a.release_date,
-              image:       a.cover_medium || null,
-              type:        a.record_type  || 'album',
-              inPlex:      albumInPlex(name, a.title),
-              artistInPlex: artistInPlex(name),
-              deezerUrl:   a.link || null
+              album:          a.title,
+              artist:         name,
+              releaseDate:    a.release_date,
+              image:          a.cover_big || a.cover_medium || null,  // STAP 13.3: cover_big
+              type:           a.record_type  || 'album',
+              inPlex:         albumInPlex(name, a.title),
+              artistInPlex:   artistInPlex(name),
+              deezerUrl:      a.link || null,
+              artistPlaycount: playcountMap.get(name) || 1  // STAP 1.4
             }));
         })
       );
       for (const r of batchResults) {
         if (r.status === 'fulfilled') releases.push(...r.value);
       }
+
+      // STAP 1.5: Rate limiting — wacht 1500ms na elke batch (behalve de laatste)
+      if (i + 5 < artists.length) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
 
-    // Sorteren op datum (nieuwste eerst)
-    releases.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
+    // STAP 1.6: Sorteer primair op artistPlaycount (desc), secundair op releaseDate (desc)
+    releases.sort((a, b) => {
+      const playDiff = (b.artistPlaycount || 0) - (a.artistPlaycount || 0);
+      if (playDiff !== 0) return playDiff;
+      return new Date(b.releaseDate) - new Date(a.releaseDate);
+    });
 
-    setCache('releases', { releases, builtAt: Date.now() });
-    console.log(`Releases cache klaar: ${releases.length} releases`);
+    // STAP 10: Vergelijk met vorige cache om nieuwe releases te detecteren
+    const prevReleases = oldCache?.releases || [];
+    const prevKeys = new Set(prevReleases.map(r => `${r.artist}::${r.album}`));
+    const newReleaseIds = releases
+      .filter(r => !prevKeys.has(`${r.artist}::${r.album}`))
+      .map(r => `${r.artist}::${r.album}`);
+
+    setCache('releases', { releases, builtAt: Date.now(), newReleaseIds });
+    console.log(`Releases cache klaar: ${releases.length} releases, ${newReleaseIds.length} nieuw`);
   } catch (e) {
     console.error('Releases cache mislukt:', e.message);
+    // STAP 12: Error recovery — bewaar de oude cache als die beschikbaar was
+    if (oldCache) {
+      setCache('releases', oldCache);
+      console.log('Releases: oude cache hersteld na fout.');
+    }
   }
 }
 
@@ -120,7 +175,12 @@ function getReleases() {
   }
   const data = getCache('releases');
   if (!data) return { status: 'building', message: 'Recente releases worden opgehaald (ca. 30 sec)...' };
-  return { status: 'ok', ...data };
+  // STAP 10: Voeg newCount toe aan response
+  return {
+    status: 'ok',
+    ...data,
+    newCount: (data.newReleaseIds || []).length
+  };
 }
 
 /** Forceer een rebuild van de releases-cache. */

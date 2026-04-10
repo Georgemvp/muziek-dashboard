@@ -10,6 +10,8 @@ let buildPromise = null;
 
 async function buildGapsCache() {
   console.log('Gaps cache bouwen...');
+  // STAP 12: Bewaar oude cache voor error recovery
+  const oldCache = getCache('gaps');
   try {
     await syncPlexLibrary();
     const topData    = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 40 });
@@ -48,6 +50,11 @@ async function buildGapsCache() {
     console.log(`Gaps cache klaar: ${gapArtists.length} artiesten met gaten`);
   } catch (e) {
     console.error('Gaps cache mislukt:', e.message);
+    // STAP 12: Error recovery — bewaar oude cache bij fout
+    if (oldCache) {
+      setCache('gaps', oldCache);
+      console.log('Gaps: oude cache hersteld na fout.');
+    }
   }
 }
 

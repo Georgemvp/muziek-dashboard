@@ -1,5 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
+
+/* ── STAP 9: Theme variabelen (dark default, light via data-theme) ── */
+:root,
+[data-theme="dark"] {
   --red: #d51007;
   --plex: #e5a00d;
   --plex-bg: rgba(229,160,13,0.12);
@@ -17,12 +20,18 @@
   --muted2: #888;
   --radius: 10px;
 }
+[data-theme="light"] {
+  --bg: #f2f2f2; --surface: #fff; --surface2: #f7f7f7; --surface3: #eee;
+  --border: #ddd; --text: #111; --muted: #999; --muted2: #777;
+}
+/* Behoud ook media-query fallback voor het geval data-theme nog niet is gezet */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #f2f2f2; --surface: #fff; --surface2: #f7f7f7; --surface3: #eee;
     --border: #ddd; --text: #111; --muted: #999; --muted2: #777;
   }
 }
+
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 .app { max-width: 1080px; margin: 0 auto; padding: 1.5rem 1rem 5rem; }
 
@@ -39,6 +48,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .plex-dot { width: 6px; height: 6px; border-radius: 50%; }
 .plex-pill.on  .plex-dot { background: var(--plex); }
 .plex-pill.off .plex-dot { background: var(--muted); }
+
+/* STAP 9: Theme toggle */
+.theme-toggle {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 20px;
+  padding: 3px 10px; font-size: 14px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.theme-toggle:hover { background: var(--surface3); }
 
 /* ── Plex now playing ── */
 .plex-np {
@@ -89,11 +106,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .search-result-name { font-size: 14px; font-weight: 500; }
 .search-result-sub { font-size: 11px; color: var(--muted2); margin-top: 1px; }
 
-/* ── Tabs ── */
+/* ── STAP 3: Scrollbare tabs ── */
 .tabs {
-  display: flex; gap: 5px; margin-bottom: 1rem;
-  flex-wrap: wrap;
+  display: flex;
+  gap: 5px;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  flex-wrap: nowrap;
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   padding: 7px 14px; font-size: 13px; font-weight: 500;
   border: 1px solid var(--border); border-radius: 7px;
@@ -153,10 +177,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .bookmark-btn:hover { opacity: 0.7; transform: scale(1.2); }
 .bookmark-btn.saved { opacity: 1; }
 
+/* ── STAP 4: Base card class ── */
+.base-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.base-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
+}
+
 /* ── Card list (recent/loved) ── */
 .card-list { display: flex; flex-direction: column; gap: 6px; }
-.card { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; transition: border-color 0.15s; }
-.card:hover { border-color: var(--muted2); }
+.card { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .card-img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .card-ph { width: 44px; height: 44px; border-radius: 6px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--muted); flex-shrink: 0; }
 .card-info { flex: 1; min-width: 0; }
@@ -165,15 +201,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .card-bar { height: 2px; background: var(--border); border-radius: 2px; margin-top: 6px; }
 .card-bar-fill { height: 2px; background: var(--red); border-radius: 2px; }
 .card-meta { font-size: 12px; color: var(--muted2); flex-shrink: 0; text-align: right; }
-.now-playing { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--red); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 6px; }
+.now-playing { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--red); border-radius: 12px; padding: 10px 14px; margin-bottom: 6px; }
 .np-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; animation: blink 1.2s ease-in-out infinite; }
 .np-label { font-size: 11px; color: var(--red); font-weight: 700; flex-shrink: 0; letter-spacing: 0.04em; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
 /* ── Artist grid ── */
 .artist-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.ag-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s, transform 0.15s; }
-.ag-card:hover { border-color: var(--muted2); transform: translateY(-2px); }
+.ag-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.ag-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .ag-photo { width: 100%; aspect-ratio: 1/1; overflow: hidden; background: var(--surface2); }
 .ag-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ag-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: var(--muted); }
@@ -183,8 +219,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ── Recs grid ── */
 .rec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.rec-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s; }
-.rec-card:hover { border-color: var(--muted2); }
+.rec-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.rec-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .rec-card.hidden { display: none; }
 .rec-photo { width: 100%; aspect-ratio: 16/9; overflow: hidden; background: var(--surface2); }
 .rec-photo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
@@ -210,8 +246,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .discover-artist-card {
   display: flex; align-items: flex-start; gap: 14px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+  border-radius: 12px; padding: 16px; margin-bottom: 12px;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
+.discover-artist-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .discover-photo {
   width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
   flex-shrink: 0; background: var(--surface2);
@@ -230,8 +268,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ── Album grid ── */
 .album-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-.album-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; transition: transform 0.15s, border-color 0.15s; }
-.album-card:hover { transform: translateY(-2px); border-color: var(--muted2); }
+.album-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.album-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .album-card.owned { opacity: 0.4; }
 .album-card.owned:hover { opacity: 0.75; }
 .album-cover { position: relative; aspect-ratio: 1/1; overflow: hidden; }
@@ -248,7 +286,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .album-status.own  { background: var(--plex-bg);  color: var(--plex); }
 
 /* ── Gaps ── */
-.gaps-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 16px 20px; margin-bottom: 1.5rem; }
+.gaps-block { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 20px; margin-bottom: 1.5rem; transition: box-shadow 0.2s ease; }
+.gaps-block:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
 .gaps-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .gaps-photo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .gaps-photo-ph { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--muted); flex-shrink: 0; }
@@ -260,7 +299,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .gaps-sub { font-size: 10px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
 .gaps-album-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 
-/* ── Artist panel overlay ── */
+/* ── STAP 8: Artist panel overlay + bottom sheet op mobiel ── */
 .panel-overlay {
   position: fixed; inset: 0; z-index: 500;
   background: rgba(0,0,0,0); pointer-events: none;
@@ -320,8 +359,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .stats-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px;
+  border-radius: 12px; padding: 16px;
+  transition: box-shadow 0.2s ease;
 }
+.stats-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
 .stats-card.full { grid-column: 1 / -1; }
 .stats-card-title { font-size: 11px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px; }
 .chart-wrap { position: relative; max-height: 260px; }
@@ -329,10 +370,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Verlanglijst ── */
 .wishlist-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .wish-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; display: flex; flex-direction: column;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
-.wish-card:hover { border-color: var(--muted2); }
+.wish-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .wish-photo {
   width: 100%; aspect-ratio: 1/1; overflow: hidden; position: relative;
   display: flex; align-items: center; justify-content: center;
@@ -353,6 +395,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .wish-remove:hover { color: var(--red); }
 
+/* ── STAP 5: Skeleton loaders ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.skeleton-card { height: 64px; border-radius: 12px; }
+.skeleton-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.skeleton-square { aspect-ratio: 1; border-radius: 12px; }
+.skeleton-stats { display: flex; flex-direction: column; gap: 20px; }
+.skeleton-stat-full { height: 180px; border-radius: 12px; }
+.skeleton-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.skeleton-stat-half { height: 160px; border-radius: 12px; }
+
 /* ── Loading / Error / Empty ── */
 .loading { text-align: center; padding: 3.5rem 1rem; color: var(--muted2); font-size: 14px; }
 .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 14px; }
@@ -361,9 +423,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .error-box { background: rgba(213,16,7,0.08); border: 1px solid rgba(213,16,7,0.25); color: #f07070; border-radius: var(--radius); padding: 14px 16px; font-size: 14px; }
 .empty { text-align: center; padding: 3rem 1rem; color: var(--muted2); font-size: 14px; }
 
+/* ── STAP 6: Staggered fade-in ── */
+.stagger-in {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: fadeUp 0.3s ease forwards;
+}
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Aanbevolen Albums ── */
 .albrec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-top: 12px; }
-.albrec-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.albrec-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.albrec-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
 .albrec-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
 .albrec-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .albrec-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: var(--muted); }
@@ -375,7 +448,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ── Aanbevolen Nummers ── */
 .trackrec-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
-.trackrec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.trackrec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; transition: box-shadow 0.2s ease; }
+.trackrec-row:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
 .trackrec-info { flex: 1; min-width: 0; }
 .trackrec-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackrec-artist { font-size: 12px; color: var(--muted2); cursor: pointer; }
@@ -388,7 +462,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ── Nieuwe Releases ── */
 .releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 12px; }
-.rel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.rel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.2s ease, transform 0.15s ease; }
+.rel-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
+/* STAP 10: Nieuwe release highlight */
+.rel-card-new { border-left: 3px solid var(--red); }
 .rel-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
 .rel-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rel-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: var(--muted); }
@@ -401,9 +478,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .rel-artist { font-size: 12px; color: var(--muted2); cursor: pointer; }
 .rel-artist:hover { color: var(--text); }
 .rel-date { font-size: 12px; color: var(--muted); }
+.rel-date-rel { font-size: 11px; color: var(--muted); opacity: 0.8; }
 .rel-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .rel-deezer-link { font-size: 11px; color: var(--red); text-decoration: none; }
 .rel-deezer-link:hover { text-decoration: underline; }
+
+/* ── STAP 7: Mobiele bottom navigation ── */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 56px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 400;
+  justify-content: space-around;
+  align-items: stretch;
+}
+.bnav-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; background: none; border: none; color: var(--muted2);
+  font-size: 10px; font-weight: 500; cursor: pointer; padding: 6px 2px;
+  transition: color 0.15s;
+}
+.bnav-btn svg { stroke: currentColor; }
+.bnav-btn.active { color: var(--red); }
+.bnav-btn span { font-size: 9px; letter-spacing: 0.01em; }
 
 /* ── Responsive ── */
 @media (max-width: 800px) {
@@ -415,11 +517,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .wishlist-grid { grid-template-columns: repeat(2, 1fr); }
   .albrec-grid   { grid-template-columns: repeat(3, 1fr); }
   .releases-grid { grid-template-columns: repeat(3, 1fr); }
+  .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  /* STAP 7: Toon bottom nav, verberg desktop tabs */
+  .bottom-nav { display: flex; }
+  .tabs { display: none; }
+  .app { padding-bottom: 70px; }
+
+  /* STAP 8: Artiest panel als bottom sheet */
+  .panel-overlay {
+    align-items: flex-end;
+    justify-content: stretch;
+  }
+  .artist-panel {
+    width: 100%;
+    max-height: 85vh;
+    height: auto;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  .panel-overlay.open .artist-panel {
+    transform: translateY(0);
+  }
 }
 @media (max-width: 560px) {
-  .app { padding: 1rem 0.75rem 4rem; }
+  .app { padding: 1rem 0.75rem 70px; }
   .album-grid   { grid-template-columns: repeat(2, 1fr); }
   .gaps-album-grid { grid-template-columns: repeat(2, 1fr); }
   .discover-artist-card { flex-wrap: wrap; }
   .wishlist-grid { grid-template-columns: repeat(2, 1fr); }
+  .releases-grid { grid-template-columns: repeat(2, 1fr); }
+  .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
+  .skeleton-two  { grid-template-columns: 1fr; }
 }

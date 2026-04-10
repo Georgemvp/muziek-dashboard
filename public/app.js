@@ -4,6 +4,7 @@ let currentPeriod = '7day';
 let recsFilter    = 'all';
 let discFilter    = 'all';
 let gapsSort      = 'missing';
+let releasesSort  = 'listening';  // STAP 2
 let plexOk        = false;
 let lastDiscover  = null;
 let lastGaps      = null;
@@ -76,11 +77,46 @@ function setContent(html, callback) {
     void contentEl.offsetHeight; // force reflow
     contentEl.style.opacity = '1';
     contentEl.style.transform = '';
+    // STAP 6: Staggered fade-in voor grid-children
+    document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
+      el.classList.add('stagger-in');
+      el.style.animationDelay = `${i * 30}ms`;
+    });
     if (callback) requestAnimationFrame(callback);
   });
 }
-const showLoading = msg  => setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);
-const showError   = msg  => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
+const showError = msg => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
+
+// STAP 5: Skeleton loaders
+function showSkeleton(type) {
+  let html = '';
+  if (type === 'cards') {
+    html = '<div class="skeleton-list">' + Array(6).fill('<div class="skeleton skeleton-card"></div>').join('') + '</div>';
+  } else if (type === 'grid') {
+    html = '<div class="skeleton-grid">' + Array(8).fill('<div class="skeleton skeleton-square"></div>').join('') + '</div>';
+  } else if (type === 'stats') {
+    html = '<div class="skeleton-stats"><div class="skeleton skeleton-stat-full"></div><div class="skeleton-two"><div class="skeleton skeleton-stat-half"></div><div class="skeleton skeleton-stat-half"></div></div></div>';
+  } else {
+    html = `<div class="loading"><div class="spinner"></div>${type || 'Laden...'}</div>`;
+  }
+  setContent(html);
+}
+const showLoading = msg => {
+  // Kies automatisch de juiste skeleton op basis van huidige tab
+  const skeletonMap = {
+    recent: 'cards', loved: 'cards', toptracks: 'cards',
+    topartists: 'grid', releases: 'grid', recs: 'grid',
+    discover: 'grid', gaps: 'grid',
+    stats: 'stats',
+    wishlist: 'grid'
+  };
+  const skType = skeletonMap[currentTab];
+  if (skType && !msg) {
+    showSkeleton(skType);
+  } else {
+    setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);
+  }
+};
 
 // Track image with proper fallback (6b)
 const trackImg = imgs => {
@@ -554,11 +590,12 @@ function applyRecsFilter() {
 }
 
 // ── Nieuwe Releases ────────────────────────────────────────────────────────
-let releasesFilter = 'all';
-let lastReleases   = null;
+let releasesFilter  = 'all';
+let lastReleases    = null;
+let newReleaseIds   = new Set();  // STAP 10
 
 async function loadReleases() {
-  showLoading('Releases ophalen...');
+  showLoading();
   try {
     const d = await apiFetch('/api/releases');
     if (d.status === 'building') {
@@ -568,9 +605,37 @@ async function loadReleases() {
       setTimeout(() => { if (currentTab === 'releases') loadReleases(); }, 5_000);
       return;
     }
-    lastReleases = d.releases || [];
+    lastReleases  = d.releases || [];
+    // STAP 10: Sla nieuwe release-ids op en toon badge
+    newReleaseIds = new Set(d.newReleaseIds || []);
+    updateReleasesBadge(d.newCount || 0);
     renderReleases();
   } catch (e) { showError(e.message); }
+}
+
+// STAP 10: Badge updater
+function updateReleasesBadge(count) {
+  const badge = document.getElementById('badge-releases');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// STAP 13.4: Relatieve datum helper
+function relativeDate(dateStr) {
+  if (!dateStr) return '';
+  const rel = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - rel;
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  if (diffDays === 0) return 'vandaag';
+  if (diffDays === 1) return 'gisteren';
+  if (diffDays < 7)  return `${diffDays} dagen geleden`;
+  return rel.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' });
 }
 
 function renderReleases() {
@@ -579,6 +644,8 @@ function renderReleases() {
     setContent('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>');
     return;
   }
+
+  // STAP 2: Type-filter
   let filtered = releases;
   if (releasesFilter !== 'all') {
     filtered = releases.filter(r => (r.type || 'album').toLowerCase() === releasesFilter);
@@ -587,6 +654,18 @@ function renderReleases() {
     setContent(`<div class="empty">Geen ${releasesFilter === 'ep' ? "EP's" : releasesFilter + 's'} gevonden voor dit filter.</div>`);
     return;
   }
+
+  // STAP 2: Sorteren op basis van releasesSort
+  if (releasesSort === 'listening') {
+    filtered = [...filtered].sort((a, b) => {
+      const playDiff = (b.artistPlaycount || 0) - (a.artistPlaycount || 0);
+      if (playDiff !== 0) return playDiff;
+      return new Date(b.releaseDate) - new Date(a.releaseDate);
+    });
+  } else {
+    filtered = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
+  }
+
   const typeLabel = t => ({ album: 'Album', single: 'Single', ep: 'EP' })[t?.toLowerCase()] || (t || 'Album');
   const typeBadgeClass = t => ({ album: 'rel-type-album', single: 'rel-type-single', ep: 'rel-type-ep' })[t?.toLowerCase()] || 'rel-type-album';
 
@@ -594,15 +673,17 @@ function renderReleases() {
     <div class="releases-grid">`;
 
   for (const r of filtered) {
+    const isNew = newReleaseIds.has(`${r.artist}::${r.album}`);  // STAP 10
     const imgEl = r.image
       ? `<img class="rel-img" src="${esc(r.image)}" alt="" loading="lazy"
            onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="rel-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</div>`
       : `<div class="rel-ph" style="background:${gradientFor(r.album)}">${initials(r.album)}</div>`;
 
-    const dateStr = r.releaseDate
-      ? new Date(r.releaseDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })
-      : '';
+    // STAP 13.4: Toon relatieve datum + absolute datum
+    const absDate  = r.releaseDate ? new Date(r.releaseDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' }) : '';
+    const relDate  = relativeDate(r.releaseDate);
+    const dateHtml = absDate ? `<div class="rel-date">${absDate} <span class="rel-date-rel">(${relDate})</span></div>` : '';
 
     const plexStatus = plexOk
       ? (r.inPlex
@@ -617,13 +698,13 @@ function renderReleases() {
       : '';
 
     html += `
-      <div class="rel-card">
+      <div class="rel-card${isNew ? ' rel-card-new' : ''}">
         <div class="rel-cover">${imgEl}</div>
         <div class="rel-info">
           <span class="rel-type-badge ${typeBadgeClass(r.type)}">${typeLabel(r.type)}</span>
           <div class="rel-album">${esc(r.album)}</div>
           <div class="rel-artist artist-link" data-artist="${esc(r.artist)}">${esc(r.artist)}</div>
-          ${dateStr ? `<div class="rel-date">${dateStr}</div>` : ''}
+          ${dateHtml}
           <div class="rel-footer">${plexStatus}${deezerLink}</div>
         </div>
       </div>`;
@@ -982,6 +1063,16 @@ document.querySelectorAll('[data-rtype]').forEach(btn => {
   });
 });
 
+// STAP 2: Sorteer-knoppen voor releases
+document.querySelectorAll('[data-rsort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
+    btn.classList.add('sel-def');
+    releasesSort = btn.dataset.rsort;
+    renderReleases();
+  });
+});
+
 document.getElementById('btn-refresh-releases').addEventListener('click', async () => {
   lastReleases = null;
   await fetch('/api/releases/refresh', { method: 'POST' });
@@ -1055,12 +1146,83 @@ document.addEventListener('click', async e => {
 
 document.getElementById('panel-close').addEventListener('click', closeArtistPanel);
 
-// Escape key sluit panel
+// STAP 13.2: Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeArtistPanel();
     document.getElementById('search-results').classList.remove('open');
+    return;
   }
+
+  // Niet triggeren als in een invoerveld
+  const inInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+
+  // '/' → focus zoekbalk
+  if (e.key === '/' && !inInput) {
+    e.preventDefault();
+    document.getElementById('search-input').focus();
+    return;
+  }
+
+  // 'r' → refresh huidige tab
+  if (e.key === 'r' && !inInput) {
+    tabLoaders[currentTab]?.();
+    return;
+  }
+
+  // Cijfertoetsen 1-9, 0=10e tab → activeer tab
+  if (!inInput && /^[0-9]$/.test(e.key)) {
+    const tabs = document.querySelectorAll('.tab');
+    const idx  = e.key === '0' ? 9 : parseInt(e.key) - 1;
+    if (tabs[idx]) tabs[idx].click();
+    return;
+  }
+});
+
+// STAP 7: Bottom nav click handlers
+document.querySelectorAll('.bnav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    // Sync met de gewone tabs
+    const desktopTab = document.querySelector(`.tab[data-tab="${tab}"]`);
+    if (desktopTab) desktopTab.click();
+    // Update bottom nav active state
+    document.querySelectorAll('.bnav-btn').forEach(b => b.classList.toggle('active', b === btn));
+  });
+});
+
+// Sync bottom nav wanneer desktop tab wordt geklikt
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.bnav-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+  });
+});
+
+// STAP 9: Dark/light mode toggle
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+(function initTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved) {
+    applyTheme(saved);
+  } else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? 'dark' : 'light');
+  }
+})();
+
+document.getElementById('theme-toggle')?.addEventListener('click', () => {
+  const current = document.documentElement.dataset.theme;
+  const next    = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem('theme', next);
 });
 
 // ── Gebruikersprofiel ──────────────────────────────────────────────────────
