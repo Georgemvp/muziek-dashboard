@@ -1,107 +1,85 @@
-# Last.fm Muziekaanbevelingen
+# Muziek-dashboard
 
-Een persoonlijke muziekaanbevelingsapp op basis van jouw Last.fm-account, draaiend als Docker-container op je Mac Mini M4.
+Een persoonlijke muziekdashboard op basis van Last.fm, draaiend als Docker-container op je Mac Mini.
+
+**Functies:** recente nummers · top artiesten & tracks · aanbevelingen · ontdek nieuwe artiesten · Plex collectiegaten
+
+---
 
 ## Mappenstructuur
 
 ```
 lastfm-app/
-├── index.html          ← De app zelf (hier pas je alles aan)
+├── server.js           ← Node/Express backend + alle API-logica
+├── public/
+│   └── index.html      ← Frontend (HTML/CSS/JS in één bestand)
 ├── Dockerfile          ← Hoe de container wordt gebouwd
 ├── docker-compose.yml  ← Hoe de container wordt gestart
+├── .env                ← Jouw API-sleutels (nooit committen!)
+├── .env.example        ← Leeg sjabloon voor .env
+├── .dockerignore       ← Bestanden die niet in de Docker image gaan
 └── README.md           ← Dit bestand
 ```
 
 ---
 
-## Opstarten (eerste keer)
+## Opstarten
 
-Open Terminal op je Mac Mini en navigeer naar de map:
+Zorg dat `.env` gevuld is (zie `.env.example`), open Terminal en run:
 
 ```bash
-cd ~/lastfm-app
+cd ~/pad/naar/lastfm-app
 docker compose up -d
 ```
 
-De app is daarna bereikbaar op: **http://localhost:8484**
-
-Via ZeroTier ook bereikbaar op: **http://10.94.184.22:8484**
+De app is bereikbaar op: **http://localhost:9090**
 
 ---
 
-## Aanpassingen maken aan de app
+## Wijzigingen aanbrengen
 
-Omdat `index.html` direct als volume is gekoppeld, hoef je de container **niet opnieuw te bouwen** na een wijziging. Je past `index.html` aan, slaat op, en herlaadt de pagina in je browser.
-
-### Workflow voor aanpassingen:
-1. Open `index.html` in een teksteditor (bijv. TextEdit, VS Code, of Cursor)
-2. Maak je wijzigingen
-3. Sla op
-4. Herlaad de pagina in je browser → klaar
-
----
-
-## Handige Docker-commando's
+Pas `public/index.html` of `server.js` aan en herbouw de container:
 
 ```bash
-# Starten
-docker compose up -d
-
-# Stoppen
 docker compose down
+docker compose up -d --build
+```
 
+---
+
+## Handige commando's
+
+```bash
 # Logs bekijken
 docker compose logs -f
 
 # Status controleren
 docker compose ps
 
-# Container herstarten (bijv. na config-wijziging)
+# Container herstarten
 docker compose restart
+
+# Cache handmatig vernieuwen (via API)
+curl -X POST http://localhost:9090/api/discover/refresh
+curl -X POST http://localhost:9090/api/gaps/refresh
 ```
 
 ---
 
-## Poort wijzigen
+## API-overzicht
 
-Wil je een andere poort dan 8484? Pas dit aan in `docker-compose.yml`:
-
-```yaml
-ports:
-  - "9000:80"    # Verander 8484 naar jouw gewenste poort
-```
-
-Daarna:
-```bash
-docker compose down
-docker compose up -d
-```
-
----
-
-## Nieuwe functies toevoegen
-
-Alle logica zit in `index.html`. Vraag Claude om uitbreidingen te maken, zoals:
-- Vergelijken met je lokale muziekbibliotheek op de 4tbdrive
-- Periode-filter (week / maand / jaar)
-- Genre-tags bij aanbevelingen
-- Koppeling met Lidarr
-
-Plak de nieuwe versie van `index.html` in de map en herlaad de browser.
-
----
-
-## Toevoegen aan bestaande Docker Compose stack
-
-Als je dit wilt samenvoegen met je bestaande `docker-compose.yml` (voor Immich, Lidarr, etc.), voeg dan dit blok toe aan je bestaande bestand:
-
-```yaml
-  lastfm-app:
-    build: /pad/naar/lastfm-app
-    container_name: lastfm-app
-    restart: unless-stopped
-    ports:
-      - "8484:80"
-    volumes:
-      - /pad/naar/lastfm-app/index.html:/usr/share/nginx/html/index.html:ro
-```
+| Endpoint | Omschrijving |
+|---|---|
+| `GET /api/user` | Profielinfo |
+| `GET /api/recent` | Recentelijk gespeeld |
+| `GET /api/topartists?period=7day` | Top artiesten (7day / 1month / 3month / 12month / overall) |
+| `GET /api/toptracks?period=7day` | Top nummers |
+| `GET /api/loved` | Geliefde nummers |
+| `GET /api/recs` | Snelle aanbevelingen (Last.fm + Plex) |
+| `GET /api/discover` | Diepgaande ontdekkingen (MusicBrainz + Deezer) |
+| `GET /api/gaps` | Ontbrekende albums bij artiesten die je al hebt |
+| `GET /api/artist/:name/info` | Artiest-info (foto, albums, tags, Plex-status) |
+| `GET /api/plex/status` | Plex verbindingsstatus |
+| `GET /api/plex/nowplaying` | Wat er nu speelt in Plex |
+| `POST /api/discover/refresh` | Forceer discover-cache vernieuwing |
+| `POST /api/gaps/refresh` | Forceer gaps-cache vernieuwing |

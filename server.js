@@ -1,5 +1,4 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const path = require('path');
 
 const app = express();
@@ -12,13 +11,20 @@ const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
 const MBZ_BASE   = 'https://musicbrainz.org/ws/2';
 const MBZ_UA     = 'LastfmPlexDiscovery/2.0 (muziek-ontdekkingen)';
 
+// ── Startup validatie ──────────────────────────────────────────────────────
+if (!API_KEY || !USERNAME) {
+  console.error('FOUT: LASTFM_API_KEY en LASTFM_USER zijn verplicht. Controleer je .env bestand.');
+  process.exit(1);
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Last.fm ────────────────────────────────────────────────────────────────
 
-async function lfm(params) {
+async function lfm(params, { includeUser = true } = {}) {
   const url = new URL(LASTFM);
-  Object.entries({ api_key: API_KEY, format: 'json', user: USERNAME, ...params })
+  const base = { api_key: API_KEY, format: 'json', ...(includeUser ? { user: USERNAME } : {}) };
+  Object.entries({ ...base, ...params })
     .forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString());
   const data = await res.json();
@@ -26,14 +32,9 @@ async function lfm(params) {
   return data;
 }
 
-async function lfmArtist(params) {
-  const url = new URL(LASTFM);
-  Object.entries({ api_key: API_KEY, format: 'json', ...params })
-    .forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
-  const data = await res.json();
-  if (data.error) throw new Error(data.message || `Last.fm fout ${data.error}`);
-  return data;
+async function getSimilarArtists(artist, limit = 8) {
+  const data = await lfm({ method: 'artist.getsimilar', artist, limit }, { includeUser: false });
+  return data.similarartists?.artist || [];
 }
 
 // ── Plex ──────────────────────────────────────────────────────────────────
@@ -112,6 +113,14 @@ const mbzCache = new Map();  // urlPath → { data, time }
 let mbzChain = Promise.resolve();
 let mbzLastCallTime = 0;
 
+// Ruim verlopen MBZ-cache entries elk uur op
+setInterval(() => {
+  const cutoff = Date.now() - 86_400_000;
+  for (const [key, { time }] of mbzCache) {
+    if (time < cutoff) mbzCache.delete(key);
+  }
+}, 3_600_000);
+
 function mbzEnqueue(fn) {
   const p = mbzChain.then(async () => {
     const wait = Math.max(0, 1250 - (Date.now() - mbzLastCallTime));
@@ -184,13 +193,11 @@ async function getDeezerImage(name) {
 
 // ── Discovery cache ────────────────────────────────────────────────────────
 
-let discoverCache     = null;
-let discoverCacheTime = 0;
-let discoverBuilding  = false;
+let discoverCache        = null;
+let discoverCacheTime    = 0;
+let discoverBuildPromise = null;
 
 async function buildDiscoverCache() {
-  if (discoverBuilding) return;
-  discoverBuilding = true;
   console.log('Discover cache bouwen...');
   try {
     await syncPlexLibrary();
@@ -198,20 +205,12 @@ async function buildDiscoverCache() {
     const topData = await lfm({ method: 'user.gettopartists', period: '3month', limit: 10 });
     const topArtists = (topData.topartists?.artist || []).map(a => a.name);
 
-    // Gelijkaardige artiesten verzamelen via Last.fm (parallel)
+    // Gelijkaardige artiesten parallel ophalen via helper
     const candidateMap = new Map();
     const discoverSimilar = await Promise.all(
       topArtists.slice(0, 5).map(async artist => {
-        try {
-          const url = new URL(LASTFM);
-          url.searchParams.set('method', 'artist.getsimilar');
-          url.searchParams.set('artist', artist);
-          url.searchParams.set('api_key', API_KEY);
-          url.searchParams.set('format', 'json');
-          url.searchParams.set('limit', '8');
-          const d = await fetch(url.toString()).then(r => r.json());
-          return { artist, similar: d.similarartists?.artist || [] };
-        } catch (e) { return { artist, similar: [] }; }
+        try { return { artist, similar: await getSimilarArtists(artist, 8) }; }
+        catch (e) { return { artist, similar: [] }; }
       })
     );
     for (const { artist, similar } of discoverSimilar) {
@@ -230,9 +229,8 @@ async function buildDiscoverCache() {
       .sort((a, b) => (b.match * (b.inPlex ? 0.8 : 1.2)) - (a.match * (a.inPlex ? 0.8 : 1.2)))
       .slice(0, 10);
 
-    // Verrijken met MBZ + Deezer
-    const enriched = [];
-    for (const c of sorted) {
+    // Verrijken met MBZ + Deezer — parallel (mbzEnqueue regelt rate limiting)
+    const enriched = await Promise.all(sorted.map(async c => {
       try {
         const [mbz, image] = await Promise.all([
           getMBZArtist(c.name).catch(() => null),
@@ -243,7 +241,7 @@ async function buildDiscoverCache() {
           const raw = await getMBZAlbums(mbz.mbid).catch(() => []);
           albums = raw.map(a => ({ ...a, inPlex: albumInPlex(c.name, a.title) }));
         }
-        enriched.push({
+        return {
           ...c,
           mbid:        mbz?.mbid || null,
           country:     mbz?.country || null,
@@ -253,31 +251,27 @@ async function buildDiscoverCache() {
           albums,
           missingCount: albums.filter(a => !a.inPlex).length,
           totalAlbums:  albums.length
-        });
+        };
       } catch (e) {
-        enriched.push({ ...c, tags: [], albums: [], missingCount: 0, totalAlbums: 0 });
+        return { ...c, tags: [], albums: [], missingCount: 0, totalAlbums: 0 };
       }
-    }
+    }));
 
     discoverCache     = { artists: enriched, basedOn: topArtists, builtAt: Date.now() };
     discoverCacheTime = Date.now();
     console.log(`Discover cache klaar: ${enriched.length} artiesten`);
   } catch (e) {
     console.error('Discover cache mislukt:', e.message);
-  } finally {
-    discoverBuilding = false;
   }
 }
 
 // ── Gaps cache ─────────────────────────────────────────────────────────────
 
-let gapsCache     = null;
-let gapsCacheTime = 0;
-let gapsBuilding  = false;
+let gapsCache        = null;
+let gapsCacheTime    = 0;
+let gapsBuildPromise = null;
 
 async function buildGapsCache() {
-  if (gapsBuilding) return;
-  gapsBuilding = true;
   console.log('Gaps cache bouwen...');
   try {
     await syncPlexLibrary();
@@ -319,8 +313,6 @@ async function buildGapsCache() {
     console.log(`Gaps cache klaar: ${gapArtists.length} artiesten met gaten`);
   } catch (e) {
     console.error('Gaps cache mislukt:', e.message);
-  } finally {
-    gapsBuilding = false;
   }
 }
 
@@ -357,7 +349,7 @@ app.get('/api/artist/:name/info', async (req, res) => {
   try {
     const [deezerR, albumsR, mbzR] = await Promise.allSettled([
       fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`).then(r => r.json()),
-      lfmArtist({ method: 'artist.gettopalbums', artist: name, limit: 6 }),
+      lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
       getMBZArtist(name)
     ]);
 
@@ -409,16 +401,8 @@ app.get('/api/recs', async (req, res) => {
     let recs = [];
     const similarResults = await Promise.all(
       topArtists.slice(0, 3).map(async artist => {
-        try {
-          const url = new URL(LASTFM);
-          url.searchParams.set('method', 'artist.getsimilar');
-          url.searchParams.set('artist', artist);
-          url.searchParams.set('api_key', API_KEY);
-          url.searchParams.set('format', 'json');
-          url.searchParams.set('limit', '8');
-          const d = await fetch(url.toString()).then(r => r.json());
-          return { artist, similar: d.similarartists?.artist || [] };
-        } catch (e) { return { artist, similar: [] }; }
+        try { return { artist, similar: await getSimilarArtists(artist, 8) }; }
+        catch (e) { return { artist, similar: [] }; }
       })
     );
     for (const { artist, similar } of similarResults) {
@@ -451,14 +435,18 @@ app.get('/api/recs', async (req, res) => {
 
 app.get('/api/discover', async (req, res) => {
   const stale = Date.now() - discoverCacheTime > 86_400_000;
-  if (stale && !discoverBuilding) buildDiscoverCache().catch(() => {});
+  if (stale && !discoverBuildPromise) {
+    discoverBuildPromise = buildDiscoverCache().finally(() => { discoverBuildPromise = null; });
+  }
   if (!discoverCache) return res.json({ status: 'building', message: 'Muziekontdekkingen worden geanalyseerd (ca. 30 sec)...' });
   res.json({ status: 'ok', ...discoverCache, plexConnected: plexSyncOk });
 });
 
 app.get('/api/gaps', async (req, res) => {
   const stale = Date.now() - gapsCacheTime > 86_400_000;
-  if (stale && !gapsBuilding) buildGapsCache().catch(() => {});
+  if (stale && !gapsBuildPromise) {
+    gapsBuildPromise = buildGapsCache().finally(() => { gapsBuildPromise = null; });
+  }
   if (!gapsCache) return res.json({ status: 'building', message: 'Collectiegaten worden gezocht...' });
   res.json({ status: 'ok', ...gapsCache, plexConnected: plexSyncOk });
 });
@@ -466,12 +454,16 @@ app.get('/api/gaps', async (req, res) => {
 // Forceer cache refresh
 app.post('/api/discover/refresh', (req, res) => {
   discoverCacheTime = 0;
-  if (!discoverBuilding) buildDiscoverCache().catch(() => {});
+  if (!discoverBuildPromise) {
+    discoverBuildPromise = buildDiscoverCache().finally(() => { discoverBuildPromise = null; });
+  }
   res.json({ ok: true, building: true });
 });
 app.post('/api/gaps/refresh', (req, res) => {
   gapsCacheTime = 0;
-  if (!gapsBuilding) buildGapsCache().catch(() => {});
+  if (!gapsBuildPromise) {
+    gapsBuildPromise = buildGapsCache().finally(() => { gapsBuildPromise = null; });
+  }
   res.json({ ok: true, building: true });
 });
 
@@ -499,6 +491,6 @@ app.get('/api/plex/nowplaying', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`App draait op poort ${PORT}`);
-  setTimeout(() => buildDiscoverCache().catch(() => {}), 8_000);
-  setTimeout(() => buildGapsCache().catch(() => {}), 15_000);
+  setTimeout(() => { discoverBuildPromise = buildDiscoverCache().finally(() => { discoverBuildPromise = null; }); }, 8_000);
+  setTimeout(() => { gapsBuildPromise    = buildGapsCache().finally(() => { gapsBuildPromise = null; }); }, 15_000);
 });
