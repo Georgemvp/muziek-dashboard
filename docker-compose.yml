@@ -21,23 +21,27 @@ services:
       retries: 3
 
   tidarr:
-    image: cstaelen/tidarr:latest
+    build:
+      context: ./tidarr
+      dockerfile: docker/Dockerfile
+      target: production
     container_name: tidarr
     restart: unless-stopped
     ports:
       - "8484:8484"
     environment:
       # Tidarr credentials (invullen in .env)
-      - TIDARR_API_KEY=${TIDARR_API_KEY}
+      - ADMIN_PASSWORD=${TIDARR_API_KEY}
       # Plex-integratie — Tidarr triggert automatisch een library-scan na download
       - PLEX_URL=${PLEX_URL}
       - PLEX_TOKEN=${PLEX_TOKEN}
-      - PLEX_LIBRARY_ID=${PLEX_LIBRARY_ID}
-      # Download-kwaliteit (LOSSLESS / HIGH / LOW) — optioneel
-      - TIDAL_QUALITY=LOSSLESS
+      - PLEX_LIBRARY=${PLEX_LIBRARY_ID}
+      # Download-kwaliteit
+      - LOCK_QUALITY=LOSSLESS
+      - ENABLE_HISTORY=true
     volumes:
-      - ./data/tidarr/config:/app/config
-      - ./data/tidarr/downloads:/downloads
+      - ./data/tidarr/config:/shared
+      - ./data/tidarr/downloads:/music
       # Zet dit pad naar je eigen Plex muziekmap zodat Tidarr direct in de bibliotheek schrijft.
       # - /pad/naar/plex/muziek:/music
     extra_hosts:

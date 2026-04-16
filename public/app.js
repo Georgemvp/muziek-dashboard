@@ -1325,14 +1325,40 @@ const tabLoaders = {
   stats:      () => loadStats(),
   wishlist:   () => loadWishlist(),
   plexlib:    () => loadPlexLibrary(),
-  tidal:      () => loadTidal()
+  tidal:      () => loadTidal(),
+  'tidarr-ui': () => loadTidarrUI()
 };
+
+// ── Tidarr UI (iframe) ─────────────────────────────────────────────────────
+function loadTidarrUI() {
+  const iframe  = document.getElementById('tidarr-iframe');
+  const wrap    = document.getElementById('tidarr-ui-wrap');
+  const content = document.getElementById('content');
+  wrap.style.display   = 'flex';
+  content.style.display = 'none';
+  // Laad de iframe pas de eerste keer dat de tab wordt geopend
+  if (!iframe.src || iframe.src === window.location.href) {
+    iframe.src = iframe.dataset.src;
+  }
+}
+
+function hideTidarrUI() {
+  document.getElementById('tidarr-ui-wrap').style.display = 'none';
+  document.getElementById('content').style.display        = '';
+}
+
+document.getElementById('btn-tidarr-reload')?.addEventListener('click', () => {
+  const iframe = document.getElementById('tidarr-iframe');
+  iframe.src = iframe.dataset.src;
+});
 
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     currentTab = btn.dataset.tab;
+    // Verberg Tidarr iframe als we naar een andere tab gaan
+    if (currentTab !== 'tidarr-ui') hideTidarrUI();
     document.getElementById('tb-period').classList.toggle('visible', ['topartists','toptracks'].includes(currentTab));
     document.getElementById('tb-recs').classList.toggle('visible', currentTab === 'recs');
     document.getElementById('tb-releases').classList.toggle('visible', currentTab === 'releases');
@@ -1340,6 +1366,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById('tb-gaps').classList.toggle('visible', currentTab === 'gaps');
     document.getElementById('tb-plexlib').classList.toggle('visible', currentTab === 'plexlib');
     document.getElementById('tb-tidal').classList.toggle('visible', currentTab === 'tidal');
+    document.getElementById('tb-tidarr-ui').classList.toggle('visible', currentTab === 'tidarr-ui');
     if (currentTab !== 'tidal') stopTidarrQueuePolling();
     tabLoaders[currentTab]?.();
   });

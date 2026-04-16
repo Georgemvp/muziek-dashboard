@@ -6,8 +6,23 @@ if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
 
 const express = require('express');
 const path    = require('path');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const app     = express();
 const PORT    = process.env.PORT || 80;
+
+// ── Tidarr UI proxy ────────────────────────────────────────────────────────
+// Alle verzoeken naar /tidarr-ui/ worden doorgestuurd naar de Tidarr container.
+const TIDARR_BASE = (process.env.TIDARR_URL || 'http://tidarr:8484').replace(/\/$/, '');
+app.use('/tidarr-ui', createProxyMiddleware({
+  target:      TIDARR_BASE,
+  changeOrigin: true,
+  pathRewrite: { '^/tidarr-ui': '' },
+  on: {
+    error: (err, req, res) => {
+      res.status(502).send('Tidarr niet bereikbaar. Is de Tidarr container actief?');
+    }
+  }
+}));
 
 // ── Services ───────────────────────────────────────────────────────────────
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');

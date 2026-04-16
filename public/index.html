@@ -44,6 +44,7 @@
     <button class="tab" data-tab="wishlist">🔖 Mijn lijst <span class="tab-badge" id="badge-wishlist">0</span></button>
     <button class="tab" data-tab="plexlib">📀 Plex bibliotheek</button>
     <button class="tab" data-tab="tidal">🌊 Tidal <span class="tab-badge" id="badge-tidarr-queue" style="display:none">0</span></button>
+    <button class="tab" data-tab="tidarr-ui">🎛️ Tidarr</button>
   </div>
 
   <!-- Period toolbar -->
@@ -102,6 +103,26 @@
       <span class="tidarr-dot"></span>
       <span id="tidarr-status-text">Tidarr…</span>
     </span>
+  </div>
+
+  <!-- Tidarr UI toolbar -->
+  <div class="toolbar" id="tb-tidarr-ui">
+    <span class="toolbar-label">Tidarr — volledige interface</span>
+    <span class="toolbar-sep"></span>
+    <button class="tool-btn" id="btn-tidarr-reload" title="Herlaad Tidarr">↻ Herladen</button>
+    <a class="tool-btn" id="btn-tidarr-open" href="/tidarr-ui/" target="_blank" title="Open in nieuw venster">↗ Nieuw venster</a>
+  </div>
+
+  <!-- Tidarr iframe container (buiten #content, wordt getoond/verborgen als tab) -->
+  <div id="tidarr-ui-wrap" style="display:none; flex:1; overflow:hidden; min-height:0;">
+    <iframe
+      id="tidarr-iframe"
+      src=""
+      data-src="/tidarr-ui/"
+      style="width:100%; height:100%; border:none; min-height:600px; border-radius:0 0 10px 10px;"
+      allow="autoplay"
+      title="Tidarr">
+    </iframe>
   </div>
 
   <!-- Gaps filter toolbar -->
