@@ -17,6 +17,7 @@ const { getDeezerImage }                                            = require('.
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
+const { searchTidal, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist } = require('./db');
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -375,6 +376,46 @@ app.post('/api/wishlist', (req, res) => {
 app.delete('/api/wishlist/:id', (req, res) => {
   removeFromWishlist(parseInt(req.params.id));
   res.json({ removed: true });
+});
+
+// ── API: Tidarr ────────────────────────────────────────────────────────────
+
+app.get('/api/tidarr/status', async (req, res) => {
+  try { res.json(await getTidarrStatus()); }
+  catch (e) { res.status(500).json({ connected: false, reason: e.message }); }
+});
+
+app.get('/api/tidarr/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json({ results: [] });
+  try { res.json(await searchTidal(q)); }
+  catch (e) { res.status(500).json({ error: e.message, results: [] }); }
+});
+
+app.post('/api/tidarr/download', async (req, res) => {
+  const { url } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url is verplicht' });
+  try {
+    const result = await addToQueue(url);
+    res.json({ ok: true, result });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/api/tidarr/queue', async (req, res) => {
+  try { res.json(await getQueue()); }
+  catch (e) { res.status(500).json({ error: e.message, items: [] }); }
+});
+
+app.delete('/api/tidarr/queue/:id', async (req, res) => {
+  try {
+    const result = await removeFromQueue(req.params.id);
+    res.json({ ok: true, result });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/api/tidarr/history', async (req, res) => {
+  try { res.json(await getHistory()); }
+  catch (e) { res.status(500).json({ error: e.message, items: [] }); }
 });
 
 // ── Health check ───────────────────────────────────────────────────────────

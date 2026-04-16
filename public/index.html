@@ -43,6 +43,7 @@
     <button class="tab" data-tab="releases">🆕 Releases <span class="tab-badge" id="badge-releases" style="display:none">0</span></button>
     <button class="tab" data-tab="wishlist">🔖 Mijn lijst <span class="tab-badge" id="badge-wishlist">0</span></button>
     <button class="tab" data-tab="plexlib">📀 Plex bibliotheek</button>
+    <button class="tab" data-tab="tidal">🌊 Tidal <span class="tab-badge" id="badge-tidarr-queue" style="display:none">0</span></button>
   </div>
 
   <!-- Period toolbar -->
@@ -87,6 +88,20 @@
   <div class="toolbar" id="tb-plexlib">
     <input class="plib-search" id="plib-search" type="text" placeholder="🔍  Zoek artiest of album…" autocomplete="off">
     <button class="tool-btn refresh-btn" id="btn-sync-plex">↻ Sync Plex</button>
+  </div>
+
+  <!-- Tidal (Tidarr) toolbar -->
+  <div class="toolbar" id="tb-tidal">
+    <input class="tidal-search" id="tidal-search" type="text" placeholder="🔍  Zoek op Tidal (album of nummer)…" autocomplete="off">
+    <span class="toolbar-sep"></span>
+    <button class="tool-btn sel-def" data-tidal-view="search">Zoeken</button>
+    <button class="tool-btn" data-tidal-view="queue">Queue <span class="tab-badge" id="badge-tidarr-queue-inline" style="display:none">0</span></button>
+    <button class="tool-btn" data-tidal-view="history">Geschiedenis</button>
+    <span class="toolbar-sep"></span>
+    <span class="tidarr-status-pill off" id="tidarr-status-pill">
+      <span class="tidarr-dot"></span>
+      <span id="tidarr-status-text">Tidarr…</span>
+    </span>
   </div>
 
   <!-- Gaps filter toolbar -->

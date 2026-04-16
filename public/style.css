@@ -648,4 +648,125 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .releases-grid { grid-template-columns: repeat(2, 1fr); }
   .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
   .skeleton-two  { grid-template-columns: 1fr; }
+  .tidal-grid   { grid-template-columns: 1fr; }
 }
+
+/* ── Tidarr / Tidal tab ────────────────────────────────────────────────── */
+.tidal-search {
+  flex: 1; min-width: 220px;
+  padding: 7px 12px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 13px; outline: none;
+  transition: border-color 0.15s;
+}
+.tidal-search:focus { border-color: var(--muted2); }
+.tidal-search::placeholder { color: var(--muted); }
+
+.tidarr-status-pill {
+  font-size: 11px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 20px;
+  display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  border: 1px solid transparent; transition: all 0.2s var(--ease);
+}
+.tidarr-status-pill.on  {
+  background: var(--new-bg); color: var(--new);
+  border-color: rgba(108,92,231,0.28);
+  box-shadow: 0 0 10px rgba(108,92,231,0.18);
+}
+.tidarr-status-pill.off { background: var(--surface2); color: var(--muted2); border-color: var(--border); }
+.tidarr-dot { width: 6px; height: 6px; border-radius: 50%; }
+.tidarr-status-pill.on  .tidarr-dot { background: var(--new); box-shadow: 0 0 5px var(--new); }
+.tidarr-status-pill.off .tidarr-dot { background: var(--muted); }
+
+.tidal-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  margin-bottom: 1.5rem;
+}
+.tidal-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tidal-card:hover { border-color: var(--border-hover); background: var(--surface2); }
+.tidal-cover { width: 56px; height: 56px; border-radius: 6px; overflow: hidden; flex-shrink: 0; position: relative; background: var(--surface2); }
+.tidal-img  { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tidal-ph   {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: var(--muted);
+}
+.tidal-info { flex: 1; min-width: 0; }
+.tidal-title  { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidal-artist { font-size: 12px; color: var(--muted2); margin-top: 1px; cursor: pointer; }
+.tidal-artist:hover { color: var(--text); }
+.tidal-meta   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tidal-dl-btn {
+  background: var(--new); color: #fff; border: none; border-radius: 6px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s var(--ease); flex-shrink: 0;
+}
+.tidal-dl-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+.tidal-dl-btn:disabled { opacity: 0.7; cursor: default; }
+.tidal-dl-btn.downloaded { background: var(--green); }
+
+/* Download-knop op album-kaart (Gaps/Discover) */
+.album-dl-btn {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  background: rgba(108,92,231,0.9); color: #fff; border: none; border-radius: 50%;
+  width: 28px; height: 28px; font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s var(--ease);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.album-dl-btn:hover:not(:disabled) { background: var(--new); transform: scale(1.08); }
+.album-dl-btn:disabled { opacity: 0.7; cursor: default; }
+.album-dl-btn.downloaded { background: var(--green); }
+
+/* Algemene download-knop (inline in andere contexts) */
+.download-btn:not(.album-dl-btn):not(.tidal-dl-btn) {
+  background: var(--new-bg); color: var(--new); border: 1px solid rgba(108,92,231,0.3);
+  border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s var(--ease);
+}
+.download-btn:not(.album-dl-btn):not(.tidal-dl-btn):hover:not(:disabled) {
+  background: var(--new); color: #fff;
+}
+.download-btn.downloaded { background: var(--green); color: #fff; }
+
+/* Queue / History lijst */
+.q-list { display: flex; flex-direction: column; gap: 8px; }
+.q-row  {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 14px;
+  transition: border-color 0.15s;
+}
+.q-row:hover { border-color: var(--border-hover); }
+.q-info { flex: 1; min-width: 0; }
+.q-title  { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-artist { font-size: 12px; color: var(--muted2); margin-top: 1px; cursor: pointer; }
+.q-artist:hover { color: var(--text); }
+.q-status {
+  display: inline-block; margin-top: 4px;
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.q-status.q-pending { background: var(--surface3); color: var(--muted2); }
+.q-status.q-active  { background: var(--plex-bg);  color: var(--plex); }
+.q-status.q-done    { background: var(--green-bg); color: var(--green); }
+.q-status.q-error   { background: rgba(213,16,7,0.13); color: var(--red); }
+.q-bar {
+  width: 120px; height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden;
+  flex-shrink: 0;
+}
+.q-bar-fill { height: 100%; background: var(--new); transition: width 0.3s ease; }
+.q-pct { font-size: 11px; color: var(--muted2); min-width: 36px; text-align: right; flex-shrink: 0; }
+.q-remove {
+  background: transparent; border: 1px solid var(--border); color: var(--muted2);
+  border-radius: 6px; width: 28px; height: 28px; font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all 0.15s var(--ease);
+}
+.q-remove:hover { background: rgba(213,16,7,0.13); color: var(--red); border-color: var(--red); }
+

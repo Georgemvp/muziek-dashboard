@@ -11,9 +11,34 @@ services:
       - ./data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - tidarr
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost/health',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       start_period: 20s
       retries: 3
+
+  tidarr:
+    image: cstaelen/tidarr:latest
+    container_name: tidarr
+    restart: unless-stopped
+    ports:
+      - "8484:8484"
+    environment:
+      # Tidarr credentials (invullen in .env)
+      - TIDARR_API_KEY=${TIDARR_API_KEY}
+      # Plex-integratie — Tidarr triggert automatisch een library-scan na download
+      - PLEX_URL=${PLEX_URL}
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - PLEX_LIBRARY_ID=${PLEX_LIBRARY_ID}
+      # Download-kwaliteit (LOSSLESS / HIGH / LOW) — optioneel
+      - TIDAL_QUALITY=LOSSLESS
+    volumes:
+      - ./data/tidarr/config:/app/config
+      - ./data/tidarr/downloads:/downloads
+      # Zet dit pad naar je eigen Plex muziekmap zodat Tidarr direct in de bibliotheek schrijft.
+      # - /pad/naar/plex/muziek:/music
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
