@@ -1,7 +1,32 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── STAP 9: Theme variabelen (dark default, light via data-theme) ── */
+/* ── STAP 9: Theme variabelen (light default, dark via data-theme) ── */
 :root,
+[data-theme="light"] {
+  --red: #d51007;
+  --plex: #e5a00d;
+  --plex-bg: rgba(229,160,13,0.13);
+  --plex-glow: rgba(229,160,13,0.18);
+  --new: #6c5ce7;
+  --new-bg: rgba(108,92,231,0.13);
+  --green: #00b894;
+  --green-bg: rgba(0,184,148,0.1);
+  --bg: #F5F5F7;
+  --surface: #FFFFFF;
+  --surface2: #F9F9FB;
+  --surface3: #EFEFEF;
+  --border: #E5E5EA;
+  --border-hover: #D0D0D5;
+  --text: #1D1D1F;
+  --muted: #86868B;
+  --muted2: #6E6E73;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 2px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
 [data-theme="dark"] {
   --red: #d51007;
   --plex: #e5a00d;
@@ -20,50 +45,41 @@
   --text: #f0f0f0;
   --muted: #5a5a62;
   --muted2: #888892;
-  --radius: 10px;
-  --radius-lg: 14px;
+  --radius: 12px;
+  --radius-lg: 16px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.2);
   --shadow-lg: 0 10px 30px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
   --ease: cubic-bezier(0.2, 0, 0, 1);
 }
-[data-theme="light"] {
-  --bg: #f0f0f3; --surface: #ffffff; --surface2: #f5f5f8; --surface3: #eaeaee;
-  --border: #e0e0e6; --border-hover: #c8c8d0; --text: #111116; --muted: #9898a6; --muted2: #6e6e7a;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.14), 0 4px 12px rgba(0,0,0,0.08);
-  --plex-glow: rgba(229,160,13,0.12);
-}
 /* Behoud ook media-query fallback voor het geval data-theme nog niet is gezet */
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #f2f2f2; --surface: #fff; --surface2: #f7f7f7; --surface3: #eee;
-    --border: #ddd; --text: #111; --muted: #999; --muted2: #777;
+    --bg: #0c0c0d; --surface: #161618; --surface2: #1f1f22; --surface3: #27272b;
+    --border: #2a2a2e; --text: #f0f0f0; --muted: #5a5a62; --muted2: #888892;
   }
 }
 
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.app { max-width: 1080px; margin: 0 auto; padding: 0 1rem 5rem; }
+.app { max-width: 1120px; margin: 0 auto; padding: 0 1rem 5rem; }
 
 /* ── Header ── */
 .site-header {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   position: sticky; top: 0; z-index: 300;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background: rgba(245,245,247,0.8);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
   border-bottom: 1px solid var(--border);
   padding: 0.85rem 0;
   margin-bottom: 1.25rem;
-  box-shadow: 0 1px 0 var(--border), 0 4px 20px rgba(0,0,0,0.15);
 }
 .lfm-logo {
   background: var(--red); color: #fff; font-size: 11px; font-weight: 800;
   padding: 3px 8px; border-radius: 5px; letter-spacing: 0.06em; flex-shrink: 0;
   box-shadow: 0 1px 6px rgba(213,16,7,0.35);
 }
-.site-title { font-size: 17px; font-weight: 700; flex: 1; letter-spacing: -0.01em; }
+.site-title { font-size: 20px; font-weight: 700; flex: 1; letter-spacing: -0.01em; }
 .plex-pill {
   font-size: 11px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 20px;
   display: flex; align-items: center; gap: 5px; flex-shrink: 0;
@@ -130,7 +146,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .plex-np-label { font-size: 11px; color: var(--plex); font-weight: 700; flex-shrink: 0; letter-spacing: 0.04em; }
 
 /* ── User card ── */
-.user-card { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 1.5rem; border-left: 3px solid var(--red); box-shadow: var(--shadow-sm); }
+.user-card { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 1.5rem; border-left: 3px solid var(--red); }
 .user-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .user-avatar-ph { width: 52px; height: 52px; border-radius: 50%; background: var(--red); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: #fff; flex-shrink: 0; }
 .user-name { font-size: 16px; font-weight: 600; }
@@ -235,7 +251,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 #content { transition: opacity 0.15s ease, transform 0.15s ease; }
 
 /* ── Section title ── */
-.section-title { font-size: 11px; font-weight: 600; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
 
 /* ── Tags ── */
 .tags { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -271,19 +287,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
 }
 .base-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   transform: translateY(-2px);
   border-color: var(--border-hover);
 }
 
 /* ── Card list (recent/loved) ── */
-.card-list { display: flex; flex-direction: column; gap: 6px; }
+.card-list { display: flex; flex-direction: column; gap: 10px; }
 .card { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 14px; transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s; }
-.card:hover { box-shadow: var(--shadow-md), 0 0 0 1px rgba(213,16,7,0.08); transform: translateY(-2px); border-color: rgba(213,16,7,0.15); }
-.card-img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
-.card-ph { width: 44px; height: 44px; border-radius: 6px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--muted); flex-shrink: 0; }
+.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--border-hover); }
+.card-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
+.card-ph { width: 56px; height: 56px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--muted); flex-shrink: 0; }
 .card-info { flex: 1; min-width: 0; }
-.card-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-sub { font-size: 13px; color: var(--muted2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .card-bar { height: 2px; background: var(--border); border-radius: 2px; margin-top: 6px; }
 .card-bar-fill { height: 2px; background: var(--red); border-radius: 2px; }
@@ -322,8 +338,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   overflow: hidden;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
 }
-.ag-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-hover); }
-.ag-photo { width: 100%; aspect-ratio: 1/1; overflow: hidden; background: var(--surface2); }
+.ag-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--border-hover); }
+.ag-photo { width: 100%; aspect-ratio: 1/1; overflow: hidden; background: var(--surface2); border-radius: 16px; }
 .ag-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s var(--ease); }
 .ag-card:hover .ag-photo img { transform: scale(1.04); }
 .ag-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: var(--muted); }
@@ -351,11 +367,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 
 /* ── Recs grid ── */
-.rec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.rec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .rec-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s; }
-.rec-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-hover); }
+.rec-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--border-hover); }
 .rec-card.hidden { display: none; }
-.rec-photo { width: 100%; aspect-ratio: 3 / 2; overflow: hidden; background: var(--surface2); }
+.rec-photo { width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: var(--surface2); border-radius: 16px; }
 .rec-photo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
 .rec-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 800; color: var(--muted); }
 .rec-body { padding: 12px 14px 14px; }
@@ -383,8 +399,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
 }
 .discover-artist-card:hover {
-  border-color: rgba(108,92,231,0.2);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(108,92,231,0.1);
+  border-color: var(--border-hover);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 .discover-photo {
   width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
@@ -403,10 +419,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .discover-match { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 6px; background: rgba(213,16,7,0.12); color: var(--red); flex-shrink: 0; align-self: flex-start; white-space: nowrap; }
 
 /* ── Album grid ── */
-.album-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .album-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.2s ease, transform 0.15s ease; }
 .album-card:hover {
-  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  transform: translateY(-4px);
 }
 .album-card.owned { opacity: 0.4; }
 .album-card.owned:hover { opacity: 0.75; }
@@ -425,7 +442,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ── Gaps ── */
 .gaps-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 16px 20px; margin-bottom: 1.5rem; transition: box-shadow 0.22s var(--ease), border-color 0.18s; }
-.gaps-block:hover { box-shadow: var(--shadow-md); border-color: var(--border-hover); }
+.gaps-block:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--border-hover); }
 .gaps-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .gaps-photo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .gaps-photo-ph { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--muted); flex-shrink: 0; }
@@ -544,7 +561,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   border-radius: var(--radius-lg); padding: 16px;
   transition: box-shadow 0.22s var(--ease), border-color 0.18s;
 }
-.stats-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-hover); }
+.stats-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--border-hover); }
 .stats-card.full { grid-column: 1 / -1; }
 .stats-card-title { font-size: 11px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px; }
 .chart-wrap { position: relative; max-height: 260px; }
@@ -556,7 +573,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   overflow: hidden; display: flex; flex-direction: column;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
 }
-.wish-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-hover); }
+.wish-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--border-hover); }
 .wish-photo {
   width: 100%; aspect-ratio: 1/1; overflow: hidden; position: relative;
   display: flex; align-items: center; justify-content: center;
@@ -618,7 +635,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Aanbevolen Albums ── */
 .albrec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-top: 12px; }
 .albrec-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.2s ease, transform 0.15s ease; }
-.albrec-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
+.albrec-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); }
 .albrec-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
 .albrec-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .albrec-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: var(--muted); }
@@ -631,7 +648,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Aanbevolen Nummers ── */
 .trackrec-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
 .trackrec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; transition: box-shadow 0.2s ease; }
-.trackrec-row:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.trackrec-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .trackrec-info { flex: 1; min-width: 0; }
 .trackrec-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackrec-artist { font-size: 12px; color: var(--muted2); cursor: pointer; }
@@ -645,7 +662,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Nieuwe Releases ── */
 .releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 12px; }
 .rel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s; }
-.rel-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-hover); }
+.rel-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--border-hover); }
 /* STAP 10: Nieuwe release highlight */
 .rel-card-new { border-left: 3px solid var(--red); }
 .rel-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
@@ -682,7 +699,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   border-radius: var(--radius-lg); overflow: hidden;
   transition: box-shadow 0.22s var(--ease), border-color 0.18s;
 }
-.plib-artist-block:hover { box-shadow: var(--shadow-sm); border-color: var(--border-hover); }
+.plib-artist-block:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--border-hover); }
 
 .plib-artist-header {
   display: flex; align-items: center; gap: 10px;
@@ -824,9 +841,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   display: flex; align-items: center; gap: 12px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 10px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.tidal-card:hover { border-color: var(--border-hover); background: var(--surface2); }
+.tidal-card:hover { border-color: var(--border-hover); background: var(--surface2); box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .tidal-cover { width: 56px; height: 56px; border-radius: 6px; overflow: hidden; flex-shrink: 0; position: relative; background: var(--surface2); }
 .tidal-img  { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tidal-ph   {
@@ -878,9 +895,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   display: flex; align-items: center; gap: 12px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 10px 14px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.q-row:hover { border-color: var(--border-hover); }
+.q-row:hover { border-color: var(--border-hover); box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
 .q-info { flex: 1; min-width: 0; }
 .q-title  { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-artist { font-size: 12px; color: var(--muted2); margin-top: 1px; cursor: pointer; }
@@ -1362,7 +1379,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .spotify-card:hover {
   border-color: rgba(29,185,84,0.4);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 
 .spotify-cover {
@@ -1445,23 +1462,53 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Sectie-blokken (Ontdek, Bibliotheek stats) ───────────────────────────── */
 .section-block { }
 
+/* Sticky section-header: blijft in beeld terwijl je door de sectie scrollt */
 .section-hdr {
+  position: sticky;
+  top: 52px;               /* onder de sticky site-header (~52px hoog) */
+  z-index: 200;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  padding: 11px 0 11px;
+  margin-bottom: 18px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--border);
 }
 
 .section-hdr-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .section-content { }
+
+/* ── Sectie-scheider (visuele break tussen Ontdek-secties) ───────────────────── */
+.ontdek-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 48px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ontdek-divider::before,
+.ontdek-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
 /* ── Ontdek layout ─────────────────────────────────────────────────────────── */
 .ontdek-layout { }

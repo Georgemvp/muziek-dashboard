@@ -1949,6 +1949,7 @@ async function loadOntdek() {
   contentEl.innerHTML = `
     <div class="ontdek-layout">
       ${moodHtml}
+
       <div class="section-block">
         <div class="section-hdr">
           <span class="section-hdr-title">Aanbevelingen</span>
@@ -1963,7 +1964,8 @@ async function loadOntdek() {
         </div>
       </div>
 
-      <div class="section-block" style="margin-top:32px">
+      <div class="ontdek-divider">Nieuwe Releases</div>
+      <div class="section-block">
         <div class="section-hdr">
           <span class="section-hdr-title">Nieuwe Releases</span>
           <div class="inline-toolbar">
@@ -1983,7 +1985,8 @@ async function loadOntdek() {
         </div>
       </div>
 
-      <div class="section-block" style="margin-top:32px">
+      <div class="ontdek-divider">Ontdek Artiesten</div>
+      <div class="section-block">
         <div class="section-hdr">
           <span class="section-hdr-title">Ontdek Artiesten</span>
           <div class="inline-toolbar">
@@ -2690,8 +2693,7 @@ function applyTheme(theme) {
   if (saved) {
     applyTheme(saved);
   } else {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    applyTheme(prefersDark ? 'dark' : 'light');
+    applyTheme('light');
   }
 })();
 
