@@ -41,20 +41,14 @@
   </div>
 
   <div class="tabs" id="tabs">
-    <button class="tab" data-tab="discover">Ontdek <span class="tab-badge" id="badge-discover">✦</span></button>
-    <button class="tab" data-tab="gaps">Collectiegaten <span class="tab-badge" id="badge-gaps">?</span></button>
-    <button class="tab active" data-tab="recent">Recent</button>
-    <button class="tab" data-tab="recs">Aanbevelingen</button>
-    <button class="tab" data-tab="topartists">Top artiesten</button>
-    <button class="tab" data-tab="toptracks">Top nummers</button>
-    <button class="tab" data-tab="loved">♥ Geliefd</button>
-    <button class="tab" data-tab="stats">📊 Statistieken</button>
-    <button class="tab" data-tab="releases">🆕 Releases <span class="tab-badge" id="badge-releases" style="display:none">0</span></button>
-    <button class="tab" data-tab="wishlist">🔖 Mijn lijst <span class="tab-badge" id="badge-wishlist">0</span></button>
-    <button class="tab" data-tab="plexlib">📀 Plex bibliotheek</button>
-    <button class="tab" data-tab="tidal">🌊 Tidal <span class="tab-badge" id="badge-tidarr-queue" style="display:none">0</span></button>
-    <button class="tab" data-tab="tidarr-ui">🎛️ Tidarr</button>
+    <button class="tab active" data-tab="nu">🎵 Nu</button>
+    <button class="tab" data-tab="ontdek">✦ Ontdek <span class="tab-badge" id="badge-releases" style="display:none">0</span></button>
+    <button class="tab" data-tab="bibliotheek">📀 Bibliotheek <span class="tab-badge" id="badge-gaps">?</span></button>
+    <button class="tab" data-tab="downloads">⬇ Downloads <span class="tab-badge" id="badge-tidarr-queue" style="display:none">0</span></button>
   </div>
+  <!-- Verborgen badge-houders voor backward-compat met bestaande JS -->
+  <span id="badge-wishlist" style="display:none">0</span>
+  <span id="badge-discover" style="display:none">✦</span>
 
   <!-- Period toolbar -->
   <div class="toolbar" id="tb-period">
@@ -70,6 +64,19 @@
     <button class="tool-btn sel-def" data-filter="all">Alle</button>
     <button class="tool-btn" data-filter="new">✦ Nieuw voor mij</button>
     <button class="tool-btn" data-filter="plex">▶ Al in Plex</button>
+  </div>
+
+  <!-- Spotify mood toolbar (verborgen als Spotify niet geconfigureerd is) -->
+  <div class="toolbar" id="tb-mood" style="display:none">
+    <span class="toolbar-label spotify-label">🎯 Spotify mood</span>
+    <span class="toolbar-sep"></span>
+    <button class="tool-btn mood-btn" data-mood="energiek">⚡ Energiek</button>
+    <button class="tool-btn mood-btn" data-mood="chill">🌊 Chill</button>
+    <button class="tool-btn mood-btn" data-mood="melancholisch">🌧 Melancholisch</button>
+    <button class="tool-btn mood-btn" data-mood="experimenteel">🔬 Experimenteel</button>
+    <button class="tool-btn mood-btn" data-mood="feest">🎉 Feest</button>
+    <span class="toolbar-sep" id="mood-sep-clear" style="display:none"></span>
+    <button class="tool-btn" id="btn-clear-mood" style="display:none">✕ Wis mood</button>
   </div>
 
   <!-- Discover filter toolbar -->
@@ -107,6 +114,9 @@
     <button class="tool-btn sel-def" data-tidal-view="search">Zoeken</button>
     <button class="tool-btn" data-tidal-view="queue">Queue <span class="tab-badge" id="badge-tidarr-queue-inline" style="display:none">0</span></button>
     <button class="tool-btn" data-tidal-view="history">📥 Gedownload</button>
+    <span class="toolbar-sep"></span>
+    <span class="toolbar-sep"></span>
+    <button class="tool-btn" data-tidal-view="tidarr">🎛️ Tidarr UI</button>
     <span class="toolbar-sep"></span>
     <span class="tidarr-status-pill off" id="tidarr-status-pill">
       <span class="tidarr-dot"></span>
@@ -146,27 +156,23 @@
     <div class="loading"><div class="spinner"></div>Laden...</div>
   </div>
 
-  <!-- STAP 7: Mobiele bottom navigation bar -->
+  <!-- Mobiele bottom navigation bar (4 hoofdtabs) -->
   <nav class="bottom-nav" id="bottom-nav">
-    <button class="bnav-btn active" data-tab="recent">
+    <button class="bnav-btn active" data-tab="nu">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <span>Recent</span>
+      <span>Nu</span>
     </button>
-    <button class="bnav-btn" data-tab="discover">
+    <button class="bnav-btn" data-tab="ontdek">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
       <span>Ontdek</span>
     </button>
-    <button class="bnav-btn" data-tab="recs">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      <span>Voor jou</span>
+    <button class="bnav-btn" data-tab="bibliotheek">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>Bibliotheek</span>
     </button>
-    <button class="bnav-btn" data-tab="releases">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-      <span>Releases</span>
-    </button>
-    <button class="bnav-btn" data-tab="stats">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      <span>Stats</span>
+    <button class="bnav-btn" data-tab="downloads">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Downloads</span>
     </button>
   </nav>
 

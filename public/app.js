@@ -1,5 +1,8 @@
 // ── State ─────────────────────────────────────────────────────────────────
-let currentTab    = 'recent';
+let currentTab    = 'nu';
+let currentMainTab = 'nu';       // 4-tab navigatie-staat
+let bibSubTab     = 'collectie'; // actieve Bibliotheek sub-tab
+let sectionContainerEl = null;   // section-bewust renderen
 let currentPeriod = '7day';
 let recsFilter    = 'all';
 let discFilter    = 'all';
@@ -20,6 +23,10 @@ let tidarrQueuePoll    = null;
 let tidarrSseSource    = null;      // SSE-verbinding voor real-time queue
 let tidarrQueueItems   = [];        // live queue-items van Tidarr SSE
 let downloadedSet      = new Set(); // genormaliseerde "artist|title" sleutels
+
+// ── Spotify state ─────────────────────────────────────────────────────────
+let spotifyEnabled  = false;   // wordt ingesteld door checkSpotifyStatus()
+let activeMood      = null;    // momenteel geselecteerde mood
 
 // ── Audio preview state ───────────────────────────────────────────────────
 const _previewAudio = new Audio();
@@ -199,20 +206,25 @@ async function apiFetch(url) {
 
 const contentEl = document.getElementById('content');
 function setContent(html, callback) {
-  contentEl.innerHTML = html;
-  contentEl.style.opacity = '0';
-  contentEl.style.transform = 'translateY(6px)';
-  requestAnimationFrame(() => {
-    void contentEl.offsetHeight; // force reflow
-    contentEl.style.opacity = '1';
-    contentEl.style.transform = '';
-    // STAP 6: Staggered fade-in voor grid-children
-    document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
-      el.classList.add('stagger-in');
-      el.style.animationDelay = `${i * 30}ms`;
+  const target = sectionContainerEl || contentEl;
+  target.innerHTML = html;
+  if (!sectionContainerEl) {
+    contentEl.style.opacity = '0';
+    contentEl.style.transform = 'translateY(6px)';
+    requestAnimationFrame(() => {
+      void contentEl.offsetHeight; // force reflow
+      contentEl.style.opacity = '1';
+      contentEl.style.transform = '';
+      // STAP 6: Staggered fade-in voor grid-children
+      document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
+        el.classList.add('stagger-in');
+        el.style.animationDelay = `${i * 30}ms`;
+      });
+      if (callback) requestAnimationFrame(callback);
     });
-    if (callback) requestAnimationFrame(callback);
-  });
+  } else {
+    if (callback) callback();
+  }
 }
 const showError = msg => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
 
@@ -231,6 +243,10 @@ function showSkeleton(type) {
   setContent(html);
 }
 const showLoading = msg => {
+  if (sectionContainerEl) {
+    sectionContainerEl.innerHTML = `<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`;
+    return;
+  }
   // Kies automatisch de juiste skeleton op basis van huidige tab
   const skeletonMap = {
     recent: 'cards', loved: 'cards', toptracks: 'cards',
@@ -238,7 +254,8 @@ const showLoading = msg => {
     discover: 'grid', gaps: 'grid',
     stats: 'stats',
     wishlist: 'grid',
-    plexlib: 'cards'
+    plexlib: 'cards',
+    nu: 'cards', ontdek: 'grid', bibliotheek: 'cards', downloads: 'cards'
   };
   const skType = skeletonMap[currentTab];
   if (skType && !msg) {
@@ -648,6 +665,180 @@ async function loadTopTracks(period) {
   } catch (e) { showError(e.message); }
 }
 
+// ── Spotify mood-aanbevelingen ────────────────────────────────────────────
+async function checkSpotifyStatus() {
+  try {
+    const data = await apiFetch('/api/spotify/status');
+    spotifyEnabled = !!data.enabled;
+    const tb = document.getElementById('tb-mood');
+    if (spotifyEnabled && currentTab === 'recs') {
+      tb.style.display = '';
+      tb.classList.add('visible');
+    } else if (spotifyEnabled) {
+      // Klaar staan voor wanneer de recs-tab actief wordt
+      tb.style.display = '';
+    }
+  } catch {
+    spotifyEnabled = false;
+  }
+}
+
+// Rendert een Spotify-track als card (met optionele play-preview)
+function spotifyCard(t, idx) {
+  const imgEl = t.image
+    ? `<img src="${esc(t.image)}" alt="" loading="lazy"
+         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="spotify-cover-ph" style="display:none">♪</div>`
+    : `<div class="spotify-cover-ph">♪</div>`;
+
+  const playBtn = t.preview_url
+    ? `<button class="spotify-play-btn" data-spotify-preview="${esc(t.preview_url)}"
+         data-artist="${esc(t.artist)}" data-track="${esc(t.name)}"
+         id="spbtn-${idx}" title="Luister preview">▶</button>`
+    : '';
+
+  const spotifyLink = t.spotify_url
+    ? `<a class="spotify-link-btn" href="${esc(t.spotify_url)}" target="_blank" rel="noopener">
+         ♫ Open in Spotify
+       </a>`
+    : '';
+
+  return `
+    <div class="spotify-card">
+      <div class="spotify-cover">
+        ${imgEl}
+        ${playBtn}
+        <div class="play-bar" style="position:absolute;bottom:0;left:0;width:100%;height:3px;background:rgba(0,0,0,0.3)">
+          <div class="play-bar-fill" id="spbar-${idx}"></div>
+        </div>
+      </div>
+      <div class="spotify-info">
+        <div class="spotify-track" title="${esc(t.name)}">${esc(t.name)}</div>
+        <div class="spotify-artist artist-link" data-artist="${esc(t.artist)}">${esc(t.artist)}</div>
+        <div class="spotify-album" title="${esc(t.album)}">${esc(t.album)}</div>
+        ${spotifyLink}
+      </div>
+    </div>`;
+}
+
+async function loadSpotifyRecs(mood) {
+  const section = document.getElementById('spotify-recs-section');
+  if (!section) return;
+
+  const moodLabels = {
+    energiek:      '⚡ Energiek',
+    chill:         '🌊 Chill',
+    melancholisch: '🌧 Melancholisch',
+    experimenteel: '🔬 Experimenteel',
+    feest:         '🎉 Feest'
+  };
+
+  section.innerHTML = `<div class="loading"><div class="spinner"></div>Spotify laden…</div>`;
+
+  try {
+    const tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
+    if (!tracks.length) {
+      section.innerHTML = `<div class="empty">Geen Spotify-aanbevelingen gevonden voor deze mood.</div>`;
+      return;
+    }
+    let html = `
+      <div class="spotify-section-title">
+        🎯 Spotify aanbevelingen · ${esc(moodLabels[mood] || mood)}
+      </div>
+      <div class="spotify-grid">`;
+    tracks.forEach((t, i) => { html += spotifyCard(t, i); });
+    html += '</div>';
+    section.innerHTML = html;
+  } catch {
+    section.innerHTML = '';
+  }
+}
+
+function clearSpotifyRecs() {
+  const section = document.getElementById('spotify-recs-section');
+  if (section) section.innerHTML = '';
+}
+
+// Mood-toolbar knoppen
+document.addEventListener('DOMContentLoaded', () => {}, false); // no-op guard
+document.querySelectorAll('.mood-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const mood = btn.dataset.mood;
+
+    // Deselect alle mood-knoppen
+    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood', 'loading'));
+
+    if (activeMood === mood) {
+      // Zelfde mood → wis selectie
+      activeMood = null;
+      clearSpotifyRecs();
+      document.getElementById('btn-clear-mood').style.display  = 'none';
+      document.getElementById('mood-sep-clear').style.display  = 'none';
+      return;
+    }
+
+    activeMood = mood;
+    btn.classList.add('sel-mood', 'loading');
+    document.getElementById('btn-clear-mood').style.display  = '';
+    document.getElementById('mood-sep-clear').style.display  = '';
+
+    await loadSpotifyRecs(mood);
+    btn.classList.remove('loading');
+  });
+});
+
+document.getElementById('btn-clear-mood')?.addEventListener('click', () => {
+  activeMood = null;
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood'));
+  document.getElementById('btn-clear-mood').style.display  = 'none';
+  document.getElementById('mood-sep-clear').style.display  = 'none';
+  clearSpotifyRecs();
+});
+
+// Play-preview voor Spotify cards (event delegation)
+document.addEventListener('click', e => {
+  const spBtn = e.target.closest('.spotify-play-btn');
+  if (!spBtn) return;
+  e.stopPropagation();
+  const previewUrl = spBtn.dataset.spotifyPreview;
+  if (!previewUrl) return;
+
+  // Stop vorige Spotify preview als dezelfde knop
+  if (_previewBtn === spBtn) {
+    if (_previewAudio.paused) {
+      _previewAudio.play();
+      spBtn.textContent = '⏸';
+      spBtn.classList.add('playing');
+    } else {
+      _previewAudio.pause();
+      spBtn.textContent = '▶';
+      spBtn.classList.remove('playing');
+    }
+    return;
+  }
+
+  // Stop vorige
+  if (_previewBtn) {
+    _previewAudio.pause();
+    _previewBtn.textContent = '▶';
+    _previewBtn.classList.remove('playing');
+    const oldFill = _previewBtn.closest('.spotify-card')?.querySelector('.play-bar-fill')
+      || _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+    if (oldFill) oldFill.style.width = '0%';
+  }
+
+  _previewBtn = spBtn;
+  _previewAudio.src = previewUrl;
+  _previewAudio.currentTime = 0;
+  _previewAudio.play().then(() => {
+    spBtn.textContent = '⏸';
+    spBtn.classList.add('playing');
+  }).catch(() => {
+    spBtn.textContent = '▶';
+    _previewBtn = null;
+  });
+}, true);
+
 // ── Aanbevelingen ──────────────────────────────────────────────────────────
 async function loadRecs() {
   showLoading();
@@ -667,7 +858,9 @@ async function loadRecs() {
     const plexC = recs.filter(r =>  r.inPlex).length;
 
     // ── Artiest-aanbevelingen ─────────────────────────────────────────────
-    let html = `<div class="section-title">Gebaseerd op jouw smaak: ${(d.basedOn||[]).slice(0,3).join(', ')}
+    // Spotify-sectie placeholder (gevuld wanneer gebruiker een mood kiest)
+    let html = `<div class="spotify-section" id="spotify-recs-section"></div>`;
+    html += `<div class="section-title">Gebaseerd op jouw smaak: ${(d.basedOn||[]).slice(0,3).join(', ')}
       ${plexOk ? ` &nbsp;·&nbsp; <span style="color:var(--new)">${newC} nieuw</span> · <span style="color:var(--plex)">${plexC} in Plex</span>` : ''}
       </div><div class="rec-grid">`;
 
@@ -749,7 +942,10 @@ async function loadRecs() {
       html += '</div>';
     }
 
-    setContent(html);
+    setContent(html, () => {
+      // Herstel Spotify-sectie als er al een mood actief is
+      if (activeMood) loadSpotifyRecs(activeMood);
+    });
     applyRecsFilter();
 
     recs.forEach(async (r, i) => {
@@ -1696,7 +1892,7 @@ document.getElementById('queue-fab')?.addEventListener('click', toggleQueuePopov
 document.getElementById('qpop-close')?.addEventListener('click', e => { e.stopPropagation(); closeQueuePopover(); });
 document.getElementById('qpop-goto-tidal')?.addEventListener('click', () => {
   closeQueuePopover();
-  document.querySelector('.tab[data-tab="tidal"]')?.click();
+  document.querySelector('.tab[data-tab="downloads"]')?.click();
   setTimeout(() => setTidalView('queue'), 150);
 });
 // Klik buiten popover → sluiten
@@ -1709,19 +1905,321 @@ document.addEventListener('click', e => {
 }, true);
 
 // ── Navigatie ──────────────────────────────────────────────────────────────
+
+// ── Lazy-load helper via IntersectionObserver ──────────────────────────────
+function setupLazyLoad(el, callback) {
+  if (!el) return;
+  if (!('IntersectionObserver' in window)) { callback(); return; }
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) { obs.unobserve(entry.target); callback(); }
+    });
+  }, { rootMargin: '300px' });
+  obs.observe(el);
+}
+
+// ── Composiet loader: Nu ────────────────────────────────────────────────────
+function loadNu() {
+  currentTab = 'recent';
+  hideTidarrUI();
+  stopTidarrQueuePolling();
+  loadRecent();
+}
+
+// ── Composiet loader: Ontdek ────────────────────────────────────────────────
+async function loadOntdek() {
+  currentTab = 'ontdek';
+  hideTidarrUI();
+  stopTidarrQueuePolling();
+
+  const moodHtml = spotifyEnabled ? `
+    <div class="section-block sec-mood-block">
+      <div class="inline-toolbar">
+        <span class="toolbar-label spotify-label">🎯 Spotify mood</span>
+        <span class="toolbar-sep"></span>
+        <button class="tool-btn${activeMood==='energiek'?' sel-mood':''}" data-mood="energiek">⚡ Energiek</button>
+        <button class="tool-btn${activeMood==='chill'?' sel-mood':''}" data-mood="chill">🌊 Chill</button>
+        <button class="tool-btn${activeMood==='melancholisch'?' sel-mood':''}" data-mood="melancholisch">🌧 Melancholisch</button>
+        <button class="tool-btn${activeMood==='experimenteel'?' sel-mood':''}" data-mood="experimenteel">🔬 Experimenteel</button>
+        <button class="tool-btn${activeMood==='feest'?' sel-mood':''}" data-mood="feest">🎉 Feest</button>
+        ${activeMood ? `<span class="toolbar-sep"></span><button class="tool-btn" id="btn-clear-mood-inline">✕ Wis mood</button>` : ''}
+      </div>
+    </div>` : '';
+
+  contentEl.innerHTML = `
+    <div class="ontdek-layout">
+      ${moodHtml}
+      <div class="section-block">
+        <div class="section-hdr">
+          <span class="section-hdr-title">Aanbevelingen</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${recsFilter==='all'?' sel-def':''}" data-filter="all">Alle</button>
+            <button class="tool-btn${recsFilter==='new'?' sel-new':''}" data-filter="new">✦ Nieuw voor mij</button>
+            <button class="tool-btn${recsFilter==='plex'?' sel-plex':''}" data-filter="plex">▶ Al in Plex</button>
+          </div>
+        </div>
+        <div class="section-content" id="sec-recs-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
+
+      <div class="section-block" style="margin-top:32px">
+        <div class="section-hdr">
+          <span class="section-hdr-title">Nieuwe Releases</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${releasesFilter==='all'?' sel-def':''}" data-rtype="all">Alle</button>
+            <button class="tool-btn${releasesFilter==='album'?' sel-def':''}" data-rtype="album">Albums</button>
+            <button class="tool-btn${releasesFilter==='single'?' sel-def':''}" data-rtype="single">Singles</button>
+            <button class="tool-btn${releasesFilter==='ep'?' sel-def':''}" data-rtype="ep">EP's</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn${releasesSort==='listening'?' sel-def':''}" data-rsort="listening">Op luistergedrag</button>
+            <button class="tool-btn${releasesSort==='date'?' sel-def':''}" data-rsort="date">Op datum</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-releases-ontdek">↻</button>
+          </div>
+        </div>
+        <div class="section-content" id="sec-releases-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
+
+      <div class="section-block" style="margin-top:32px">
+        <div class="section-hdr">
+          <span class="section-hdr-title">Ontdek Artiesten</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${discFilter==='all'?' sel-def':''}" data-dfilter="all">Alle artiesten</button>
+            <button class="tool-btn${discFilter==='new'?' sel-new':''}" data-dfilter="new">✦ Nieuw voor mij</button>
+            <button class="tool-btn${discFilter==='partial'?' sel-miss':''}" data-dfilter="partial">▶ Gedeeltelijk in Plex</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-discover-ontdek">↻</button>
+          </div>
+        </div>
+        <div class="section-content" id="sec-discover-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
+    </div>`;
+
+  contentEl.style.opacity = '1';
+  contentEl.style.transform = '';
+
+  // Inline refresh-knoppen
+  document.getElementById('btn-ref-releases-ontdek')?.addEventListener('click', async () => {
+    lastReleases = null;
+    await fetch('/api/releases/refresh', { method: 'POST' });
+    sectionContainerEl = document.getElementById('sec-releases-content');
+    await loadReleases();
+    sectionContainerEl = null;
+  });
+  document.getElementById('btn-ref-discover-ontdek')?.addEventListener('click', async () => {
+    lastDiscover = null;
+    await fetch('/api/discover/refresh', { method: 'POST' });
+    sectionContainerEl = document.getElementById('sec-discover-content');
+    await loadDiscover();
+    sectionContainerEl = null;
+  });
+  document.getElementById('btn-clear-mood-inline')?.addEventListener('click', () => {
+    activeMood = null;
+    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood', 'loading'));
+    clearSpotifyRecs();
+    loadOntdek(); // herbouw zonder clear-knop
+  });
+
+  // 1. Laad recs onmiddellijk
+  sectionContainerEl = document.getElementById('sec-recs-content');
+  await loadRecs();
+  sectionContainerEl = null;
+
+  // 2. Lazy-load releases en discover
+  setupLazyLoad(document.getElementById('sec-releases-content'), async () => {
+    sectionContainerEl = document.getElementById('sec-releases-content');
+    await loadReleases();
+    sectionContainerEl = null;
+  });
+  setupLazyLoad(document.getElementById('sec-discover-content'), async () => {
+    sectionContainerEl = document.getElementById('sec-discover-content');
+    await loadDiscover();
+    sectionContainerEl = null;
+  });
+}
+
+// ── Composiet loader: Bibliotheek sub-tab wisselen ──────────────────────────
+async function switchBibSubTab(subTab) {
+  bibSubTab = subTab;
+  const bibContent = document.getElementById('bib-sub-content');
+  const bibToolbar = document.getElementById('bib-subtoolbar');
+  if (!bibContent) return;
+
+  document.querySelectorAll('.bib-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.bibtab === subTab));
+
+  if (bibToolbar) {
+    if (subTab === 'collectie') {
+      bibToolbar.innerHTML = `
+        <div class="inline-toolbar" style="margin-bottom:12px">
+          <input class="plib-search" id="plib-search-bib" type="text"
+            placeholder="🔍  Zoek artiest of album…" autocomplete="off" style="flex:1;min-width:0">
+          <button class="tool-btn" id="btn-sync-plex-bib">↻ Sync Plex</button>
+        </div>`;
+      document.getElementById('plib-search-bib')?.addEventListener('input', e => {
+        if (!plexLibData) return;
+        bibContent.innerHTML = buildPlexLibraryHtml(plexLibData, e.target.value);
+      });
+      document.getElementById('btn-sync-plex-bib')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-sync-plex-bib');
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '↻ Bezig…';
+        try {
+          await fetch('/api/plex/refresh', { method: 'POST' });
+          await loadPlexStatus();
+          plexLibData = null;
+          sectionContainerEl = bibContent;
+          await loadPlexLibrary();
+          sectionContainerEl = null;
+        } catch (e) {}
+        finally { btn.disabled = false; btn.textContent = orig; }
+      });
+    } else if (subTab === 'gaten') {
+      bibToolbar.innerHTML = `
+        <div class="inline-toolbar" style="margin-bottom:12px">
+          <button class="tool-btn${gapsSort==='missing'?' sel-def':''}" data-gsort="missing">Meest ontbrekend</button>
+          <button class="tool-btn${gapsSort==='name'?' sel-def':''}" data-gsort="name">A–Z</button>
+          <span class="toolbar-sep"></span>
+          <button class="tool-btn refresh-btn" id="btn-ref-gaps-bib">↻ Vernieuwen</button>
+        </div>`;
+      document.getElementById('btn-ref-gaps-bib')?.addEventListener('click', async () => {
+        lastGaps = null;
+        await fetch('/api/gaps/refresh', { method: 'POST' });
+        sectionContainerEl = document.getElementById('bib-sub-content');
+        await loadGaps();
+        sectionContainerEl = null;
+      });
+    } else {
+      bibToolbar.innerHTML = '';
+    }
+  }
+
+  sectionContainerEl = bibContent;
+  try {
+    if (subTab === 'collectie') {
+      currentTab = 'plexlib';
+      await loadPlexLibrary();
+    } else if (subTab === 'gaten') {
+      currentTab = 'gaps';
+      await loadGaps();
+    } else if (subTab === 'lijst') {
+      currentTab = 'wishlist';
+      await loadWishlist();
+    }
+  } finally {
+    sectionContainerEl = null;
+  }
+}
+
+// ── Composiet loader: Bibliotheek ───────────────────────────────────────────
+async function loadBibliotheek() {
+  currentTab = 'plexlib';
+  hideTidarrUI();
+  stopTidarrQueuePolling();
+
+  contentEl.innerHTML = `
+    <div class="bib-layout">
+      <div class="bib-strips-wrap">
+        <div class="scroll-strip">
+          <div class="strip-label">Top artiesten <span class="strip-period">(${periodLabel(currentPeriod)})</span></div>
+          <div class="strip-body" id="strip-artists-body">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="scroll-strip" style="margin-top:16px">
+          <div class="strip-label">Top nummers <span class="strip-period">(${periodLabel(currentPeriod)})</span></div>
+          <div class="strip-body" id="strip-tracks-body">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bib-subtabs" id="bib-subtabs">
+        <button class="bib-tab${bibSubTab==='collectie'?' active':''}" data-bibtab="collectie">Collectie</button>
+        <button class="bib-tab${bibSubTab==='gaten'?' active':''}" data-bibtab="gaten">Gaten <span class="bib-tab-badge" id="badge-gaps-bib"></span></button>
+        <button class="bib-tab${bibSubTab==='lijst'?' active':''}" data-bibtab="lijst">Lijst</button>
+      </div>
+
+      <div id="bib-subtoolbar"></div>
+      <div class="bib-sub-content" id="bib-sub-content">
+        <div class="loading"><div class="spinner"></div>Laden...</div>
+      </div>
+
+      <div class="section-block" style="margin-top:32px">
+        <div class="section-hdr">
+          <span class="section-hdr-title">Statistieken</span>
+        </div>
+        <div class="section-content" id="bib-stats-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
+    </div>`;
+
+  contentEl.style.opacity = '1';
+  contentEl.style.transform = '';
+
+  // Badges synchroniseren
+  const gapsBibBadge = document.getElementById('badge-gaps-bib');
+  const mainGapsBadge = document.getElementById('badge-gaps');
+  if (gapsBibBadge && mainGapsBadge) gapsBibBadge.textContent = mainGapsBadge.textContent;
+
+  // Sub-tab klik-handlers
+  document.querySelectorAll('.bib-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchBibSubTab(btn.dataset.bibtab));
+  });
+
+  // Strips laden (sequentieel om sectionContainerEl-conflict te vermijden)
+  sectionContainerEl = document.getElementById('strip-artists-body');
+  await loadTopArtists(currentPeriod);
+  sectionContainerEl = null;
+
+  sectionContainerEl = document.getElementById('strip-tracks-body');
+  await loadTopTracks(currentPeriod);
+  sectionContainerEl = null;
+
+  // Initieel sub-tab laden
+  await switchBibSubTab(bibSubTab);
+
+  // Stats lazy-loaden
+  setupLazyLoad(document.getElementById('bib-stats-content'), async () => {
+    sectionContainerEl = document.getElementById('bib-stats-content');
+    await loadStats();
+    sectionContainerEl = null;
+  });
+}
+
+// ── Composiet loader: Downloads ─────────────────────────────────────────────
+function loadDownloads() {
+  currentTab = 'tidal';
+  hideTidarrUI();
+  document.getElementById('tb-tidal')?.classList.add('visible');
+  loadTidal();
+}
+
 const tabLoaders = {
-  discover:   () => loadDiscover(),
-  gaps:       () => loadGaps(),
-  recent:     () => loadRecent(),
-  recs:       () => loadRecs(),
-  releases:   () => loadReleases(),
-  topartists: () => loadTopArtists(currentPeriod),
-  toptracks:  () => loadTopTracks(currentPeriod),
-  loved:      () => loadLoved(),
-  stats:      () => loadStats(),
-  wishlist:   () => loadWishlist(),
-  plexlib:    () => loadPlexLibrary(),
-  tidal:      () => loadTidal(),
+  // ── Nieuwe 4-tab navigatie ────────────────────────────────────────────────
+  nu:          () => loadNu(),
+  ontdek:      () => loadOntdek(),
+  bibliotheek: () => loadBibliotheek(),
+  downloads:   () => loadDownloads(),
+  // ── Backward-compat (voor 'r' shortcut en sub-tab loaders) ───────────────
+  discover:    () => loadDiscover(),
+  gaps:        () => loadGaps(),
+  recent:      () => loadRecent(),
+  recs:        () => loadRecs(),
+  releases:    () => loadReleases(),
+  topartists:  () => loadTopArtists(currentPeriod),
+  toptracks:   () => loadTopTracks(currentPeriod),
+  loved:       () => loadLoved(),
+  stats:       () => loadStats(),
+  wishlist:    () => loadWishlist(),
+  plexlib:     () => loadPlexLibrary(),
+  tidal:       () => loadTidal(),
   'tidarr-ui': () => loadTidarrUI()
 };
 
@@ -1751,21 +2249,24 @@ document.getElementById('btn-tidarr-reload')?.addEventListener('click', () => {
 
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    currentTab = btn.dataset.tab;
-    // Verberg Tidarr iframe als we naar een andere tab gaan
-    if (currentTab !== 'tidarr-ui') hideTidarrUI();
-    document.getElementById('tb-period').classList.toggle('visible', ['topartists','toptracks'].includes(currentTab));
-    document.getElementById('tb-recs').classList.toggle('visible', currentTab === 'recs');
-    document.getElementById('tb-releases').classList.toggle('visible', currentTab === 'releases');
-    document.getElementById('tb-discover').classList.toggle('visible', currentTab === 'discover');
-    document.getElementById('tb-gaps').classList.toggle('visible', currentTab === 'gaps');
-    document.getElementById('tb-plexlib').classList.toggle('visible', currentTab === 'plexlib');
-    document.getElementById('tb-tidal').classList.toggle('visible', currentTab === 'tidal');
-    document.getElementById('tb-tidarr-ui').classList.toggle('visible', currentTab === 'tidarr-ui');
-    if (currentTab !== 'tidal') stopTidarrQueuePolling();
-    tabLoaders[currentTab]?.();
+    currentMainTab = tab;
+
+    // Alle externe toolbars verbergen; composiet-tabs beheren hun eigen inline toolbars
+    ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
+     'tb-gaps','tb-plexlib','tb-tidarr-ui'].forEach(id =>
+      document.getElementById(id)?.classList.remove('visible'));
+
+    // Tidal-toolbar alleen tonen voor Downloads-tab
+    document.getElementById('tb-tidal')?.classList.toggle('visible', tab === 'downloads');
+
+    // Tidarr UI verbergen tenzij in Downloads-context
+    if (tab !== 'downloads') hideTidarrUI();
+    if (tab !== 'downloads') stopTidarrQueuePolling();
+
+    tabLoaders[tab]?.();
   });
 });
 
@@ -1992,10 +2493,113 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  // Tidal: view-knop (zoeken / queue / geschiedenis)
+  // ── Inline toolbar: recs-filter ───────────────────────────────────────────
+  const inlineFilter = e.target.closest('.inline-toolbar [data-filter]');
+  if (inlineFilter) {
+    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
+    recsFilter = inlineFilter.dataset.filter;
+    inlineFilter.classList.add(recsFilter==='all'?'sel-def':recsFilter==='new'?'sel-new':'sel-plex');
+    applyRecsFilter();
+    return;
+  }
+
+  // ── Inline toolbar: releases type-filter ──────────────────────────────────
+  const inlineRtype = e.target.closest('.inline-toolbar [data-rtype]');
+  if (inlineRtype) {
+    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
+    releasesFilter = inlineRtype.dataset.rtype;
+    inlineRtype.classList.add('sel-def');
+    const secRel = document.getElementById('sec-releases-content');
+    if (secRel && currentMainTab === 'ontdek') {
+      sectionContainerEl = secRel; renderReleases(); sectionContainerEl = null;
+    } else { renderReleases(); }
+    return;
+  }
+
+  // ── Inline toolbar: releases sortering ────────────────────────────────────
+  const inlineRsort = e.target.closest('.inline-toolbar [data-rsort]');
+  if (inlineRsort) {
+    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
+    releasesSort = inlineRsort.dataset.rsort;
+    inlineRsort.classList.add('sel-def');
+    const secRel = document.getElementById('sec-releases-content');
+    if (secRel && currentMainTab === 'ontdek') {
+      sectionContainerEl = secRel; renderReleases(); sectionContainerEl = null;
+    } else { renderReleases(); }
+    return;
+  }
+
+  // ── Inline toolbar: discover-filter ───────────────────────────────────────
+  const inlineDfilter = e.target.closest('.inline-toolbar [data-dfilter]');
+  if (inlineDfilter) {
+    document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
+    discFilter = inlineDfilter.dataset.dfilter;
+    inlineDfilter.classList.add(discFilter==='all'?'sel-def':discFilter==='new'?'sel-new':'sel-miss');
+    const secDisc = document.getElementById('sec-discover-content');
+    if (secDisc && currentMainTab === 'ontdek') {
+      sectionContainerEl = secDisc; renderDiscover(); sectionContainerEl = null;
+    } else { renderDiscover(); }
+    return;
+  }
+
+  // ── Inline toolbar: gaps-sortering (Bibliotheek) ───────────────────────────
+  const inlineGsort = e.target.closest('.inline-toolbar [data-gsort]');
+  if (inlineGsort) {
+    document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
+    gapsSort = inlineGsort.dataset.gsort;
+    inlineGsort.classList.add('sel-def');
+    const secGaps = document.getElementById('bib-sub-content');
+    if (secGaps && currentMainTab === 'bibliotheek') {
+      sectionContainerEl = secGaps; renderGaps(); sectionContainerEl = null;
+    } else { renderGaps(); }
+    return;
+  }
+
+  // ── Inline mood-knoppen (Ontdek) ───────────────────────────────────────────
+  const inlineMoodBtn = e.target.closest('.sec-mood-block [data-mood]');
+  if (inlineMoodBtn) {
+    const mood = inlineMoodBtn.dataset.mood;
+    if (activeMood === mood) {
+      activeMood = null;
+      document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood', 'loading'));
+      clearSpotifyRecs();
+      loadOntdek(); // herbouw zonder clear-knop
+      return;
+    }
+    activeMood = mood;
+    document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood', 'loading'));
+    inlineMoodBtn.classList.add('sel-mood');
+    // Voeg clear-knop toe als die er nog niet is
+    const itb = inlineMoodBtn.closest('.inline-toolbar');
+    if (itb && !document.getElementById('btn-clear-mood-inline')) {
+      const sep = document.createElement('span'); sep.className = 'toolbar-sep';
+      const clr = document.createElement('button'); clr.className = 'tool-btn';
+      clr.id = 'btn-clear-mood-inline'; clr.textContent = '✕ Wis mood';
+      clr.addEventListener('click', () => {
+        activeMood = null;
+        document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood','loading'));
+        clearSpotifyRecs(); loadOntdek();
+      });
+      itb.appendChild(sep); itb.appendChild(clr);
+    }
+    loadSpotifyRecs(mood);
+    return;
+  }
+
+  // Tidal: view-knop (zoeken / queue / geschiedenis / tidarr)
   const tvBtn = e.target.closest('[data-tidal-view]');
   if (tvBtn) {
-    setTidalView(tvBtn.dataset.tidalView);
+    const view = tvBtn.dataset.tidalView;
+    if (view === 'tidarr') {
+      document.getElementById('tb-tidal')?.classList.remove('visible');
+      document.getElementById('tb-tidarr-ui')?.classList.add('visible');
+      loadTidarrUI();
+    } else {
+      hideTidarrUI();
+      document.getElementById('tb-tidal')?.classList.add('visible');
+      document.getElementById('tb-tidarr-ui')?.classList.remove('visible');
+      setTidalView(view);
+    }
     return;
   }
 
@@ -2035,16 +2639,18 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // 'r' → refresh huidige tab
+  // 'r' → refresh huidige tab (composiet tabs herladen als geheel)
   if (e.key === 'r' && !inInput) {
-    tabLoaders[currentTab]?.();
+    if (currentMainTab === 'ontdek') loadOntdek();
+    else if (currentMainTab === 'bibliotheek') loadBibliotheek();
+    else tabLoaders[currentTab]?.();
     return;
   }
 
-  // Cijfertoetsen 1-9, 0=10e tab → activeer tab
-  if (!inInput && /^[0-9]$/.test(e.key)) {
+  // Cijfertoetsen 1–4 → activeer één van de 4 hoofdtabs
+  if (!inInput && /^[1-4]$/.test(e.key)) {
     const tabs = document.querySelectorAll('.tab');
-    const idx  = e.key === '0' ? 9 : parseInt(e.key) - 1;
+    const idx  = parseInt(e.key) - 1;
     if (tabs[idx]) tabs[idx].click();
     return;
   }
@@ -2139,5 +2745,6 @@ loadWishlistState();
 loadTidarrStatus();
 loadDownloadHistory();   // laad persistente download-geschiedenis voor groene vinkjes
 startTidarrSSE();        // real-time queue via SSE
-loadRecent();
+checkSpotifyStatus();    // toon mood-toolbar als SPOTIFY_CLIENT_ID aanwezig is
+loadNu();
 setInterval(loadPlexNP, 30_000);
