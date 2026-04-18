@@ -20,6 +20,15 @@
       <button class="plex-refresh-btn" id="plex-refresh-btn" title="Bibliotheek synchroniseren">↻</button>
     </span>
     <button class="theme-toggle" id="theme-toggle" title="Wissel thema">☀️</button>
+    <label class="quality-selector" title="Download kwaliteit">
+      <span class="quality-label">⬇ Kwaliteit</span>
+      <select id="download-quality">
+        <option value="max">Max (24-bit Hi-Res)</option>
+        <option value="high">High (lossless FLAC)</option>
+        <option value="normal">Normal (AAC)</option>
+        <option value="low">Low (96kbps)</option>
+      </select>
+    </label>
   </div>
 
   <div id="plex-np-wrap"></div>
@@ -97,7 +106,7 @@
     <span class="toolbar-sep"></span>
     <button class="tool-btn sel-def" data-tidal-view="search">Zoeken</button>
     <button class="tool-btn" data-tidal-view="queue">Queue <span class="tab-badge" id="badge-tidarr-queue-inline" style="display:none">0</span></button>
-    <button class="tool-btn" data-tidal-view="history">Geschiedenis</button>
+    <button class="tool-btn" data-tidal-view="history">📥 Gedownload</button>
     <span class="toolbar-sep"></span>
     <span class="tidarr-status-pill off" id="tidarr-status-pill">
       <span class="tidarr-dot"></span>

@@ -12,11 +12,14 @@ let plexLibData   = null;         // gecachede Plex-bibliotheek data
 let wishlistMap   = new Map();   // key "type:name" → id
 let searchTimeout = null;
 // ── Tidarr state ──────────────────────────────────────────────────────────
-let tidarrOk          = false;
-let tidalView         = 'search';  // 'search' | 'queue' | 'history'
+let tidarrOk           = false;
+let tidalView          = 'search';  // 'search' | 'queue' | 'history'
 let tidalSearchResults = null;
 let tidalSearchTimeout = null;
-let tidarrQueuePoll   = null;
+let tidarrQueuePoll    = null;
+let tidarrSseSource    = null;      // SSE-verbinding voor real-time queue
+let tidarrQueueItems   = [];        // live queue-items van Tidarr SSE
+let downloadedSet      = new Set(); // genormaliseerde "artist|title" sleutels
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const getImg = (imgs, size = 'medium') => {
@@ -69,9 +72,35 @@ function bookmarkBtn(type, name, artist = '', image = '') {
     title="${saved ? 'Verwijder uit lijst' : 'Sla op in lijst'}">🔖</button>`;
 }
 
+// ── Download-helpers ───────────────────────────────────────────────────────
+function normalizeKey(artist, title) {
+  const n = s => (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  return `${n(artist)}|${n(title)}`;
+}
+function isDownloaded(artist, title) {
+  return downloadedSet.has(normalizeKey(artist, title));
+}
+function markDownloaded(artist, title) {
+  downloadedSet.add(normalizeKey(artist, title));
+}
+
+async function loadDownloadHistory() {
+  try {
+    const keys = await apiFetch('/api/downloads/keys');
+    downloadedSet = new Set(keys);
+  } catch { downloadedSet = new Set(); }
+}
+
 // Kleine download-knop (Tidarr) — opent zoek-en-download flow vanuit Gaps/Discover.
 function downloadBtn(artist, album = '') {
   if (!tidarrOk) return '';
+  if (isDownloaded(artist, album)) {
+    return `<button class="download-btn dl-done"
+      data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
+      title="Al gedownload">✓</button>`;
+  }
   return `<button class="download-btn"
     data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
     title="Download via Tidarr">⬇</button>`;
@@ -148,8 +177,11 @@ function albumCard(album, showBadge = true, artist = '') {
   const owned = album.inPlex;
   const bg = gradientFor(album.title || '');
   const year = album.year || '—';
-  const dlHtml = (!owned && tidarrOk && artist)
-    ? `<button class="album-dl-btn download-btn" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title || '')}" title="Download via Tidarr">⬇</button>`
+  const alreadyDl = isDownloaded(artist, album.title || '');
+  const dlHtml = (tidarrOk && artist && !owned)
+    ? alreadyDl
+      ? `<button class="album-dl-btn download-btn dl-done" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title || '')}" title="Al gedownload">✓</button>`
+      : `<button class="album-dl-btn download-btn" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title || '')}" title="Download via Tidarr">⬇</button>`
     : '';
   return `
     <div class="album-card ${owned ? 'owned' : 'missing'}" title="${esc(album.title)}${year !== '—' ? ' ('+year+')' : ''}">
@@ -1200,26 +1232,52 @@ function queueItemRow(item, isHistory = false) {
     </div>`;
 }
 
-async function renderTidalQueue() {
+function renderTidalQueue() {
   const target = document.getElementById('tidal-content');
   if (!target) return;
-  target.innerHTML = `<div class="loading"><div class="spinner"></div>Queue ophalen…</div>`;
-  try {
-    const d = await apiFetch('/api/tidarr/queue');
-    if (d.error) {
-      target.innerHTML = `<div class="error-box">⚠️ ${esc(d.error)}</div>`;
-      return;
-    }
-    const items = d.items || [];
-    if (!items.length) {
-      target.innerHTML = `<div class="empty">De download-queue is leeg.</div>`;
-      return;
-    }
-    target.innerHTML = `<div class="section-title">${items.length} in queue</div>
-      <div class="q-list">${items.map(it => queueItemRow(it, false)).join('')}</div>`;
-  } catch (e) {
-    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
+  const items = tidarrQueueItems;
+  if (!items.length) {
+    target.innerHTML = `<div class="empty">De download-queue is leeg.</div>`;
+    return;
   }
+  const statusLabel = {
+    queue_download:   'In wachtrij',
+    queue_processing: 'Verwerken (wacht)',
+    download:         'Downloaden…',
+    processing:       'Verwerken…',
+    finished:         'Klaar',
+    error:            'Fout'
+  };
+  const statusClass = {
+    queue_download:   'q-pending',
+    queue_processing: 'q-pending',
+    download:         'q-active',
+    processing:       'q-active',
+    finished:         'q-done',
+    error:            'q-error'
+  };
+  target.innerHTML = `
+    <div class="section-title">${items.length} item${items.length !== 1 ? 's' : ''} in queue</div>
+    <div class="q-list">${items.map(it => {
+      const sc  = statusClass[it.status]  || 'q-pending';
+      const lbl = statusLabel[it.status]  || it.status || 'In wachtrij';
+      const pct = it.progress?.current && it.progress?.total
+        ? Math.round(it.progress.current / it.progress.total * 100) : null;
+      const progHtml = pct !== null
+        ? `<div class="q-bar"><div class="q-bar-fill" style="width:${pct}%"></div></div><div class="q-pct">${pct}%</div>`
+        : '';
+      const isDone = it.status === 'finished' || it.status === 'error';
+      const removeBtn = `<button class="q-remove" data-qid="${esc(it.id)}" title="Verwijder">✕</button>`;
+      return `<div class="q-row">
+        <div class="q-info">
+          <div class="q-title">${esc(it.title || '(onbekend)')}</div>
+          ${it.artist ? `<div class="q-artist">${esc(it.artist)}</div>` : ''}
+          <span class="q-status ${sc}">${esc(lbl)}</span>
+        </div>
+        ${progHtml}
+        ${removeBtn}
+      </div>`;
+    }).join('')}</div>`;
 }
 
 async function renderTidalHistory() {
@@ -1227,18 +1285,39 @@ async function renderTidalHistory() {
   if (!target) return;
   target.innerHTML = `<div class="loading"><div class="spinner"></div>Geschiedenis ophalen…</div>`;
   try {
-    const d = await apiFetch('/api/tidarr/history');
-    if (d.error) {
-      target.innerHTML = `<div class="error-box">⚠️ ${esc(d.error)}</div>`;
-      return;
-    }
-    const items = d.items || [];
+    const items = await apiFetch('/api/downloads');
     if (!items.length) {
-      target.innerHTML = `<div class="empty">Nog geen downloads voltooid.</div>`;
+      target.innerHTML = `<div class="empty">Nog geen downloads opgeslagen.</div>`;
       return;
     }
-    target.innerHTML = `<div class="section-title">${items.length} voltooide downloads</div>
-      <div class="q-list">${items.map(it => queueItemRow(it, true)).join('')}</div>`;
+    const qualityLabel = { max: '24-bit', high: 'Lossless', normal: 'AAC', low: '96kbps' };
+    target.innerHTML = `
+      <div class="section-title">${items.length} gedownloade albums
+        <button class="tool-btn" id="dl-history-clear" style="margin-left:auto;font-size:11px">🗑 Wis alles</button>
+      </div>
+      <div class="q-list">${items.map(it => {
+        const date = it.queued_at ? new Date(it.queued_at).toLocaleDateString('nl-NL', { day:'numeric', month:'short', year:'numeric' }) : '';
+        const ql   = qualityLabel[it.quality] || it.quality || '';
+        return `<div class="q-row">
+          <div class="q-info">
+            <div class="q-title">${esc(it.title)}</div>
+            ${it.artist ? `<div class="q-artist artist-link" data-artist="${esc(it.artist)}">${esc(it.artist)}</div>` : ''}
+            <span class="q-status q-done">✓ gedownload${ql ? ' · ' + ql : ''}${date ? ' · ' + date : ''}</span>
+          </div>
+          <button class="q-remove" data-dlid="${it.id}" title="Verwijder uit geschiedenis">✕</button>
+        </div>`;
+      }).join('')}</div>`;
+
+    document.getElementById('dl-history-clear')?.addEventListener('click', async () => {
+      if (!confirm('Wis de volledige download-geschiedenis?')) return;
+      await fetch('/api/downloads', { method: 'DELETE' }).catch(() => {});
+      // Verwijder elk item apart (geen bulk-endpoint, dus per item)
+      for (const it of items) {
+        await fetch(`/api/downloads/${it.id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      downloadedSet.clear();
+      renderTidalHistory();
+    });
   } catch (e) {
     target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
   }
@@ -1254,17 +1333,43 @@ function setTidalView(view) {
   else if (view === 'history') renderTidalHistory();
 }
 
-function startTidarrQueuePolling() {
-  stopTidarrQueuePolling();
-  tidarrQueuePoll = setInterval(() => {
-    refreshTidarrQueueBadge();
+// ── Tidarr SSE: real-time queue updates ───────────────────────────────────
+function startTidarrSSE() {
+  if (tidarrSseSource) return;
+  const es = new EventSource('/api/tidarr/stream');
+  tidarrSseSource = es;
+
+  es.onmessage = (e) => {
+    try {
+      tidarrQueueItems = JSON.parse(e.data) || [];
+    } catch { tidarrQueueItems = []; }
+
+    // Badge bijwerken
+    const active = tidarrQueueItems.filter(i => i.status !== 'finished' && i.status !== 'error');
+    const badges = [document.getElementById('badge-tidarr-queue'), document.getElementById('badge-tidarr-queue-inline')];
+    for (const b of badges) {
+      if (!b) continue;
+      if (active.length > 0) { b.textContent = active.length; b.style.display = ''; }
+      else                    { b.style.display = 'none'; }
+    }
+    // Queue-tab live bijwerken als die open is
     if (currentTab === 'tidal' && tidalView === 'queue') renderTidalQueue();
-  }, 5_000);
+  };
+
+  es.onerror = () => {
+    es.close();
+    tidarrSseSource = null;
+    // Herverbind na 10 seconden
+    setTimeout(startTidarrSSE, 10_000);
+  };
 }
-function stopTidarrQueuePolling() {
-  if (tidarrQueuePoll) clearInterval(tidarrQueuePoll);
-  tidarrQueuePoll = null;
+function stopTidarrSSE() {
+  if (tidarrSseSource) { tidarrSseSource.close(); tidarrSseSource = null; }
 }
+
+// Legacy polling (fallback badge refresh voor als SSE niet werkt)
+function startTidarrQueuePolling() { startTidarrSSE(); }
+function stopTidarrQueuePolling()  { /* SSE blijft actief */ }
 
 async function loadTidal() {
   setContent(`<div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>`);
@@ -1274,38 +1379,54 @@ async function loadTidal() {
   startTidarrQueuePolling();
 }
 
-// Download-knop klik: zoekt artiest+album op Tidal en voegt beste match toe aan queue.
+// Download-knop klik: vindt best passend album via meerdere zoekstrategieën.
 async function triggerTidarrDownload(artist, album, btn) {
   if (!tidarrOk) {
     alert('Tidarr is niet verbonden. Controleer TIDARR_URL en TIDARR_API_KEY.');
     return;
   }
-  const q = [artist, album].filter(Boolean).join(' ');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
-    const s = await apiFetch(`/api/tidarr/search?q=${encodeURIComponent(q)}`);
-    const results = s.results || [];
-    // Beste match: album met exacte titel, anders eerste album, anders eerste track.
-    const exactAlbum = album
-      ? results.find(r => r.type === 'album' && r.title.toLowerCase() === album.toLowerCase())
-      : null;
-    const anyAlbum = results.find(r => r.type === 'album');
-    const best = exactAlbum || anyAlbum || results[0];
-    if (!best?.url) {
-      alert('Geen resultaat op Tidal gevonden voor deze release.');
+    // Gebruik het slimme /find-endpoint: probeert meerdere queries + fuzzy matching
+    const params = new URLSearchParams();
+    if (artist) params.set('artist', artist);
+    if (album)  params.set('album',  album);
+    const findRes = await fetch(`/api/tidarr/find?${params}`);
+
+    if (!findRes.ok) {
+      if (findRes.status === 401) {
+        alert('Niet ingelogd bij TIDAL.\nGa naar de 🎛️ Tidarr-tab en koppel je TIDAL-account eerst.');
+      } else {
+        alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer het handmatig te zoeken via de 🌊 Tidal-tab.`);
+      }
       if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
       return;
     }
+
+    const best = await findRes.json();
     const res = await fetch('/api/tidarr/download', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ url: best.url })
+      body:    JSON.stringify({
+        url:     best.url,
+        type:    best.type   || 'album',
+        title:   best.title  || album  || '',
+        artist:  best.artist || artist || '',
+        id:      String(best.id || ''),
+        quality: getDownloadQuality()
+      })
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
-    if (btn) { btn.textContent = '✓'; btn.classList.add('downloaded'); }
+    // Markeer als gedownload in de lokale set (voor groene vinkjes)
+    markDownloaded(best.artist || artist || '', best.title || album || '');
+    // Zet de knop permanent op groen vinkje
+    if (btn) {
+      btn.textContent = '✓';
+      btn.classList.add('dl-done');
+      btn.disabled = false;
+    }
     await refreshTidarrQueueBadge();
-    setTimeout(() => { if (btn) { btn.textContent = '⬇'; btn.disabled = false; btn.classList.remove('downloaded'); } }, 2_000);
   } catch (e) {
     alert('Downloaden mislukt: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
@@ -1334,11 +1455,12 @@ function loadTidarrUI() {
   const iframe  = document.getElementById('tidarr-iframe');
   const wrap    = document.getElementById('tidarr-ui-wrap');
   const content = document.getElementById('content');
-  wrap.style.display   = 'flex';
+  wrap.style.display    = 'flex';
   content.style.display = 'none';
-  // Laad de iframe pas de eerste keer dat de tab wordt geopend
-  if (!iframe.src || iframe.src === window.location.href) {
-    iframe.src = iframe.dataset.src;
+  // Laad de iframe de eerste keer dat de tab wordt geopend
+  if (!iframe.dataset.loaded) {
+    iframe.src          = iframe.dataset.src;
+    iframe.dataset.loaded = '1';
   }
 }
 
@@ -1570,9 +1692,19 @@ document.addEventListener('click', async e => {
     e.stopPropagation();
     const id = qRemove.dataset.qid;
     try {
-      await fetch(`/api/tidarr/queue/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      await refreshTidarrQueueBadge();
-      if (tidalView === 'queue') renderTidalQueue();
+      await fetch('/api/tidarr/queue/' + encodeURIComponent(id), { method: 'DELETE' });
+    } catch (err) { alert('Verwijderen mislukt: ' + err.message); }
+    return;
+  }
+
+  // Downloads: item uit geschiedenis verwijderen
+  const dlRemove = e.target.closest('.q-remove[data-dlid]');
+  if (dlRemove) {
+    e.stopPropagation();
+    const id = dlRemove.dataset.dlid;
+    try {
+      await fetch(`/api/downloads/${id}`, { method: 'DELETE' });
+      dlRemove.closest('.q-row')?.remove();
     } catch (err) { alert('Verwijderen mislukt: ' + err.message); }
     return;
   }
@@ -1681,6 +1813,23 @@ document.getElementById('theme-toggle')?.addEventListener('click', () => {
   localStorage.setItem('theme', next);
 });
 
+// ── Download kwaliteit ─────────────────────────────────────────────────────
+const VALID_QUALITIES = ['max', 'high', 'normal', 'low'];
+
+function getDownloadQuality() {
+  return localStorage.getItem('downloadQuality') || 'high';
+}
+
+(function initQuality() {
+  const saved = getDownloadQuality();
+  const sel   = document.getElementById('download-quality');
+  if (sel && VALID_QUALITIES.includes(saved)) sel.value = saved;
+})();
+
+document.getElementById('download-quality')?.addEventListener('change', (e) => {
+  localStorage.setItem('downloadQuality', e.target.value);
+});
+
 // ── Gebruikersprofiel ──────────────────────────────────────────────────────
 async function loadUser() {
   try {
@@ -1705,7 +1854,7 @@ loadPlexNP();
 loadUser();
 loadWishlistState();
 loadTidarrStatus();
-refreshTidarrQueueBadge();
+loadDownloadHistory();   // laad persistente download-geschiedenis voor groene vinkjes
+startTidarrSSE();        // real-time queue via SSE
 loadRecent();
 setInterval(loadPlexNP, 30_000);
-setInterval(refreshTidarrQueueBadge, 30_000);

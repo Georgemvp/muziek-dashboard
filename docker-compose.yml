@@ -1,48 +1,32 @@
 services:
-  lastfm-app:
+  muziekdashboard:
     build: .
-    container_name: lastfm-app
+    container_name: muziekdashboard
     restart: unless-stopped
     ports:
       - "9090:80"
     env_file:
       - .env
-    volumes:
-      - ./data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      - tidarr
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost/health',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      start_period: 20s
-      retries: 3
-
-  tidarr:
-    build:
-      context: ./tidarr
-      dockerfile: docker/Dockerfile
-      target: production
-    container_name: tidarr
-    restart: unless-stopped
-    ports:
-      - "8484:8484"
     environment:
-      # Tidarr credentials (invullen in .env)
-      - ADMIN_PASSWORD=${TIDARR_API_KEY}
-      # Plex-integratie — Tidarr triggert automatisch een library-scan na download
+      # Tidarr draait intern in dezelfde container op poort 8484
+      - TIDARR_URL=http://localhost:8484
+      # Plex-integratie voor Tidarr
       - PLEX_URL=${PLEX_URL}
       - PLEX_TOKEN=${PLEX_TOKEN}
       - PLEX_LIBRARY=${PLEX_LIBRARY_ID}
-      # Download-kwaliteit
-      - LOCK_QUALITY=LOSSLESS
+      # Tidarr instellingen
+      - ADMIN_PASSWORD=${TIDARR_API_KEY}
+      - LOCK_QUALITY=high
       - ENABLE_HISTORY=true
     volumes:
+      - ./data:/data
       - ./data/tidarr/config:/shared
-      - ./data/tidarr/downloads:/music
-      # Zet dit pad naar je eigen Plex muziekmap zodat Tidarr direct in de bibliotheek schrijft.
-      # - /pad/naar/plex/muziek:/music
+      - /Volumes/4tbdrive/Muziek:/music
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost/',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 45s
+      retries: 3

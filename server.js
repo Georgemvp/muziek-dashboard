@@ -14,12 +14,25 @@ const PORT    = process.env.PORT || 80;
 // Alle verzoeken naar /tidarr-ui/ worden doorgestuurd naar de Tidarr container.
 const TIDARR_BASE = (process.env.TIDARR_URL || 'http://tidarr:8484').replace(/\/$/, '');
 app.use('/tidarr-ui', createProxyMiddleware({
-  target:      TIDARR_BASE,
+  target:       TIDARR_BASE,
   changeOrigin: true,
-  pathRewrite: { '^/tidarr-ui': '' },
+  pathRewrite:  { '^/tidarr-ui': '' },
   on: {
+    // Verwijder headers die het tonen in een iframe blokkeren
+    proxyRes: (proxyRes) => {
+      delete proxyRes.headers['x-frame-options'];
+      delete proxyRes.headers['content-security-policy'];
+      delete proxyRes.headers['x-content-type-options'];
+    },
     error: (err, req, res) => {
-      res.status(502).send('Tidarr niet bereikbaar. Is de Tidarr container actief?');
+      res.status(502).send(`
+        <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
+          <h2>⚠️ Tidarr niet bereikbaar</h2>
+          <p>Tidarr is nog niet opgestart of er is een fout opgetreden.</p>
+          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
+        </div>
+      `);
     }
   }
 }));
@@ -32,8 +45,9 @@ const { getDeezerImage }                                            = require('.
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
-const { searchTidal, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
-const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist } = require('./db');
+const { searchTidal, findBestAlbum, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
+const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
+const { TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -407,11 +421,28 @@ app.get('/api/tidarr/search', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, results: [] }); }
 });
 
-app.post('/api/tidarr/download', async (req, res) => {
-  const { url } = req.body || {};
-  if (!url) return res.status(400).json({ error: 'url is verplicht' });
+// Slim album-zoeken met meerdere strategieën en fuzzy matching.
+// Geeft het best passende album terug, of 404 als niets gevonden.
+app.get('/api/tidarr/find', async (req, res) => {
+  const artist = (req.query.artist || '').trim();
+  const album  = (req.query.album  || '').trim();
+  if (!album) return res.status(400).json({ error: 'album is verplicht' });
   try {
-    const result = await addToQueue(url);
+    const match = await findBestAlbum(artist, album);
+    if (!match) return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    res.json(match);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/tidarr/download', async (req, res) => {
+  const { url, type, title, artist, id, quality } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url is verplicht' });
+  const validQualities = ['max', 'high', 'normal', 'low'];
+  const q = validQualities.includes(quality) ? quality : null;
+  try {
+    const result = await addToQueue(url, type || 'album', title || '', artist || '', id || '', q);
+    // Sla op in de persistente download-geschiedenis
+    addDownload({ tidal_id: id || null, artist: artist || '', title: title || '', url, quality: q || process.env.LOCK_QUALITY || 'high' });
     res.json({ ok: true, result });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -431,6 +462,61 @@ app.delete('/api/tidarr/queue/:id', async (req, res) => {
 app.get('/api/tidarr/history', async (req, res) => {
   try { res.json(await getHistory()); }
   catch (e) { res.status(500).json({ error: e.message, items: [] }); }
+});
+
+// ── Download-geschiedenis (persistente SQLite-opslag) ──────────────────────
+
+app.get('/api/downloads', (req, res) => {
+  try { res.json(getDownloads()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/downloads/keys', (req, res) => {
+  try { res.json([...getDownloadKeys()]); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/downloads', (req, res) => {
+  const { tidal_id, artist, title, url, quality } = req.body || {};
+  if (!title) return res.status(400).json({ error: 'title is verplicht' });
+  try {
+    addDownload({ tidal_id, artist, title, url, quality });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/downloads/:id', (req, res) => {
+  try {
+    removeDownload(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Tidarr SSE-proxy: stuurt real-time queue updates door naar de browser ──
+app.get('/api/tidarr/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const tidarrBase = (process.env.TIDARR_URL || 'http://localhost:8484').replace(/\/$/, '');
+  const apiKey     = process.env.TIDARR_API_KEY || '';
+  const sseUrl     = `${tidarrBase}/api/stream-processing${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`;
+
+  const ac = new AbortController();
+  req.on('close', () => ac.abort());
+
+  try {
+    const upstream = await fetch(sseUrl, { signal: ac.signal });
+    const reader   = upstream.body.getReader();
+    const dec      = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(dec.decode(value, { stream: true }));
+    }
+  } catch { /* verbinding gesloten */ }
+  res.end();
 });
 
 // ── Health check ───────────────────────────────────────────────────────────

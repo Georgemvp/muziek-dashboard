@@ -78,4 +78,55 @@ function isInWishlist(type, name) {
   return row ? row.id : null;
 }
 
-module.exports = { getCache, setCache, clearCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, isInWishlist };
+// ── Downloads (persistente download-geschiedenis) ──────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS downloads (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tidal_id   TEXT,
+    artist     TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    url        TEXT,
+    quality    TEXT,
+    queued_at  INTEGER NOT NULL
+  )
+`);
+// Index voor snelle opzoekacties op artiest+titel
+db.exec(`CREATE INDEX IF NOT EXISTS idx_dl_artist_title ON downloads(artist, title)`);
+
+/** Sla een gedownload album op in de geschiedenis. */
+function addDownload({ tidal_id, artist, title, url, quality }) {
+  db.prepare(`
+    INSERT INTO downloads (tidal_id, artist, title, url, quality, queued_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tidal_id || null, artist || '', title || '', url || null, quality || null, Date.now());
+}
+
+/** Geeft alle downloads terug, nieuwste eerst. */
+function getDownloads() {
+  return db.prepare('SELECT * FROM downloads ORDER BY queued_at DESC').all();
+}
+
+/** Geeft een Set van genormaliseerde "artist|title" sleutels van alle downloads. */
+function getDownloadKeys() {
+  const rows = db.prepare('SELECT artist, title FROM downloads').all();
+  return new Set(rows.map(r => normalizeKey(r.artist, r.title)));
+}
+
+/** Verwijder een download-record op id. */
+function removeDownload(id) {
+  db.prepare('DELETE FROM downloads WHERE id = ?').run(id);
+}
+
+/** Normaliseer artiest+titel tot een opzoeksleutel (ook gebruikt door de frontend). */
+function normalizeKey(artist, title) {
+  const n = s => (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  return `${n(artist)}|${n(title)}`;
+}
+
+module.exports = {
+  getCache, setCache, clearCache, getCacheAge,
+  getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
+  addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey
+};
