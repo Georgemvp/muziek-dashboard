@@ -891,6 +891,10 @@ async function loadRecs() {
     const newC  = recs.filter(r => !r.inPlex).length;
     const plexC = recs.filter(r =>  r.inPlex).length;
 
+    // Update ontdek-sectie header met telling
+    const titleRecs = document.getElementById('hdr-title-recs');
+    if (titleRecs) titleRecs.textContent = `🎯 Aanbevelingen · ${recs.length} artiesten`;
+
     // ── Artiest-aanbevelingen ─────────────────────────────────────────────
     // Spotify-sectie placeholder (gevuld wanneer gebruiker een mood kiest)
     let html = `<div class="spotify-section" id="spotify-recs-section"></div>`;
@@ -1039,7 +1043,7 @@ async function loadReleases() {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
-      setTimeout(() => { if (currentTab === 'releases') loadReleases(); }, 5_000);
+      setTimeout(() => { if (currentTab === 'releases' || currentTab === 'ontdek') loadReleases(); }, 5_000);
       return;
     }
     lastReleases  = d.releases || [];
@@ -1103,6 +1107,10 @@ function renderReleases() {
     filtered = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
   }
 
+  // Update ontdek-sectie header met telling
+  const titleReleases = document.getElementById('hdr-title-releases');
+  if (titleReleases) titleReleases.textContent = `💿 Nieuwe Releases · ${filtered.length} release${filtered.length !== 1 ? 's' : ''}`;
+
   const typeLabel = t => ({ album: 'Album', single: 'Single', ep: 'EP' })[t?.toLowerCase()] || (t || 'Album');
   const typeBadgeClass = t => ({ album: 'rel-type-album', single: 'rel-type-single', ep: 'rel-type-ep' })[t?.toLowerCase()] || 'rel-type-album';
 
@@ -1158,7 +1166,7 @@ async function loadDiscover() {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-      setTimeout(() => { if (currentTab === 'discover') loadDiscover(); }, 20_000);
+      setTimeout(() => { if (currentTab === 'discover' || currentTab === 'ontdek') loadDiscover(); }, 20_000);
       return;
     }
     lastDiscover = d;
@@ -1178,9 +1186,14 @@ function renderDiscover() {
 
   if (!filtered.length) { setContent('<div class="empty">Geen artiesten voor dit filter.</div>'); return; }
 
+  // Update ontdek-sectie header met telling
+  const titleDiscover = document.getElementById('hdr-title-discover');
+  if (titleDiscover) titleDiscover.textContent = `🔭 Ontdek Artiesten · ${filtered.length} artiesten`;
+
   const totalMissing = filtered.reduce((s, a) => s + a.missingCount, 0);
   let html = `<div class="section-title">Gebaseerd op: ${(basedOn||[]).slice(0,3).join(', ')}
-    &nbsp;·&nbsp; <span style="color:var(--new)">${totalMissing} albums te ontdekken</span></div>`;
+    &nbsp;·&nbsp; <span style="color:var(--new)">${totalMissing} albums te ontdekken</span></div>
+    <div class="discover-grid">`;
 
   for (let i = 0; i < filtered.length; i++) {
     const a = filtered[i];
@@ -1199,30 +1212,30 @@ function renderDiscover() {
       : `<div class="discover-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
 
     const albumCount = a.albums?.length || 0;
-    const albumCountLabel = albumCount > 0 ? `${albumCount} ${albumCount === 1 ? 'album' : 'albums'}` : '';
+    const albumLabel = `${albumCount} album${albumCount !== 1 ? 's' : ''}`;
 
     html += `
-      <div class="discover-section" id="disc-${i}">
-        <div class="discover-artist-card discover-card-toggle" data-disc-id="disc-${i}">
-          ${photo}
-          <div class="discover-info">
-            <div class="discover-name">
-              <span class="artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</span>
-              ${plexBadge(a.inPlex)}
+      <div class="discover-section collapsed" id="disc-${i}">
+        <div class="discover-card discover-card-toggle" data-disc-id="disc-${i}">
+          <div class="discover-card-top">
+            ${photo}
+            <div class="discover-card-info">
+              <div class="discover-card-name">
+                <span class="artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</span>
+                ${plexBadge(a.inPlex)}
+              </div>
+              <div class="discover-card-sub">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div>
             </div>
-            <div class="discover-meta">${esc(meta)}</div>
-            ${tagsHtml(a.tags, 5)}
-            <div class="discover-reason" style="margin-top:6px">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div>
-            ${a.missingCount > 0
-              ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
-              : `<div style="font-size:12px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
-            <button class="disc-toggle-btn expanded" data-disc-id="disc-${i}" title="Vouw albums in/uit"
-              aria-label="Albums in/uitklappen">${albumCountLabel}</button>
             <span class="discover-match">${matchPct}%</span>
             ${bookmarkBtn('artist', a.name, '', a.image || '')}
           </div>
+          ${meta ? `<div class="discover-meta">${esc(meta)}</div>` : ''}
+          ${tagsHtml(a.tags, 3)}
+          ${a.missingCount > 0
+            ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
+            : `<div style="font-size:11px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
+          <button class="disc-toggle-btn collapsed" data-disc-id="disc-${i}" data-album-count="${albumCount}"
+            title="Toon/verberg albums" aria-label="Albums tonen/verbergen">Toon ${albumLabel}</button>
         </div>
         <div class="discover-albums-wrap">`;
 
@@ -1235,6 +1248,7 @@ function renderDiscover() {
     }
     html += `</div></div>`;
   }
+  html += `</div>`;
   setContent(html);
 }
 
@@ -2052,7 +2066,7 @@ async function loadOntdek() {
       <div class="section-block" data-section="recs">
         <div class="section-hdr">
           <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title">Aanbevelingen</span>
+          <span class="section-hdr-title" id="hdr-title-recs">🎯 Aanbevelingen</span>
           <div class="inline-toolbar">
             <button class="tool-btn${recsFilter==='all'?' sel-def':''}" data-filter="all">Alle</button>
             <button class="tool-btn${recsFilter==='new'?' sel-new':''}" data-filter="new">✦ Nieuw voor mij</button>
@@ -2068,7 +2082,7 @@ async function loadOntdek() {
       <div class="section-block" data-section="releases">
         <div class="section-hdr">
           <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title">Nieuwe Releases</span>
+          <span class="section-hdr-title" id="hdr-title-releases">💿 Nieuwe Releases</span>
           <div class="inline-toolbar">
             <button class="tool-btn${releasesFilter==='all'?' sel-def':''}" data-rtype="all">Alle</button>
             <button class="tool-btn${releasesFilter==='album'?' sel-def':''}" data-rtype="album">Albums</button>
@@ -2090,7 +2104,7 @@ async function loadOntdek() {
       <div class="section-block" data-section="discover">
         <div class="section-hdr">
           <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title">Ontdek Artiesten</span>
+          <span class="section-hdr-title" id="hdr-title-discover">🔭 Ontdek Artiesten</span>
           <div class="inline-toolbar">
             <button class="tool-btn${discFilter==='all'?' sel-def':''}" data-dfilter="all">Alle artiesten</button>
             <button class="tool-btn${discFilter==='new'?' sel-new':''}" data-dfilter="new">✦ Nieuw voor mij</button>
@@ -2518,12 +2532,13 @@ document.addEventListener('click', async e => {
     const section = document.getElementById(sectionId);
     if (section) {
       const isCollapsed = section.classList.toggle('collapsed');
-      discToggleBtn.classList.toggle('expanded', !isCollapsed);
-      discToggleBtn.classList.toggle('collapsed', isCollapsed);
-      // Sync ook de knop in de kaart als die apart is
+      // Sync alle toggle-knoppen en pas tekst aan
       section.querySelectorAll('.disc-toggle-btn').forEach(b => {
         b.classList.toggle('expanded', !isCollapsed);
         b.classList.toggle('collapsed', isCollapsed);
+        const n = parseInt(b.dataset.albumCount, 10) || 0;
+        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
+        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
       });
     }
     return;
@@ -2535,12 +2550,14 @@ document.addEventListener('click', async e => {
     const sectionId = discCard.dataset.discId;
     const section = document.getElementById(sectionId);
     if (section) {
-      const toggleBtn = section.querySelector('.disc-toggle-btn');
       const isCollapsed = section.classList.toggle('collapsed');
-      if (toggleBtn) {
-        toggleBtn.classList.toggle('expanded', !isCollapsed);
-        toggleBtn.classList.toggle('collapsed', isCollapsed);
-      }
+      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
+        b.classList.toggle('expanded', !isCollapsed);
+        b.classList.toggle('collapsed', isCollapsed);
+        const n = parseInt(b.dataset.albumCount, 10) || 0;
+        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
+        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
+      });
     }
     return;
   }

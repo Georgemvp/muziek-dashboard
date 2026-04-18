@@ -404,8 +404,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .rec-album-plex { font-size: 10px; color: var(--plex); font-weight: 600; flex-shrink: 0; }
 .rec-loading { font-size: 12px; color: var(--muted2); }
 
-/* ── Discover ── */
-.discover-section { margin-bottom: 2rem; }
+/* ── Discover Grid ── */
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.discover-section { margin-bottom: 0; }
+
+/* Compact discover card */
+.discover-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  cursor: pointer;
+  transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
+}
+.discover-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+.discover-section:not(.collapsed) .discover-card {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.discover-section.collapsed .discover-card {
+  border-radius: var(--radius-lg);
+}
+
+/* Legacy large-card styles (fallback, unused in new grid) */
 .discover-artist-card {
   display: flex; align-items: flex-start; gap: 14px;
   background: var(--surface); border: 1px solid var(--border);
@@ -416,42 +446,72 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .discover-section.collapsed .discover-artist-card {
   border-radius: var(--radius-lg);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 0;
 }
+
 .discover-card-toggle { cursor: pointer; }
-.discover-artist-card:hover {
-  border-color: var(--border-hover);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+
+/* Card inner layout */
+.discover-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
+.discover-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.discover-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  line-height: 1.2;
+}
+.discover-card-sub {
+  font-size: 11px;
+  color: var(--muted2);
+  line-height: 1.3;
+}
+
+/* Photo: compact 48px */
 .discover-photo {
-  width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
+  width: 48px; height: 48px; border-radius: 50%; object-fit: cover;
   flex-shrink: 0; background: var(--surface2);
 }
 .discover-photo-ph {
-  width: 72px; height: 72px; border-radius: 50%;
+  width: 48px; height: 48px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 24px; font-weight: 800; color: var(--muted); flex-shrink: 0;
+  font-size: 18px; font-weight: 800; color: var(--muted); flex-shrink: 0;
 }
-.discover-info { flex: 1; min-width: 0; }
-.discover-name { font-size: 19px; font-weight: 700; margin-bottom: 3px; line-height: 1.2; }
-.discover-meta { font-size: 12px; color: var(--muted2); margin-bottom: 6px; }
-.discover-reason { font-size: 12px; color: var(--muted2); margin-top: 6px; }
-.discover-missing { font-size: 12px; color: var(--new); font-weight: 600; margin-top: 4px; }
-.discover-match { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 6px; background: rgba(213,16,7,0.12); color: var(--red); flex-shrink: 0; align-self: flex-start; white-space: nowrap; }
 
-/* Discover toggle-knop */
+.discover-info { flex: 1; min-width: 0; }
+.discover-name { font-size: 17px; font-weight: 700; margin-bottom: 3px; line-height: 1.2; }
+.discover-meta { font-size: 11px; color: var(--muted2); margin-bottom: 5px; }
+.discover-reason { font-size: 11px; color: var(--muted2); margin-top: 4px; }
+.discover-missing { font-size: 11px; color: var(--new); font-weight: 600; margin-top: 4px; }
+.discover-match {
+  font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 6px;
+  background: rgba(213,16,7,0.12); color: var(--red);
+  flex-shrink: 0; align-self: flex-start; white-space: nowrap;
+}
+
+/* Discover toggle-knop — volledig breed in nieuwe grid-kaart */
 .disc-toggle-btn {
-  background: none; border: 1px solid var(--border); border-radius: 6px;
-  cursor: pointer; padding: 3px 8px; color: var(--muted2);
-  font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; padding: 6px 10px; color: var(--muted2);
+  font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;
   transition: color 0.2s var(--ease), border-color 0.2s, background 0.2s;
-  flex-shrink: 0; white-space: nowrap; user-select: none;
+  width: 100%; margin-top: 10px; white-space: nowrap; user-select: none;
 }
 .disc-toggle-btn::after {
   content: '▾'; font-size: 10px; transition: transform 0.25s var(--ease); display: inline-block;
 }
 .disc-toggle-btn.collapsed::after { transform: rotate(-90deg); }
-.disc-toggle-btn:hover { color: var(--text); border-color: var(--border-hover); background: var(--surface2); }
+.disc-toggle-btn:hover { color: var(--text); border-color: var(--border-hover); background: var(--surface3); }
 
 /* Discover album-wrap: vloeiend in/uitklappen */
 .discover-albums-wrap {
@@ -852,6 +912,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .album-grid   { grid-template-columns: repeat(2, 1fr); }
   .gaps-album-grid { grid-template-columns: repeat(2, 1fr); }
   .discover-artist-card { flex-wrap: wrap; }
+  .discover-grid { grid-template-columns: 1fr; }
   .wishlist-grid { grid-template-columns: repeat(2, 1fr); }
   .releases-grid { grid-template-columns: repeat(2, 1fr); }
   .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1513,7 +1574,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 
 /* ── Sectie-blokken (Ontdek, Bibliotheek stats) ───────────────────────────── */
-.section-block { }
+.section-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0 20px 24px;
+}
 
 /* Sticky section-header: blijft in beeld terwijl je door de sectie scrollt */
 .section-hdr {
@@ -1526,7 +1592,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   flex-wrap: wrap;
   padding: 11px 0 11px;
   margin-bottom: 18px;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   backdrop-filter: blur(18px) saturate(150%);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
   border-bottom: 1px solid var(--border);
@@ -1547,20 +1613,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .ontdek-divider {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 48px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 14px;
+  margin: 10px 0 28px;
+  color: var(--new);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 6px 0;
 }
 .ontdek-divider::before,
 .ontdek-divider::after {
   content: '';
   flex: 1;
-  height: 1px;
-  background: var(--border);
+  height: 2px;
+  background: linear-gradient(90deg, var(--new-bg), transparent);
+}
+.ontdek-divider::after {
+  background: linear-gradient(270deg, var(--new-bg), transparent);
 }
 
 /* ── Ontdek layout ─────────────────────────────────────────────────────────── */
@@ -1693,11 +1762,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .section-hdr-title { font-size: 14px; }
   .inline-toolbar { gap: 4px; }
   .tool-btn { padding: 4px 9px; font-size: 11px; }
+  .section-block { padding: 0 12px 18px; }
+  .discover-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Collapsible sections (Ontdek page) ───────────────────────────────────── */
 .section-block {
-  transition: opacity 0.2s var(--ease);
+  transition: opacity 0.2s var(--ease), box-shadow 0.22s var(--ease);
+  margin-bottom: 8px;
+}
+.section-block:hover {
+  box-shadow: var(--shadow-sm);
 }
 
 .section-block.collapsed .section-content {
