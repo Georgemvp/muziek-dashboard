@@ -1,1442 +1,345 @@
-// ── State ─────────────────────────────────────────────────────────────────
-let currentTab    = 'nu';
-let currentMainTab = 'nu';       // 4-tab navigatie-staat
-let bibSubTab     = 'collectie'; // actieve Bibliotheek sub-tab
-let sectionContainerEl = null;   // section-bewust renderen
-let currentPeriod = '7day';
-let recsFilter    = 'all';
-let discFilter    = 'all';
-let gapsSort      = 'missing';
-let releasesSort  = 'listening';  // STAP 2
-let plexOk        = false;
-let lastDiscover  = null;
-let lastGaps      = null;
-let plexLibData   = null;         // gecachede Plex-bibliotheek data
-let wishlistMap   = new Map();   // key "type:name" → id
-let searchTimeout = null;
-// ── Tidarr state ──────────────────────────────────────────────────────────
-let tidarrOk           = false;
-let tidalView          = 'search';  // 'search' | 'queue' | 'history'
-let tidalSearchResults = null;
-let tidalSearchTimeout = null;
-let tidarrQueuePoll    = null;
-let tidarrSseSource    = null;      // SSE-verbinding voor real-time queue
-let tidarrQueueItems   = [];        // live queue-items van Tidarr SSE
-let downloadedSet      = new Set(); // genormaliseerde "artist|title" sleutels
-
-// ── Spotify state ─────────────────────────────────────────────────────────
-let spotifyEnabled  = false;   // wordt ingesteld door checkSpotifyStatus()
-let activeMood      = null;    // momenteel geselecteerde mood
-
-// ── Audio preview state ───────────────────────────────────────────────────
-const _previewAudio = new Audio();
-let   _previewBtn   = null; // de actieve play-knop
-
-// ── Animation preferences ──────────────────────────────────────────────────
-const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-if (prefersReducedMotion) {
-  document.documentElement.setAttribute('data-reduce-motion', 'true');
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-const getImg = (imgs, size = 'medium') => {
-  if (!imgs) return null;
-  const i = imgs.find(x => x.size === size);
-  return (i && i['#text'] && !i['#text'].includes('2a96cbd8b46e442fc41c2b86b821562f')) ? i['#text'] : null;
-};
-const initials = n => String(n || '?').split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
-const fmt  = n => parseInt(n).toLocaleString('nl-NL');
-const esc  = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-const periodLabel = p => ({ '7day':'week','1month':'maand','3month':'3 maanden','12month':'jaar','overall':'alles' }[p] || p);
-
-function timeAgo(ts) {
-  const s = Math.floor(Date.now()/1000) - ts;
-  if (s < 120)   return 'zojuist';
-  if (s < 3600)  return `${Math.floor(s/60)}m`;
-  if (s < 86400) return `${Math.floor(s/3600)}u`;
-  return `${Math.floor(s/86400)}d`;
-}
-
-function gradientFor(name, useRadial = false) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++)
-    h = (h * 31 + name.charCodeAt(i)) & 0xffffff;
-  const hue = h % 360;
-  const sat1 = 45 + (h % 31); // 45-75% variatie
-  const sat2 = 50 + ((h >> 8) % 26); // 50-75% variatie
-  const lightness1 = 20 + ((h >> 16) % 16); // 20-35% variatie
-  const lightness2 = 15 + ((h >> 10) % 11); // 15-25% variatie
-
-  if (useRadial) {
-    return `radial-gradient(circle, hsl(${hue}, ${sat1}%, ${lightness1}%), hsl(${(hue + 40) % 360}, ${sat2}%, ${lightness2}%))`;
-  }
-  return `linear-gradient(135deg, hsl(${hue}, ${sat1}%, ${lightness1}%), hsl(${(hue + 40) % 360}, ${sat2}%, ${lightness2}%))`;
-}
-
-function countryFlag(code) {
-  if (!code || code.length !== 2) return '';
-  return [...code.toUpperCase()].map(c => String.fromCodePoint(c.charCodeAt(0) + 127397)).join('');
-}
-
-function tagsHtml(tags, max = 4) {
-  if (!tags?.length) return '';
-  return `<div class="tags" style="margin-top:5px">${tags.slice(0, max).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>`;
-}
-
-function plexBadge(inPlex) {
-  if (!plexOk) return '';
-  return inPlex
-    ? `<span class="badge plex">▶ In Plex</span>`
-    : `<span class="badge new">✦ Nieuw</span>`;
-}
-
-function bookmarkBtn(type, name, artist = '', image = '') {
-  const saved = wishlistMap.has(`${type}:${name}`);
-  return `<button class="bookmark-btn${saved ? ' saved' : ''}"
-    data-btype="${esc(type)}" data-bname="${esc(name)}"
-    data-bartist="${esc(artist)}" data-bimage="${esc(image)}"
-    title="${saved ? 'Verwijder uit lijst' : 'Sla op in lijst'}">🔖</button>`;
-}
-
-// ── Download-helpers ───────────────────────────────────────────────────────
-function normalizeKey(artist, title) {
-  const n = s => (s || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-  return `${n(artist)}|${n(title)}`;
-}
-function isDownloaded(artist, title) {
-  return downloadedSet.has(normalizeKey(artist, title));
-}
-function markDownloaded(artist, title) {
-  downloadedSet.add(normalizeKey(artist, title));
-}
-
-async function loadDownloadHistory() {
-  try {
-    const keys = await apiFetch('/api/downloads/keys');
-    downloadedSet = new Set(keys);
-  } catch { downloadedSet = new Set(); }
-}
-
-// Kleine download-knop (Tidarr) — opent zoek-en-download flow vanuit Gaps/Discover/panel.
-// inPlex=true → geen knop (al in je collectie).
-function downloadBtn(artist, album = '', inPlex = false) {
-  if (!tidarrOk || inPlex) return '';
-  if (isDownloaded(artist, album)) {
-    return `<button class="download-btn dl-done"
-      data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
-      title="Al gedownload">✓</button>`;
-  }
-  return `<button class="download-btn"
-    data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
-    title="Download via Tidarr">⬇</button>`;
-}
-
-// ── Audio preview logica ───────────────────────────────────────────────────
-async function playPreview(btn, artist, track) {
-  // Zelfde knop → toggle play/pauze
-  if (_previewBtn === btn) {
-    if (_previewAudio.paused) {
-      await _previewAudio.play();
-      btn.textContent = '⏸';
-      btn.classList.add('playing');
-    } else {
-      _previewAudio.pause();
-      btn.textContent = '▶';
-      btn.classList.remove('playing');
-    }
-    return;
-  }
-
-  // Stop vorige track
-  if (_previewBtn) {
-    _previewAudio.pause();
-    _previewBtn.textContent = '▶';
-    _previewBtn.classList.remove('playing');
-    const oldFill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
-    if (oldFill) oldFill.style.width = '0%';
-  }
-
-  _previewBtn = btn;
-  btn.textContent = '…';
-  btn.disabled = true;
-
-  try {
-    const params = new URLSearchParams({ artist, track });
-    const data = await apiFetch(`/api/preview?${params}`);
-    if (!data.preview) {
-      btn.textContent = '—';
-      btn.disabled = false;
-      setTimeout(() => { if (btn.textContent === '—') btn.textContent = '▶'; }, 1800);
-      _previewBtn = null;
-      return;
-    }
-    _previewAudio.src = data.preview;
-    _previewAudio.currentTime = 0;
-    await _previewAudio.play();
-    btn.textContent = '⏸';
-    btn.disabled = false;
-    btn.classList.add('playing');
-  } catch {
-    btn.textContent = '▶';
-    btn.disabled = false;
-    _previewBtn = null;
-  }
-}
-
-_previewAudio.addEventListener('timeupdate', () => {
-  if (!_previewBtn || !_previewAudio.duration) return;
-  const fill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
-  if (fill) fill.style.width = `${(_previewAudio.currentTime / _previewAudio.duration * 100).toFixed(1)}%`;
-});
-
-_previewAudio.addEventListener('ended', () => {
-  if (_previewBtn) {
-    _previewBtn.textContent = '▶';
-    _previewBtn.classList.remove('playing');
-    const fill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
-    if (fill) fill.style.width = '0%';
-    _previewBtn = null;
-  }
-});
-
-// Stop audio als de tab onzichtbaar wordt
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && !_previewAudio.paused) {
-    _previewAudio.pause();
-    if (_previewBtn) {
-      _previewBtn.textContent = '▶';
-      _previewBtn.classList.remove('playing');
-    }
-  }
-});
-
-async function apiFetch(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Serverfout ${res.status}`);
-  return res.json();
-}
-
-const contentEl = document.getElementById('content');
-function applyStaggeredAnimations() {
-  // Skip animaties als prefers-reduced-motion is ingesteld
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (prefersReducedMotion) return;
-
-  // Bepaal stagger delay per kaarttype
-  const staggerConfigs = {
-    '.rec-grid > *': 60,    // Grote kaarten: 60ms stagger
-    '.card-list > *': 25,   // Lijsten: 25ms stagger
-    '.artist-grid > *': 40, // 4-kolommen grid: 40ms stagger
-    '.releases-grid > *': 40,
-    '.wishlist-grid > *': 40,
-  };
-
-  Object.entries(staggerConfigs).forEach(([selector, delayMs]) => {
-    document.querySelectorAll(selector).forEach((el, i) => {
-      el.style.animationDelay = `${i * delayMs}ms`;
-    });
-  });
-}
-
-function setContent(html, callback) {
-  const target = sectionContainerEl || contentEl;
-
-  // Gebruik View Transitions API als beschikbaar
-  if (!sectionContainerEl && document.startViewTransition) {
-    document.startViewTransition(() => {
-      target.innerHTML = html;
-      applyStaggeredAnimations();
-      if (callback) requestAnimationFrame(callback);
-    }).finished.catch(() => {});
-  } else {
-    target.innerHTML = html;
-    if (!sectionContainerEl) {
-      // Fallback voor browsers zonder View Transitions API
-      contentEl.style.opacity = '0';
-      contentEl.style.transform = 'translateY(6px)';
-      requestAnimationFrame(() => {
-        void contentEl.offsetHeight; // force reflow
-        contentEl.style.opacity = '1';
-        contentEl.style.transform = '';
-        applyStaggeredAnimations();
-        if (callback) requestAnimationFrame(callback);
-      });
-    } else {
-      if (callback) callback();
-    }
-  }
-}
-const showError = msg => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
-
-// STAP 5: Skeleton loaders
-function showSkeleton(type) {
-  let html = '';
-  if (type === 'cards') {
-    html = '<div class="skeleton-list">' + Array(6).fill('<div class="skeleton skeleton-card"></div>').join('') + '</div>';
-  } else if (type === 'grid') {
-    html = '<div class="skeleton-grid">' + Array(8).fill('<div class="skeleton skeleton-square"></div>').join('') + '</div>';
-  } else if (type === 'stats') {
-    html = '<div class="skeleton-stats"><div class="skeleton skeleton-stat-full"></div><div class="skeleton-two"><div class="skeleton skeleton-stat-half"></div><div class="skeleton skeleton-stat-half"></div></div></div>';
-  } else {
-    html = `<div class="loading"><div class="spinner"></div>${type || 'Laden...'}</div>`;
-  }
-  setContent(html);
-}
-const showLoading = msg => {
-  if (sectionContainerEl) {
-    sectionContainerEl.innerHTML = `<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`;
-    return;
-  }
-  // Kies automatisch de juiste skeleton op basis van huidige tab
-  const skeletonMap = {
-    recent: 'cards', loved: 'cards', toptracks: 'cards',
-    topartists: 'grid', releases: 'grid', recs: 'grid',
-    discover: 'grid', gaps: 'grid',
-    stats: 'stats',
-    wishlist: 'grid',
-    plexlib: 'cards',
-    nu: 'cards', ontdek: 'grid', bibliotheek: 'cards', downloads: 'cards'
-  };
-  const skType = skeletonMap[currentTab];
-  if (skType && !msg) {
-    showSkeleton(skType);
-  } else {
-    setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);
-  }
-};
-
-// Track image with proper fallback (6b)
-const trackImg = imgs => {
-  const src = getImg(imgs);
-  if (src) return `<img class="card-img" src="${src}" alt="" loading="lazy"
-    onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div class="card-ph" style="display:none">♪</div>`;
-  return `<div class="card-ph">♪</div>`;
-};
-
-// ── Album card ─────────────────────────────────────────────────────────────
-function albumCard(album, showBadge = true, artist = '') {
-  const owned = album.inPlex;
-  const bg = gradientFor(album.title || '');
-  const year = album.year || '—';
-  const alreadyDl = isDownloaded(artist, album.title || '');
-  const dlHtml = (tidarrOk && artist && !owned)
-    ? alreadyDl
-      ? `<button class="album-dl-btn download-btn dl-done" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title || '')}" title="Al gedownload">✓</button>`
-      : `<button class="album-dl-btn download-btn" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title || '')}" title="Download via Tidarr">⬇</button>`
-    : '';
-  return `
-    <div class="album-card ${owned ? 'owned' : 'missing'}" title="${esc(album.title)}${year !== '—' ? ' ('+year+')' : ''}">
-      <div class="album-cover" style="background:${bg}">
-        <div class="album-cover-ph">${initials(album.title || '?')}</div>
-        <img src="${esc(album.coverUrl || '')}" alt="" loading="lazy"
+(()=>{var s={currentTab:"nu",currentMainTab:"nu",bibSubTab:"collectie",sectionContainerEl:null,currentPeriod:"7day",recsFilter:"all",discFilter:"all",gapsSort:"missing",releasesSort:"listening",releasesFilter:"all",plexOk:!1,lastDiscover:null,lastGaps:null,lastReleases:null,plexLibData:null,wishlistMap:new Map,newReleaseIds:new Set,searchTimeout:null,tidalSearchTimeout:null,tidarrOk:!1,tidalView:"search",tidalSearchResults:null,tidarrQueuePoll:null,tidarrSseSource:null,tidarrQueueItems:[],downloadedSet:new Set,spotifyEnabled:!1,activeMood:null,previewAudio:new Audio,previewBtn:null,collapsibleSections:{recs:!1,releases:!1,discover:!1},sectionMutex:Promise.resolve(),dlResolve:null,VALID_QUALITIES:["max","high","normal","low"]};var fe=window.matchMedia("(prefers-reduced-motion: reduce)").matches,I=document.getElementById("content"),F=(e,t="medium")=>{if(!e)return null;let a=e.find(i=>i.size===t);return a&&a["#text"]&&!a["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")?a["#text"]:null},m=e=>String(e||"?").split(/\s+/).map(t=>t[0]).join("").toUpperCase().slice(0,2),B=e=>parseInt(e).toLocaleString("nl-NL"),o=e=>String(e||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"),W=e=>({"7day":"week","1month":"maand","3month":"3 maanden","12month":"jaar",overall:"alles"})[e]||e;function ae(e){let t=Math.floor(Date.now()/1e3)-e;return t<120?"zojuist":t<3600?`${Math.floor(t/60)}m`:t<86400?`${Math.floor(t/3600)}u`:`${Math.floor(t/86400)}d`}function g(e,t=!1){let a=0;for(let r=0;r<e.length;r++)a=a*31+e.charCodeAt(r)&16777215;let i=a%360,n=45+a%31,d=50+(a>>8)%26,c=20+(a>>16)%16,l=15+(a>>10)%11;return t?`radial-gradient(circle, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${l}%))`:`linear-gradient(135deg, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${l}%))`}function z(e){return!e||e.length!==2?"":[...e.toUpperCase()].map(t=>String.fromCodePoint(t.charCodeAt(0)+127397)).join("")}function j(e,t=4){return e?.length?`<div class="tags" style="margin-top:5px">${e.slice(0,t).map(a=>`<span class="tag">${o(a)}</span>`).join("")}</div>`:""}function be(e){return s.plexOk?e?'<span class="badge plex">\u25B6 In Plex</span>':'<span class="badge new">\u2726 Nieuw</span>':""}function O(e,t,a="",i=""){let n=s.wishlistMap.has(`${e}:${t}`);return`<button class="bookmark-btn${n?" saved":""}"
+    data-btype="${o(e)}" data-bname="${o(t)}"
+    data-bartist="${o(a)}" data-bimage="${o(i)}"
+    title="${n?"Verwijder uit lijst":"Sla op in lijst"}">\u{1F516}</button>`}function ie(e){return e.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").substring(0,50)}function Pe(e,t){let a=i=>(i||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");return`${a(e)}|${a(t)}`}var Me=(e,t)=>s.downloadedSet.has(Pe(e,t)),De=(e,t)=>s.downloadedSet.add(Pe(e,t));function N(e,t="",a=!1){return!s.tidarrOk||a?"":Me(e,t)?`<button class="download-btn dl-done"
+      data-dlartist="${o(e)}" data-dlalbum="${o(t)}"
+      title="Al gedownload">\u2713</button>`:`<button class="download-btn"
+    data-dlartist="${o(e)}" data-dlalbum="${o(t)}"
+    title="Download via Tidarr">\u2B07</button>`}var Y=e=>{let t=F(e);return t?`<img class="card-img" src="${t}" alt="" loading="lazy"
+      onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="card-ph" style="display:none">\u266A</div>`:'<div class="card-ph">\u266A</div>'};function J(e,t=!0,a=""){let i=e.inPlex,n=g(e.title||""),d=e.year||"\u2014",c=Me(a,e.title||""),l=s.tidarrOk&&a&&!i?c?`<button class="album-dl-btn download-btn dl-done" data-dlartist="${o(a)}" data-dlalbum="${o(e.title||"")}" title="Al gedownload">\u2713</button>`:`<button class="album-dl-btn download-btn" data-dlartist="${o(a)}" data-dlalbum="${o(e.title||"")}" title="Download via Tidarr">\u2B07</button>`:"";return`
+    <div class="album-card ${i?"owned":"missing"}" title="${o(e.title)}${d!=="\u2014"?" ("+d+")":""}">
+      <div class="album-cover" style="background:${n}">
+        <div class="album-cover-ph">${m(e.title||"?")}</div>
+        <img src="${o(e.coverUrl||"")}" alt="" loading="lazy"
           style="opacity:0;transition:opacity 0.35s;position:relative;z-index:1"
           onload="this.style.opacity='1'" onerror="this.remove()">
-        ${dlHtml}
+        ${l}
       </div>
       <div class="album-info">
-        <div class="album-title">${esc(album.title)}</div>
-        <div class="album-year">${year}</div>
-        ${showBadge ? `<span class="album-status ${owned ? 'own' : 'miss'}">${owned ? '▶ In Plex' : '✦ Ontbreekt'}</span>` : ''}
+        <div class="album-title">${o(e.title)}</div>
+        <div class="album-year">${d}</div>
+        ${t?`<span class="album-status ${i?"own":"miss"}">${i?"\u25B6 In Plex":"\u2726 Ontbreekt"}</span>`:""}
       </div>
-    </div>`;
-}
-
-// ── Wishlist ───────────────────────────────────────────────────────────────
-async function loadWishlistState() {
-  try {
-    const items = await apiFetch('/api/wishlist');
-    wishlistMap.clear();
-    for (const item of items) wishlistMap.set(`${item.type}:${item.name}`, item.id);
-    updateWishlistBadge();
-  } catch {}
-}
-
-function updateWishlistBadge() {
-  const badge = document.getElementById('badge-wishlist');
-  if (badge) badge.textContent = wishlistMap.size || '0';
-}
-
-async function toggleWishlist(type, name, artist, image) {
-  const key = `${type}:${name}`;
-  if (wishlistMap.has(key)) {
-    await fetch(`/api/wishlist/${wishlistMap.get(key)}`, { method: 'DELETE' });
-    wishlistMap.delete(key);
-    updateWishlistBadge();
-    return false;
-  } else {
-    const res = await fetch('/api/wishlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, name, artist, image })
-    });
-    const data = await res.json();
-    wishlistMap.set(key, data.id);
-    updateWishlistBadge();
-    return true;
-  }
-}
-
-async function loadWishlist() {
-  showLoading();
-  await loadWishlistState();
-  try {
-    const items = await apiFetch('/api/wishlist');
-    if (!items.length) {
-      setContent('<div class="empty">Je lijst is leeg.<br>Voeg artiesten toe via het 🔖 icoon in Ontdek en Collectiegaten.</div>');
-      return;
-    }
-    let html = `<div class="section-title">${items.length} opgeslagen</div><div class="wishlist-grid">`;
-    for (const item of items) {
-      const imgHtml = item.image
-        ? `<img src="${esc(item.image)}" alt="" loading="lazy"
-            onerror="this.onerror=null;this.style.display='none'">`
-        : '';
-      html += `
+    </div>`}function Ae(){if(fe)return;Object.entries({".rec-grid > *":60,".card-list > *":25,".artist-grid > *":40,".releases-grid > *":40,".wishlist-grid > *":40}).forEach(([t,a])=>{document.querySelectorAll(t).forEach((i,n)=>{i.style.animationDelay=`${n*a}ms`})})}function st(e){let t="";e==="cards"?t='<div class="skeleton-list">'+Array(6).fill('<div class="skeleton skeleton-card"></div>').join("")+"</div>":e==="grid"?t='<div class="skeleton-grid">'+Array(8).fill('<div class="skeleton skeleton-square"></div>').join("")+"</div>":e==="stats"?t='<div class="skeleton-stats"><div class="skeleton skeleton-stat-full"></div><div class="skeleton-two"><div class="skeleton skeleton-stat-half"></div><div class="skeleton skeleton-stat-half"></div></div></div>':t=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`,b(t)}function b(e,t){let a=s.sectionContainerEl||I;!s.sectionContainerEl&&document.startViewTransition?document.startViewTransition(()=>{a.innerHTML=e,Ae(),t&&requestAnimationFrame(t)}).finished.catch(()=>{}):(a.innerHTML=e,s.sectionContainerEl?t&&t():(I.style.opacity="0",I.style.transform="translateY(6px)",requestAnimationFrame(()=>{I.offsetHeight,I.style.opacity="1",I.style.transform="",Ae(),t&&requestAnimationFrame(t)})))}var S=e=>b(`<div class="error-box">\u26A0\uFE0F ${o(e)}</div>`);function T(e){if(s.sectionContainerEl){s.sectionContainerEl.innerHTML=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`;return}let a={recent:"cards",loved:"cards",toptracks:"cards",topartists:"grid",releases:"grid",recs:"grid",discover:"grid",gaps:"grid",stats:"stats",wishlist:"grid",plexlib:"cards",nu:"cards",ontdek:"grid",bibliotheek:"cards",downloads:"cards"}[s.currentTab];a&&!e?st(a):b(`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`)}function Z(e,t){if(!e)return;if(!("IntersectionObserver"in window)){t();return}let a=new IntersectionObserver(i=>{i.forEach(n=>{n.isIntersecting&&(a.unobserve(n.target),t())})},{rootMargin:"300px"});a.observe(e)}function M(e,t){let a=s.sectionMutex.then(async()=>{s.sectionContainerEl=e;try{await t()}finally{s.sectionContainerEl=null}});return s.sectionMutex=a.catch(()=>{}),a}async function f(e){let t=await fetch(e);if(!t.ok)throw new Error(`Serverfout ${t.status}`);return t.json()}async function Re(){try{let e=await f("/api/downloads/keys");s.downloadedSet=new Set(e)}catch{s.downloadedSet=new Set}}async function H(){try{let e=await fetch("/api/plex/status").then(i=>i.json()),t=document.getElementById("plex-pill"),a=document.getElementById("plex-pill-text");if(e.connected){s.plexOk=!0,t.className="plex-pill on";let i=e.albums?` \xB7 ${B(e.albums)} albums`:"";a.textContent=`Plex \xB7 ${B(e.artists)} artiesten${i}`}else t.className="plex-pill off",a.textContent="Plex offline"}catch{document.getElementById("plex-pill-text").textContent="Plex offline"}}async function je(){try{let t=(await f("/api/user")).user,a=F(t.image,"large"),i=a?`<img class="user-avatar" src="${a}" alt="">`:`<div class="user-avatar-ph">${(t.name||"U")[0].toUpperCase()}</div>`,n=new Date(parseInt(t.registered?.unixtime)*1e3).getFullYear();document.getElementById("user-wrap").innerHTML=`
+      <div class="user-card">${i}
+        <div><div class="user-name">${o(t.realname||t.name)}</div>
+        <div class="user-sub">${B(t.playcount)} scrobbles \xB7 lid sinds ${n}</div></div>
+      </div>`}catch{}}async function ye(){try{let e=await f("/api/wishlist");s.wishlistMap.clear();for(let t of e)s.wishlistMap.set(`${t.type}:${t.name}`,t.id);X()}catch{}}function X(){let e=document.getElementById("badge-wishlist");e&&(e.textContent=s.wishlistMap.size||"0")}async function He(e,t,a,i){let n=`${e}:${t}`;if(s.wishlistMap.has(n))return await fetch(`/api/wishlist/${s.wishlistMap.get(n)}`,{method:"DELETE"}),s.wishlistMap.delete(n),X(),!1;{let c=await(await fetch("/api/wishlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:e,name:t,artist:a,image:i})})).json();return s.wishlistMap.set(n,c.id),X(),!0}}async function K(){T(),await ye();try{let e=await f("/api/wishlist");if(!e.length){b('<div class="empty">Je lijst is leeg.<br>Voeg artiesten toe via het \u{1F516} icoon in Ontdek en Collectiegaten.</div>');return}let t=`<div class="section-title">${e.length} opgeslagen</div><div class="wishlist-grid">`;for(let a of e){let i=a.image?`<img src="${o(a.image)}" alt="" loading="lazy"
+            onerror="this.onerror=null;this.style.display='none'">`:"";t+=`
         <div class="wish-card">
-          <div class="wish-photo" style="background:${gradientFor(item.name)}">
-            ${imgHtml}
-            <div class="wish-ph">${initials(item.name)}</div>
+          <div class="wish-photo" style="background:${g(a.name)}">
+            ${i}
+            <div class="wish-ph">${m(a.name)}</div>
           </div>
           <div class="wish-body">
             <div class="wish-info">
-              <div class="wish-name artist-link" data-artist="${esc(item.name)}">${esc(item.name)}</div>
-              ${item.artist ? `<div class="wish-sub">${esc(item.artist)}</div>` : ''}
-              <div class="wish-type">${item.type === 'artist' ? 'Artiest' : 'Album'}</div>
+              <div class="wish-name artist-link" data-artist="${o(a.name)}">${o(a.name)}</div>
+              ${a.artist?`<div class="wish-sub">${o(a.artist)}</div>`:""}
+              <div class="wish-type">${a.type==="artist"?"Artiest":"Album"}</div>
             </div>
-            <button class="wish-remove" data-wid="${item.id}" title="Verwijder">✕</button>
+            <button class="wish-remove" data-wid="${a.id}" title="Verwijder">\u2715</button>
           </div>
-        </div>`;
-    }
-    setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
-}
-
-// ── Plex Bibliotheek ──────────────────────────────────────────────────────
-
-/**
- * Bouwt de HTML voor de Plex-bibliotheekweergave. Groepeert albums per artiest
- * en filtert optioneel op `query`. Retourneert HTML-string (geen DOM-aanpassing).
- */
-function buildPlexLibraryHtml(library, query) {
-  const q = (query || '').toLowerCase().trim();
-  let filtered = library;
-  if (q) {
-    filtered = library.filter(x =>
-      x.artist.toLowerCase().includes(q) || x.album.toLowerCase().includes(q)
-    );
-  }
-  if (!filtered.length) {
-    return `<div class="empty">Geen resultaten voor "<strong>${esc(query)}</strong>".</div>`;
-  }
-
-  // Groepeer op artiest (originele volgorde is al gesorteerd op artiest)
-  const byArtist = new Map();
-  for (const x of filtered) {
-    if (!byArtist.has(x.artist)) byArtist.set(x.artist, []);
-    byArtist.get(x.artist).push(x.album);
-  }
-
-  let html = `<div class="section-title">${byArtist.size} artiesten · ${fmt(filtered.length)} albums</div>
-    <div class="plib-list">`;
-
-  for (const [artist, albums] of byArtist) {
-    html += `
-      <div class="plib-artist-block">
-        <div class="plib-artist-header artist-link" data-artist="${esc(artist)}">
-          <div class="plib-avatar" style="background:${gradientFor(artist)}">${initials(artist)}</div>
-          <span class="plib-artist-name">${esc(artist)}</span>
-          <span class="plib-album-count">${albums.length}</span>
-        </div>
-        <div class="plib-albums">
-          ${albums.map(a => `<div class="plib-album-row">
-            <span class="plib-album-badge">▶</span>
-            <span class="plib-album-title" title="${esc(a)}">${esc(a)}</span>
-          </div>`).join('')}
-        </div>
-      </div>`;
-  }
-  return html + '</div>';
-}
-
-/** Haalt de Plex-bibliotheek op van de server en rendert hem. */
-async function loadPlexLibrary() {
-  showLoading();
-  try {
-    const d = await apiFetch('/api/plex/library');
-    plexLibData = d.library || [];
-    // Reset zoekbalk
-    const searchEl = document.getElementById('plib-search');
-    if (searchEl) searchEl.value = '';
-    if (!plexLibData.length) {
-      setContent('<div class="empty">Plex bibliotheek is leeg of nog niet gesynchroniseerd.<br>Klik ↻ Sync Plex om te beginnen.</div>');
-      return;
-    }
-    setContent(buildPlexLibraryHtml(plexLibData, ''));
-  } catch (e) { showError(e.message); }
-}
-
-// ── Helper: zet artiesnaam om naar CSS-safe string ──
-function sanitizeArtistName(name) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
-}
-
-// ── Artiest panel (5b) ─────────────────────────────────────────────────────
-function openArtistPanel(name) {
-  const overlay  = document.getElementById('panel-overlay');
-  const panelContent = document.getElementById('panel-content');
-  const sanitized = sanitizeArtistName(name);
-
-  const doOpen = () => {
-    panelContent.innerHTML = `<div style="height:260px;background:var(--surface2)"></div>
-      <div class="panel-body"><div class="loading" style="padding:2rem 0"><div class="spinner"></div>Laden...</div></div>`;
-    overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  };
-
-  if (document.startViewTransition) {
-    document.startViewTransition(doOpen).finished.catch(() => {});
-  } else {
-    doOpen();
-  }
-
-  Promise.allSettled([
-    apiFetch(`/api/artist/${encodeURIComponent(name)}/info`),
-    apiFetch(`/api/artist/${encodeURIComponent(name)}/similar`)
-  ]).then(([infoR, simR]) => {
-    const info    = infoR.status === 'fulfilled' ? infoR.value : {};
-    const similar = simR.status === 'fulfilled' ? (simR.value.similar || []) : [];
-
-    const photoHtml = info.image
-      ? `<img src="${esc(info.image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
-           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="panel-photo-ph" style="background:${gradientFor(name)};display:none">${initials(name)}</div>`
-      : `<div class="panel-photo-ph" style="background:${gradientFor(name)}">${initials(name)}</div>`;
-
-    const meta = [
-      info.country ? countryFlag(info.country) + ' ' + info.country : null,
-      info.startYear ? `Actief vanaf ${info.startYear}` : null,
-      plexOk && info.inPlex !== undefined ? (info.inPlex ? '▶ In Plex' : '✦ Nieuw voor jou') : null
-    ].filter(Boolean).join(' · ');
-
-    let albumsHtml = '';
-    if (info.albums?.length) {
-      albumsHtml = `<div class="panel-section">Albums</div><div class="panel-albums">`;
-      for (const a of info.albums) {
-        const imgEl = a.image
-          ? `<img class="panel-album-img" src="${esc(a.image)}" alt="" loading="lazy" onerror="this.onerror=null;this.remove()">`
-          : `<div class="panel-album-ph">♪</div>`;
-        const plexMark = plexOk && a.inPlex ? `<span class="badge plex" style="font-size:9px">▶</span>` : '';
-        albumsHtml += `<div class="panel-album-row">${imgEl}
-          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(name, a.name, a.inPlex)}</div>`;
-      }
-      albumsHtml += `</div>`;
-    }
-
-    let simHtml = '';
-    if (similar.length) {
-      simHtml = `<div class="panel-section">Vergelijkbare artiesten</div><div class="panel-similar">`;
-      for (const s of similar) {
-        simHtml += `<button class="panel-similar-chip artist-link" data-artist="${esc(s.name)}">${esc(s.name)}</button>`;
-      }
-      simHtml += `</div>`;
-    }
-
-    panelContent.innerHTML = `
-      <div class="panel-photo-wrap" style="view-transition-name: artist-${sanitized}">${photoHtml}</div>
-      <div class="panel-body">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-          <div class="panel-artist-name">${esc(name)}</div>
-          ${bookmarkBtn('artist', name, '', info.image || '')}
-        </div>
-        ${meta ? `<div class="panel-meta">${esc(meta)}</div>` : ''}
-        ${tagsHtml(info.tags, 6)}
-        ${albumsHtml}
-        ${simHtml}
-      </div>`;
-  });
-}
-
-function closeArtistPanel() {
-  document.getElementById('panel-overlay').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// ── Zoekbalk (5a) ──────────────────────────────────────────────────────────
-async function doSearch(q) {
-  const results = document.getElementById('search-results');
-  if (q.length < 2) { results.classList.remove('open'); return; }
-  try {
-    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
-    if (!data.results?.length) {
-      results.innerHTML = `<div style="padding:12px 14px;color:var(--muted2);font-size:13px">Geen resultaten</div>`;
-    } else {
-      results.innerHTML = data.results.map(a => {
-        const imgEl = a.image
-          ? `<img class="search-result-img" src="${esc(a.image)}" alt="" loading="lazy"
-               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-             <div class="search-result-ph" style="background:${gradientFor(a.name)};display:none">${initials(a.name)}</div>`
-          : `<div class="search-result-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
-        const listeners = a.listeners ? `${fmt(a.listeners)} luisteraars` : '';
-        return `<button class="search-result-item" data-artist="${esc(a.name)}">
-          ${imgEl}
-          <div><div class="search-result-name">${esc(a.name)}</div>
-          ${listeners ? `<div class="search-result-sub">${listeners}</div>` : ''}</div>
-        </button>`;
-      }).join('');
-    }
-    results.classList.add('open');
-  } catch {}
-}
-
-document.getElementById('search-input').addEventListener('input', e => {
-  clearTimeout(searchTimeout);
-  const q = e.target.value.trim();
-  if (!q) { document.getElementById('search-results').classList.remove('open'); return; }
-  searchTimeout = setTimeout(() => doSearch(q), 320);
-});
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('#search-wrap')) {
-    document.getElementById('search-results').classList.remove('open');
-  }
-});
-
-// ── Plex status ────────────────────────────────────────────────────────────
-async function loadPlexStatus() {
-  try {
-    const d = await fetch('/api/plex/status').then(r => r.json());
-    const pill = document.getElementById('plex-pill');
-    const text = document.getElementById('plex-pill-text');
-    if (d.connected) {
-      plexOk = true;
-      pill.className = 'plex-pill on';
-      const albumPart = d.albums ? ` · ${fmt(d.albums)} albums` : '';
-      text.textContent = `Plex · ${fmt(d.artists)} artiesten${albumPart}`;
-    } else {
-      pill.className = 'plex-pill off';
-      text.textContent = 'Plex offline';
-    }
-  } catch (e) { document.getElementById('plex-pill-text').textContent = 'Plex offline'; }
-}
-
-async function loadPlexNP() {
-  const wrap = document.getElementById('plex-np-wrap');
-  try {
-    const d = await fetch('/api/plex/nowplaying').then(r => r.json());
-    wrap.innerHTML = d.playing
-      ? `<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
-           <div class="card-info"><div class="card-title">${esc(d.track)}</div>
-           <div class="card-sub">${esc(d.artist)}${d.album ? ' · '+esc(d.album) : ''}</div></div></div>`
-      : '';
-  } catch (e) { wrap.innerHTML = ''; }
-}
-
-// ── Recent ─────────────────────────────────────────────────────────────────
-async function loadRecent() {
-  showLoading(); loadPlexNP();
-  try {
-    const d = await apiFetch('/api/recent');
-    const tracks = d.recenttracks?.track || [];
-    if (!tracks.length) { setContent('<div class="empty">Geen recente nummers.</div>'); return; }
-    let html = '<div class="card-list">';
-    for (const t of tracks) {
-      const isNow = t['@attr']?.nowplaying;
-      const when  = t.date?.uts ? timeAgo(parseInt(t.date.uts)) : '';
-      const art   = t.artist?.['#text'] || '';
-      const artwork = trackImg(t.image);
-      if (isNow) {
-        html += `<div class="now-playing">${artwork}<div class="np-dot"></div><span class="np-label">NU</span>
-          <div class="card-info"><div class="card-title">${esc(t.name)}</div>
-          <div class="card-sub artist-link" data-artist="${esc(art)}">${esc(art)}</div></div></div>`;
-      } else {
-        html += `<div class="card">${artwork}<div class="card-info">
-          <div class="card-title">${esc(t.name)}</div>
-          <div class="card-sub artist-link" data-artist="${esc(art)}">${esc(art)}</div>
-          </div><div class="card-meta">${when}</div>
-          <button class="play-btn" data-artist="${esc(art)}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
-          <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
-      }
-    }
-    setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
-}
-
-// ── Top artiesten ──────────────────────────────────────────────────────────
-async function loadTopArtists(period) {
-  showLoading();
-  try {
-    const d = await apiFetch(`/api/topartists?period=${period}`);
-    const artists = d.topartists?.artist || [];
-    if (!artists.length) { setContent('<div class="empty">Geen data.</div>'); return; }
-    const max = parseInt(artists[0]?.playcount || 1);
-    let html = `<div class="section-title">Top artiesten · ${periodLabel(period)}</div><div class="artist-grid">`;
-    for (let i = 0; i < artists.length; i++) {
-      const a = artists[i];
-      const pct = Math.round(parseInt(a.playcount) / max * 100);
-      const lfmImg = getImg(a.image, 'large') || getImg(a.image);
-      const photoHtml = lfmImg
-        ? `<img src="${lfmImg}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-          + `<div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
-        : `<div class="ag-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
-      html += `<div class="ag-card"><div class="ag-photo" id="agp-${i}" style="view-transition-name: artist-${sanitizeArtistName(a.name)}">${photoHtml}</div>
-        <div class="ag-info"><div class="ag-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
-        <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
-        <div class="ag-plays">${fmt(a.playcount)} plays</div></div></div>`;
-    }
-    setContent(html + '</div>');
-    artists.forEach(async (a, i) => {
-      try {
-        const info = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`);
-        if (info.image) {
-          const el = document.getElementById(`agp-${i}`);
-          if (el) el.innerHTML = `<img src="${info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
-        }
-      } catch (e) {}
-    });
-  } catch (e) { showError(e.message); }
-}
-
-// ── Top nummers ────────────────────────────────────────────────────────────
-async function loadTopTracks(period) {
-  showLoading();
-  try {
-    const d = await apiFetch(`/api/toptracks?period=${period}`);
-    const tracks = d.toptracks?.track || [];
-    if (!tracks.length) { setContent('<div class="empty">Geen data.</div>'); return; }
-    const max = parseInt(tracks[0]?.playcount || 1);
-    let html = `<div class="section-title">Top nummers · ${periodLabel(period)}</div><div class="card-list">`;
-    for (const t of tracks) {
-      const pct = Math.round(parseInt(t.playcount) / max * 100);
-      html += `<div class="card">${trackImg(t.image)}<div class="card-info">
-        <div class="card-title">${esc(t.name)}</div>
-        <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name || '')}</div>
-        <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
-        </div><div class="card-meta">${fmt(t.playcount)}×</div>
-        <button class="play-btn" data-artist="${esc(t.artist?.name||'')}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
-        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
-    }
-    setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
-}
-
-// ── Spotify mood-aanbevelingen ────────────────────────────────────────────
-async function checkSpotifyStatus() {
-  try {
-    const data = await apiFetch('/api/spotify/status');
-    spotifyEnabled = !!data.enabled;
-    const tb = document.getElementById('tb-mood');
-    if (spotifyEnabled && currentTab === 'recs') {
-      tb.style.display = '';
-      tb.classList.add('visible');
-    } else if (spotifyEnabled) {
-      // Klaar staan voor wanneer de recs-tab actief wordt
-      tb.style.display = '';
-    }
-  } catch {
-    spotifyEnabled = false;
-  }
-}
-
-// Rendert een Spotify-track als card (met optionele play-preview)
-function spotifyCard(t, idx) {
-  const imgEl = t.image
-    ? `<img src="${esc(t.image)}" alt="" loading="lazy"
+        </div>`}b(t+"</div>")}catch(e){S(e.message)}}function at(){return localStorage.getItem("downloadQuality")||"high"}async function he(){try{let e=await f("/api/tidarr/status"),t=document.getElementById("tidarr-status-pill"),a=document.getElementById("tidarr-status-text");s.tidarrOk=!!e.connected,t&&a&&(t.className=`tidarr-status-pill ${s.tidarrOk?"on":"off"}`,a.textContent=s.tidarrOk?`Tidarr \xB7 verbonden${e.quality?" \xB7 "+e.quality:""}`:"Tidarr offline")}catch{s.tidarrOk=!1;let e=document.getElementById("tidarr-status-text");e&&(e.textContent="Tidarr offline")}}async function ne(){try{let t=((await f("/api/tidarr/queue")).items||[]).length,a=[document.getElementById("badge-tidarr-queue"),document.getElementById("badge-tidarr-queue-inline")];for(let i of a)i&&(t>0?(i.textContent=t,i.style.display=""):i.style.display="none")}catch{}}function Fe(e){let t=e.image?`<img class="tidal-img" src="${o(e.image)}" alt="" loading="lazy"
          onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-       <div class="spotify-cover-ph" style="display:none">♪</div>`
-    : `<div class="spotify-cover-ph">♪</div>`;
+       <div class="tidal-ph" style="display:none;background:${g(e.title)}">${m(e.title)}</div>`:`<div class="tidal-ph" style="background:${g(e.title)}">${m(e.title)}</div>`,a=[e.type==="album"?"Album":"Nummer",e.year,e.album&&e.type==="track"?e.album:null,e.tracks?`${e.tracks} nummers`:null].filter(Boolean).join(" \xB7 ");return`
+    <div class="tidal-card">
+      <div class="tidal-cover">${t}</div>
+      <div class="tidal-info">
+        <div class="tidal-title">${o(e.title)}</div>
+        <div class="tidal-artist artist-link" data-artist="${o(e.artist)}">${o(e.artist)}</div>
+        <div class="tidal-meta">${o(a)}</div>
+      </div>
+      <button class="tidal-dl-btn" data-dlurl="${o(e.url)}" title="Download via Tidarr">\u2B07 Download</button>
+    </div>`}async function we(e){let t=document.getElementById("tidal-content");if(!t)return;let a=(e||"").trim();if(a.length<2){t.innerHTML='<div class="empty">Begin met typen om te zoeken op Tidal.</div>';return}t.innerHTML='<div class="loading"><div class="spinner"></div>Zoeken op Tidal\u2026</div>';try{let i=await f(`/api/tidarr/search?q=${encodeURIComponent(a)}`);if(s.tidalSearchResults=i.results||[],i.error){t.innerHTML=`<div class="error-box">\u26A0\uFE0F ${o(i.error)}</div>`;return}if(!s.tidalSearchResults.length){t.innerHTML=`<div class="empty">Geen resultaten op Tidal voor "<strong>${o(a)}</strong>".</div>`;return}let n=s.tidalSearchResults.filter(l=>l.type==="album"),d=s.tidalSearchResults.filter(l=>l.type==="track"),c="";n.length&&(c+=`<div class="section-title">Albums (${n.length})</div>
+        <div class="tidal-grid">${n.map(Fe).join("")}</div>`),d.length&&(c+=`<div class="section-title" style="margin-top:1.5rem">Nummers (${d.length})</div>
+        <div class="tidal-grid">${d.map(Fe).join("")}</div>`),t.innerHTML=c}catch(i){t.innerHTML=`<div class="error-box">\u26A0\uFE0F ${o(i.message)}</div>`}}function Ne(){let e=document.getElementById("tidal-content");if(!e)return;let t=s.tidarrQueueItems;if(!t.length){e.innerHTML='<div class="empty">De download-queue is leeg.</div>';return}let a={queue_download:"In wachtrij",queue_processing:"Verwerken (wacht)",download:"Downloaden\u2026",processing:"Verwerken\u2026",finished:"Klaar",error:"Fout"},i={queue_download:"q-pending",queue_processing:"q-pending",download:"q-active",processing:"q-active",finished:"q-done",error:"q-error"};e.innerHTML=`
+    <div class="section-title">${t.length} item${t.length!==1?"s":""} in queue</div>
+    <div class="q-list">${t.map(n=>{let d=i[n.status]||"q-pending",c=a[n.status]||n.status||"In wachtrij",l=n.progress?.current&&n.progress?.total?Math.round(n.progress.current/n.progress.total*100):null,r=l!==null?`<div class="q-bar"><div class="q-bar-fill" style="width:${l}%"></div></div><div class="q-pct">${l}%</div>`:"";return`<div class="q-row">
+        <div class="q-info">
+          <div class="q-title">${o(n.title||"(onbekend)")}</div>
+          ${n.artist?`<div class="q-artist">${o(n.artist)}</div>`:""}
+          <span class="q-status ${d}">${o(c)}</span>
+        </div>
+        ${r}
+        <button class="q-remove" data-qid="${o(n.id)}" title="Verwijder">\u2715</button>
+      </div>`}).join("")}</div>`}async function Ve(){let e=document.getElementById("tidal-content");if(e){e.innerHTML='<div class="loading"><div class="spinner"></div>Geschiedenis ophalen\u2026</div>';try{let t=await f("/api/downloads");if(!t.length){e.innerHTML='<div class="empty">Nog geen downloads opgeslagen.</div>';return}let a={max:"24-bit",high:"Lossless",normal:"AAC",low:"96kbps"};e.innerHTML=`
+      <div class="section-title">${t.length} gedownloade albums
+        <button class="tool-btn" id="dl-history-clear" style="margin-left:auto;font-size:11px">\u{1F5D1} Wis alles</button>
+      </div>
+      <div class="q-list">${t.map(i=>{let n=i.queued_at?new Date(i.queued_at).toLocaleDateString("nl-NL",{day:"numeric",month:"short",year:"numeric"}):"",d=a[i.quality]||i.quality||"";return`<div class="q-row">
+          <div class="q-info">
+            <div class="q-title">${o(i.title)}</div>
+            ${i.artist?`<div class="q-artist artist-link" data-artist="${o(i.artist)}">${o(i.artist)}</div>`:""}
+            <span class="q-status q-done">\u2713 gedownload${d?" \xB7 "+d:""}${n?" \xB7 "+n:""}</span>
+          </div>
+          <button class="q-remove" data-dlid="${i.id}" title="Verwijder uit geschiedenis">\u2715</button>
+        </div>`}).join("")}</div>`,document.getElementById("dl-history-clear")?.addEventListener("click",async()=>{if(confirm("Wis de volledige download-geschiedenis?")){await fetch("/api/downloads",{method:"DELETE"}).catch(()=>{});for(let i of t)await fetch(`/api/downloads/${i.id}`,{method:"DELETE"}).catch(()=>{});s.downloadedSet.clear(),Ve()}})}catch(t){e.innerHTML=`<div class="error-box">\u26A0\uFE0F ${o(t.message)}</div>`}}}function le(e){s.tidalView=e,document.querySelectorAll("[data-tidal-view]").forEach(t=>t.classList.toggle("sel-def",t.dataset.tidalView===e)),e==="search"?we(document.getElementById("tidal-search")?.value||""):e==="queue"?Ne():e==="history"&&Ve()}function oe(){if(s.tidarrSseSource)return;let e=new EventSource("/api/tidarr/stream");s.tidarrSseSource=e,e.onmessage=t=>{try{s.tidarrQueueItems=JSON.parse(t.data)||[]}catch{s.tidarrQueueItems=[]}let a=s.tidarrQueueItems.filter(n=>n.status!=="finished"&&n.status!=="error"),i=[document.getElementById("badge-tidarr-queue"),document.getElementById("badge-tidarr-queue-inline")];for(let n of i)n&&(a.length>0?(n.textContent=a.length,n.style.display=""):n.style.display="none");nt(s.tidarrQueueItems),s.currentTab==="tidal"&&s.tidalView==="queue"&&Ne(),document.getElementById("queue-popover")?.classList.contains("open")&&Ge()},e.onerror=()=>{e.close(),s.tidarrSseSource=null,setTimeout(oe,1e4)}}function it(){oe()}function Ue(){let e=document.getElementById("tidarr-iframe"),t=document.getElementById("tidarr-ui-wrap"),a=document.getElementById("content");t.style.display="flex",a.style.display="none",e.dataset.loaded||(e.src=e.dataset.src,e.dataset.loaded="1")}function A(){document.getElementById("tidarr-ui-wrap").style.display="none",document.getElementById("content").style.display=""}function nt(e){let t=document.getElementById("queue-fab"),a=document.getElementById("fab-queue-badge");if(!t)return;let i=(e||[]).filter(n=>n.status!=="finished"&&n.status!=="error");e&&e.length>0?(t.style.display="",i.length>0?(a.textContent=i.length,a.style.display=""):a.style.display="none"):(t.style.display="none",document.getElementById("queue-popover")?.classList.remove("open"))}function Ge(){let e=document.getElementById("queue-popover-list");if(!e)return;let t=s.tidarrQueueItems;if(!t.length){e.innerHTML='<div class="qpop-empty">Queue is leeg</div>';return}let a={queue_download:"In wachtrij",queue_processing:"Verwerken",download:"Downloaden\u2026",processing:"Verwerken\u2026",finished:"Klaar \u2713",error:"Fout"},i={queue_download:"q-pending",queue_processing:"q-pending",download:"q-active",processing:"q-active",finished:"q-done",error:"q-error"};e.innerHTML=t.map(n=>{let d=i[n.status]||"q-pending",c=a[n.status]||n.status||"In wachtrij",l=n.progress?.current&&n.progress?.total?Math.round(n.progress.current/n.progress.total*100):null,r=l!==null?`<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${l}%"></div></div>`:"";return`<div class="qpop-row">
+      <div class="qpop-title">${o(n.title||"(onbekend)")}</div>
+      ${n.artist?`<div class="qpop-artist">${o(n.artist)}</div>`:""}
+      <span class="q-status ${d}">${o(c)}</span>
+      ${r}
+    </div>`}).join("")}function lt(){let e=document.getElementById("queue-popover");if(!e)return;e.classList.toggle("open")&&Ge()}function $e(){document.getElementById("queue-popover")?.classList.remove("open")}function ze(e){return(e||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"")}function Qe(e,t){let a=ze(e),i=ze(t);return!a||!i?!0:a===i||a.includes(i)||i.includes(a)}function ot(e,t,a,i){return new Promise(n=>{s.dlResolve=n;let d=document.getElementById("dl-confirm-modal"),c=document.getElementById("dl-confirm-cards");document.getElementById("dl-confirm-wanted").textContent=`"${a}"${t?" \u2013 "+t:""}`,c.innerHTML=e.map((l,r)=>{let u=!Qe(l.artist,t),v=l.image?`<img class="dlc-img" src="${o(l.image)}" alt="" loading="lazy"
+             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+           <div class="dlc-ph" style="display:none">${m(l.title)}</div>`:`<div class="dlc-ph">${m(l.title)}</div>`,y=u?`<div class="dlc-artist dlc-artist-warn">\u26A0 ${o(l.artist)}</div>`:`<div class="dlc-artist">${o(l.artist)}</div>`,w=l.score??0;return`
+        <button class="dlc-card${r===0?" dlc-best":""}" data-dlc-idx="${r}">
+          <div class="dlc-cover">${v}</div>
+          <div class="dlc-info">
+            <div class="dlc-title">${o(l.title)}</div>
+            ${y}
+            <div class="dlc-meta">${l.year?o(l.year):""}${l.year&&l.tracks?" \xB7 ":""}${l.tracks?l.tracks+" nrs":""}</div>
+            <div class="dlc-score-bar"><div class="dlc-score-fill" style="width:${w}%"></div></div>
+            <div class="dlc-score-label">${w}% overeenkomst</div>
+          </div>
+          ${r===0?'<span class="dlc-badge-best">Beste match</span>':""}
+        </button>`}).join(""),c.querySelectorAll(".dlc-card").forEach(l=>{l.addEventListener("click",()=>{let r=parseInt(l.dataset.dlcIdx);xe(),n({chosen:e[r],btn:i})})}),d.classList.add("open"),document.body.style.overflow="hidden"})}function xe(){document.getElementById("dl-confirm-modal")?.classList.remove("open"),document.body.style.overflow="",s.dlResolve&&(s.dlResolve({chosen:null}),s.dlResolve=null)}async function Oe(e,t,a,i){let n=await fetch("/api/tidarr/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:e.url,type:e.type||"album",title:e.title||a||"",artist:e.artist||t||"",id:String(e.id||""),quality:at()})}),d=await n.json();if(!n.ok||!d.ok)throw new Error(d.error||"download mislukt");De(e.artist||t||"",e.title||a||""),i&&(i.textContent="\u2713",i.classList.add("dl-done"),i.disabled=!1),await ne()}async function _e(e,t,a){if(!s.tidarrOk){alert("Tidarr is niet verbonden. Controleer TIDARR_URL en TIDARR_API_KEY.");return}a&&(a.disabled=!0,a.textContent="\u2026");try{let i=new URLSearchParams;e&&i.set("artist",e),t&&i.set("album",t);let n=await fetch(`/api/tidarr/candidates?${i}`);if(!n.ok){n.status===401?alert(`Niet ingelogd bij TIDAL.
+Ga naar de \u{1F39B}\uFE0F Tidarr-tab en koppel je TIDAL-account eerst.`):alert(`Niet gevonden op TIDAL: "${t}"${e?" van "+e:""}
 
-  const playBtn = t.preview_url
-    ? `<button class="spotify-play-btn" data-spotify-preview="${esc(t.preview_url)}"
-         data-artist="${esc(t.artist)}" data-track="${esc(t.name)}"
-         id="spbtn-${idx}" title="Luister preview">▶</button>`
-    : '';
-
-  const spotifyLink = t.spotify_url
-    ? `<a class="spotify-link-btn" href="${esc(t.spotify_url)}" target="_blank" rel="noopener">
-         ♫ Open in Spotify
-       </a>`
-    : '';
-
-  return `
+Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textContent="\u2B07");return}let{candidates:d}=await n.json();if(!d?.length){alert(`Niet gevonden op TIDAL: "${t}"${e?" van "+e:""}`),a&&(a.disabled=!1,a.textContent="\u2B07");return}let c=d[0];if(e&&!Qe(c.artist,e)){a&&(a.disabled=!1,a.textContent="\u2B07");let{chosen:l}=await ot(d,e,t,a);if(!l)return;a&&(a.disabled=!0,a.textContent="\u2026"),await Oe(l,e,t,a)}else await Oe(c,e,t,a)}catch(i){alert("Downloaden mislukt: "+i.message),a&&(a.disabled=!1,a.textContent="\u2B07")}}async function Ee(){b('<div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>'),await he(),await ne(),le(s.tidalView),it()}function We(){s.currentTab="tidal",A(),document.getElementById("tb-tidal")?.classList.add("visible"),Ee()}document.getElementById("dl-confirm-cancel")?.addEventListener("click",()=>{xe()});document.getElementById("dl-confirm-modal")?.addEventListener("click",e=>{e.target===document.getElementById("dl-confirm-modal")&&xe()});document.getElementById("queue-fab")?.addEventListener("click",lt);document.getElementById("qpop-close")?.addEventListener("click",e=>{e.stopPropagation(),$e()});document.getElementById("qpop-goto-tidal")?.addEventListener("click",()=>{$e(),document.querySelector('.tab[data-tab="downloads"]')?.click(),setTimeout(()=>le("queue"),150)});document.addEventListener("click",e=>{let t=document.getElementById("queue-popover"),a=document.getElementById("queue-fab");t?.classList.contains("open")&&!t.contains(e.target)&&!a?.contains(e.target)&&$e()},!0);document.getElementById("btn-tidarr-reload")?.addEventListener("click",()=>{let e=document.getElementById("tidarr-iframe");e.src=e.dataset.src});async function Je(){try{let e=await f("/api/spotify/status");s.spotifyEnabled=!!e.enabled;let t=document.getElementById("tb-mood");s.spotifyEnabled&&s.currentTab==="recs"?(t.style.display="",t.classList.add("visible")):s.spotifyEnabled&&(t.style.display="")}catch{s.spotifyEnabled=!1}}function rt(e,t){let a=e.image?`<img src="${o(e.image)}" alt="" loading="lazy"
+         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="spotify-cover-ph" style="display:none">\u266A</div>`:'<div class="spotify-cover-ph">\u266A</div>',i=e.preview_url?`<button class="spotify-play-btn" data-spotify-preview="${o(e.preview_url)}"
+         data-artist="${o(e.artist)}" data-track="${o(e.name)}"
+         id="spbtn-${t}" title="Luister preview">\u25B6</button>`:"",n=e.spotify_url?`<a class="spotify-link-btn" href="${o(e.spotify_url)}" target="_blank" rel="noopener">\u266B Open in Spotify</a>`:"";return`
     <div class="spotify-card">
       <div class="spotify-cover">
-        ${imgEl}
-        ${playBtn}
+        ${a}${i}
         <div class="play-bar" style="position:absolute;bottom:0;left:0;width:100%;height:3px;background:rgba(0,0,0,0.3)">
-          <div class="play-bar-fill" id="spbar-${idx}"></div>
+          <div class="play-bar-fill" id="spbar-${t}"></div>
         </div>
       </div>
       <div class="spotify-info">
-        <div class="spotify-track" title="${esc(t.name)}">${esc(t.name)}</div>
-        <div class="spotify-artist artist-link" data-artist="${esc(t.artist)}">${esc(t.artist)}</div>
-        <div class="spotify-album" title="${esc(t.album)}">${esc(t.album)}</div>
-        ${spotifyLink}
+        <div class="spotify-track" title="${o(e.name)}">${o(e.name)}</div>
+        <div class="spotify-artist artist-link" data-artist="${o(e.artist)}">${o(e.artist)}</div>
+        <div class="spotify-album" title="${o(e.album)}">${o(e.album)}</div>
+        ${n}
       </div>
-    </div>`;
-}
-
-async function loadSpotifyRecs(mood) {
-  const section = document.getElementById('spotify-recs-section');
-  if (!section) return;
-
-  const moodLabels = {
-    energiek:      '⚡ Energiek',
-    chill:         '🌊 Chill',
-    melancholisch: '🌧 Melancholisch',
-    experimenteel: '🔬 Experimenteel',
-    feest:         '🎉 Feest'
-  };
-
-  section.innerHTML = `<div class="loading"><div class="spinner"></div>Spotify laden…</div>`;
-
-  try {
-    const tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
-    if (!tracks.length) {
-      section.innerHTML = `<div class="empty">Geen Spotify-aanbevelingen gevonden voor deze mood.</div>`;
-      return;
-    }
-    let html = `
-      <div class="spotify-section-title">
-        🎯 Spotify aanbevelingen · ${esc(moodLabels[mood] || mood)}
-      </div>
-      <div class="spotify-grid">`;
-    tracks.forEach((t, i) => { html += spotifyCard(t, i); });
-    html += '</div>';
-    section.innerHTML = html;
-  } catch {
-    section.innerHTML = '';
-  }
-}
-
-function clearSpotifyRecs() {
-  const section = document.getElementById('spotify-recs-section');
-  if (section) section.innerHTML = '';
-}
-
-// Mood-toolbar knoppen
-document.addEventListener('DOMContentLoaded', () => {}, false); // no-op guard
-document.querySelectorAll('.mood-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const mood = btn.dataset.mood;
-
-    // Deselect alle mood-knoppen
-    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood', 'loading'));
-
-    if (activeMood === mood) {
-      // Zelfde mood → wis selectie
-      activeMood = null;
-      clearSpotifyRecs();
-      document.getElementById('btn-clear-mood').style.display  = 'none';
-      document.getElementById('mood-sep-clear').style.display  = 'none';
-      return;
-    }
-
-    activeMood = mood;
-    btn.classList.add('sel-mood', 'loading');
-    document.getElementById('btn-clear-mood').style.display  = '';
-    document.getElementById('mood-sep-clear').style.display  = '';
-
-    await loadSpotifyRecs(mood);
-    btn.classList.remove('loading');
-  });
-});
-
-document.getElementById('btn-clear-mood')?.addEventListener('click', () => {
-  activeMood = null;
-  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood'));
-  document.getElementById('btn-clear-mood').style.display  = 'none';
-  document.getElementById('mood-sep-clear').style.display  = 'none';
-  clearSpotifyRecs();
-});
-
-// Play-preview voor Spotify cards (event delegation)
-document.addEventListener('click', e => {
-  const spBtn = e.target.closest('.spotify-play-btn');
-  if (!spBtn) return;
-  e.stopPropagation();
-  const previewUrl = spBtn.dataset.spotifyPreview;
-  if (!previewUrl) return;
-
-  // Stop vorige Spotify preview als dezelfde knop
-  if (_previewBtn === spBtn) {
-    if (_previewAudio.paused) {
-      _previewAudio.play();
-      spBtn.textContent = '⏸';
-      spBtn.classList.add('playing');
-    } else {
-      _previewAudio.pause();
-      spBtn.textContent = '▶';
-      spBtn.classList.remove('playing');
-    }
-    return;
-  }
-
-  // Stop vorige
-  if (_previewBtn) {
-    _previewAudio.pause();
-    _previewBtn.textContent = '▶';
-    _previewBtn.classList.remove('playing');
-    const oldFill = _previewBtn.closest('.spotify-card')?.querySelector('.play-bar-fill')
-      || _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
-    if (oldFill) oldFill.style.width = '0%';
-  }
-
-  _previewBtn = spBtn;
-  _previewAudio.src = previewUrl;
-  _previewAudio.currentTime = 0;
-  _previewAudio.play().then(() => {
-    spBtn.textContent = '⏸';
-    spBtn.classList.add('playing');
-  }).catch(() => {
-    spBtn.textContent = '▶';
-    _previewBtn = null;
-  });
-}, true);
-
-// ── Aanbevelingen ──────────────────────────────────────────────────────────
-async function loadRecs() {
-  showLoading();
-  try {
-    const d = await apiFetch('/api/recs');
-    const recs      = d.recommendations || [];
-    const albumRecs = d.albumRecs        || [];
-    const trackRecs = d.trackRecs        || [];
-    plexOk = d.plexConnected || plexOk;
-    if (d.plexConnected && d.plexArtistCount) {
-      document.getElementById('plex-pill').className = 'plex-pill on';
-      document.getElementById('plex-pill-text').textContent = `Plex · ${fmt(d.plexArtistCount)} artiesten`;
-    }
-    if (!recs.length) { setContent('<div class="empty">Geen aanbevelingen gevonden.</div>'); return; }
-
-    const newC  = recs.filter(r => !r.inPlex).length;
-    const plexC = recs.filter(r =>  r.inPlex).length;
-
-    // Update ontdek-sectie header met telling
-    const titleRecs = document.getElementById('hdr-title-recs');
-    if (titleRecs) titleRecs.textContent = `🎯 Aanbevelingen · ${recs.length} artiesten`;
-
-    // ── Artiest-aanbevelingen ─────────────────────────────────────────────
-    // Spotify-sectie placeholder (gevuld wanneer gebruiker een mood kiest)
-    let html = `<div class="spotify-section" id="spotify-recs-section"></div>`;
-    html += `<div class="section-title">Gebaseerd op jouw smaak: ${(d.basedOn||[]).slice(0,3).join(', ')}
-      ${plexOk ? ` &nbsp;·&nbsp; <span style="color:var(--new)">${newC} nieuw</span> · <span style="color:var(--plex)">${plexC} in Plex</span>` : ''}
-      </div><div class="rec-grid">`;
-
-    for (let i = 0; i < recs.length; i++) {
-      const r = recs[i];
-      const pct = Math.round(r.match * 100);
-      html += `
-        <div class="rec-card" data-inplex="${r.inPlex}" id="rc-${i}">
-          <div class="rec-photo" id="rph-${i}">
-            <div class="rec-photo-ph" style="background:${gradientFor(r.name)}">${initials(r.name)}</div>
+    </div>`}async function de(e){let t=document.getElementById("spotify-recs-section");if(!t)return;let a={energiek:"\u26A1 Energiek",chill:"\u{1F30A} Chill",melancholisch:"\u{1F327} Melancholisch",experimenteel:"\u{1F52C} Experimenteel",feest:"\u{1F389} Feest"};t.innerHTML='<div class="loading"><div class="spinner"></div>Spotify laden\u2026</div>';try{let i=await f(`/api/spotify/recs?mood=${encodeURIComponent(e)}`);if(!i.length){t.innerHTML='<div class="empty">Geen Spotify-aanbevelingen gevonden voor deze mood.</div>';return}let n=`
+      <div class="spotify-section-title">\u{1F3AF} Spotify aanbevelingen \xB7 ${o(a[e]||e)}</div>
+      <div class="spotify-grid">`;i.forEach((d,c)=>{n+=rt(d,c)}),n+="</div>",t.innerHTML=n}catch{t.innerHTML=""}}function G(){let e=document.getElementById("spotify-recs-section");e&&(e.innerHTML="")}document.querySelectorAll(".mood-btn").forEach(e=>{e.addEventListener("click",async()=>{let t=e.dataset.mood;if(document.querySelectorAll(".mood-btn").forEach(a=>a.classList.remove("sel-mood","loading")),s.activeMood===t){s.activeMood=null,G(),document.getElementById("btn-clear-mood").style.display="none",document.getElementById("mood-sep-clear").style.display="none";return}s.activeMood=t,e.classList.add("sel-mood","loading"),document.getElementById("btn-clear-mood").style.display="",document.getElementById("mood-sep-clear").style.display="",await de(t),e.classList.remove("loading")})});document.getElementById("btn-clear-mood")?.addEventListener("click",()=>{s.activeMood=null,document.querySelectorAll(".mood-btn").forEach(e=>e.classList.remove("sel-mood")),document.getElementById("btn-clear-mood").style.display="none",document.getElementById("mood-sep-clear").style.display="none",G()});document.addEventListener("click",e=>{let t=e.target.closest(".spotify-play-btn");if(!t)return;e.stopPropagation();let a=t.dataset.spotifyPreview;if(a){if(s.previewBtn===t){s.previewAudio.paused?(s.previewAudio.play(),t.textContent="\u23F8",t.classList.add("playing")):(s.previewAudio.pause(),t.textContent="\u25B6",t.classList.remove("playing"));return}if(s.previewBtn){s.previewAudio.pause(),s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let i=s.previewBtn.closest(".spotify-card")?.querySelector(".play-bar-fill")||s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");i&&(i.style.width="0%")}s.previewBtn=t,s.previewAudio.src=a,s.previewAudio.currentTime=0,s.previewAudio.play().then(()=>{t.textContent="\u23F8",t.classList.add("playing")}).catch(()=>{t.textContent="\u25B6",s.previewBtn=null})}},!0);async function re(){T();try{let e=await f("/api/recs"),t=e.recommendations||[],a=e.albumRecs||[],i=e.trackRecs||[];if(s.plexOk=e.plexConnected||s.plexOk,e.plexConnected&&e.plexArtistCount&&(document.getElementById("plex-pill").className="plex-pill on",document.getElementById("plex-pill-text").textContent=`Plex \xB7 ${B(e.plexArtistCount)} artiesten`),!t.length){b('<div class="empty">Geen aanbevelingen gevonden.</div>');return}let n=t.filter(u=>!u.inPlex).length,d=t.filter(u=>u.inPlex).length,c=document.getElementById("hdr-title-recs");c&&(c.textContent=`\u{1F3AF} Aanbevelingen \xB7 ${t.length} artiesten`);let l='<div class="spotify-section" id="spotify-recs-section"></div>';l+=`<div class="section-title">Gebaseerd op jouw smaak: ${(e.basedOn||[]).slice(0,3).join(", ")}
+      ${s.plexOk?` &nbsp;\xB7&nbsp; <span style="color:var(--new)">${n} nieuw</span> \xB7 <span style="color:var(--plex)">${d} in Plex</span>`:""}
+      </div><div class="rec-grid">`;for(let u=0;u<t.length;u++){let v=t[u],y=Math.round(v.match*100);l+=`
+        <div class="rec-card" data-inplex="${v.inPlex}" id="rc-${u}">
+          <div class="rec-photo" id="rph-${u}">
+            <div class="rec-photo-ph" style="background:${g(v.name)}">${m(v.name)}</div>
           </div>
           <div class="rec-body">
             <div class="rec-header">
               <div class="rec-title-row">
-                <span class="rec-name artist-link" data-artist="${esc(r.name)}">${esc(r.name)}</span>
-                ${plexBadge(r.inPlex)}
+                <span class="rec-name artist-link" data-artist="${o(v.name)}">${o(v.name)}</span>
+                ${be(v.inPlex)}
               </div>
-              <span class="rec-match">${pct}%</span>
+              <span class="rec-match">${y}%</span>
             </div>
-            <div class="rec-reason">Vergelijkbaar met ${esc(r.reason)}</div>
-            <div id="rtags-${i}"></div>
-            <div id="ralb-${i}"><div class="rec-loading">Albums laden…</div></div>
+            <div class="rec-reason">Vergelijkbaar met ${o(v.reason)}</div>
+            <div id="rtags-${u}"></div>
+            <div id="ralb-${u}"><div class="rec-loading">Albums laden\u2026</div></div>
           </div>
-        </div>`;
-    }
-    html += '</div>';
-
-    // ── Aanbevolen Albums ───────────────────────────────────────────────
-    if (albumRecs.length) {
-      html += `<div class="section-title" style="margin-top:2rem">Aanbevolen Albums</div>
-        <div class="albrec-grid">`;
-      for (const a of albumRecs) {
-        const imgEl = a.image
-          ? `<img class="albrec-img" src="${esc(a.image)}" alt="" loading="lazy"
+        </div>`}if(l+="</div>",a.length){l+=`<div class="section-title" style="margin-top:2rem">Aanbevolen Albums</div>
+        <div class="albrec-grid">`;for(let u of a){let v=u.image?`<img class="albrec-img" src="${o(u.image)}" alt="" loading="lazy"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-             <div class="albrec-ph" style="display:none;background:${gradientFor(a.album)}">${initials(a.album)}</div>`
-          : `<div class="albrec-ph" style="background:${gradientFor(a.album)}">${initials(a.album)}</div>`;
-        const badge = plexOk
-          ? (a.inPlex
-            ? `<span class="badge plex" style="font-size:9px;margin-top:4px">▶ In Plex</span>`
-            : `<span class="badge new" style="font-size:9px;margin-top:4px">✦ Nieuw</span>`)
-          : '';
-        html += `
+             <div class="albrec-ph" style="display:none;background:${g(u.album)}">${m(u.album)}</div>`:`<div class="albrec-ph" style="background:${g(u.album)}">${m(u.album)}</div>`,y=s.plexOk?u.inPlex?'<span class="badge plex" style="font-size:9px;margin-top:4px">\u25B6 In Plex</span>':'<span class="badge new" style="font-size:9px;margin-top:4px">\u2726 Nieuw</span>':"";l+=`
           <div class="albrec-card">
-            <div class="albrec-cover">${imgEl}</div>
+            <div class="albrec-cover">${v}</div>
             <div class="albrec-info">
-              <div class="albrec-title">${esc(a.album)}</div>
-              <div class="albrec-artist artist-link" data-artist="${esc(a.artist)}">${esc(a.artist)}</div>
-              <div class="albrec-reason">via ${esc(a.reason)}</div>
-              ${badge}
-              ${downloadBtn(a.artist, a.album, a.inPlex)}
+              <div class="albrec-title">${o(u.album)}</div>
+              <div class="albrec-artist artist-link" data-artist="${o(u.artist)}">${o(u.artist)}</div>
+              <div class="albrec-reason">via ${o(u.reason)}</div>
+              ${y}${N(u.artist,u.album,u.inPlex)}
             </div>
-          </div>`;
-      }
-      html += '</div>';
-    }
-
-    // ── Aanbevolen Nummers ──────────────────────────────────────────────
-    if (trackRecs.length) {
-      html += `<div class="section-title" style="margin-top:2rem">Aanbevolen Nummers</div>
-        <div class="trackrec-list">`;
-      for (const t of trackRecs) {
-        const playsHtml = t.playcount > 0
-          ? `<span class="trackrec-plays">${fmt(t.playcount)}×</span>`
-          : '';
-        const linkHtml = t.url
-          ? `<a class="trackrec-link" href="${esc(t.url)}" target="_blank" rel="noopener">Last.fm ↗</a>`
-          : '';
-        html += `
+          </div>`}l+="</div>"}if(i.length){l+=`<div class="section-title" style="margin-top:2rem">Aanbevolen Nummers</div>
+        <div class="trackrec-list">`;for(let u of i){let v=u.playcount>0?`<span class="trackrec-plays">${B(u.playcount)}\xD7</span>`:"",y=u.url?`<a class="trackrec-link" href="${o(u.url)}" target="_blank" rel="noopener">Last.fm \u2197</a>`:"";l+=`
           <div class="trackrec-row">
             <div class="trackrec-info">
-              <div class="trackrec-title">${esc(t.track)}</div>
-              <div class="trackrec-artist artist-link" data-artist="${esc(t.artist)}">${esc(t.artist)}</div>
-              <div class="trackrec-reason">via ${esc(t.reason)}</div>
+              <div class="trackrec-title">${o(u.track)}</div>
+              <div class="trackrec-artist artist-link" data-artist="${o(u.artist)}">${o(u.artist)}</div>
+              <div class="trackrec-reason">via ${o(u.reason)}</div>
             </div>
-            <div class="trackrec-meta">${playsHtml}${linkHtml}</div>
-          </div>`;
-      }
-      html += '</div>';
-    }
-
-    setContent(html, () => {
-      // Herstel Spotify-sectie als er al een mood actief is
-      if (activeMood) loadSpotifyRecs(activeMood);
-    });
-    applyRecsFilter();
-
-    const previewEl = document.getElementById('sec-recs-preview');
-    if (previewEl) {
-      const previewItems = recs.slice(0, 8);
-      previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map((r, i) =>
-        `<div class="collapsed-thumb collapsed-thumb-round" id="recs-thumb-${i}" style="background:${gradientFor(r.name)}">
-          <span class="collapsed-thumb-ph">${initials(r.name)}</span>
-        </div>`
-      ).join('')}${recs.length > 8 ? `<span class="collapsed-thumbs-more">+${recs.length - 8}</span>` : ''}</div>`;
-      previewItems.forEach(async (r, i) => {
-        try {
-          const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
-          const el = document.getElementById(`recs-thumb-${i}`);
-          if (el && info.image) el.innerHTML = `<img src="${esc(info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
-        } catch {}
-      });
-    }
-
-    recs.forEach(async (r, i) => {
-      try {
-        const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
-
-        const ph = document.getElementById(`rph-${i}`);
-        if (ph && info.image) ph.innerHTML = `<img src="${info.image}" alt="" loading="lazy"
-          onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
-
-        const tagsEl = document.getElementById(`rtags-${i}`);
-        if (tagsEl) tagsEl.innerHTML = tagsHtml(info.tags, 3) + `<div style="height:6px"></div>`;
-
-        const albEl = document.getElementById(`ralb-${i}`);
-        if (albEl) {
-          const albums = (info.albums || []).slice(0, 4);
-          if (albums.length) {
-            let ah = '<div class="rec-albums-label">Bekende albums</div><div class="rec-albums-list">';
-            for (const a of albums) {
-              const imgEl = a.image
-                ? `<img class="rec-album-img" src="${a.image}" alt="" loading="lazy">`
-                : `<div class="rec-album-ph">♪</div>`;
-              const plexMark = plexOk && a.inPlex ? `<span class="rec-album-plex">▶</span>` : '';
-              ah += `<div class="rec-album-row">${imgEl}<span class="rec-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(r.name, a.name, a.inPlex)}</div>`;
-            }
-            albEl.innerHTML = ah + '</div>';
-          } else { albEl.innerHTML = ''; }
-        }
-      } catch (e) {
-        const albEl = document.getElementById(`ralb-${i}`);
-        if (albEl) albEl.innerHTML = '';
-      }
-    });
-  } catch (e) { showError(e.message); }
-}
-
-function applyRecsFilter() {
-  document.querySelectorAll('.rec-card[data-inplex]').forEach(card => {
-    const inPlex = card.dataset.inplex === 'true';
-    let show = true;
-    if (recsFilter === 'new')  show = !inPlex;
-    if (recsFilter === 'plex') show = inPlex;
-    card.classList.toggle('hidden', !show);
-  });
-}
-
-// ── Nieuwe Releases ────────────────────────────────────────────────────────
-let releasesFilter  = 'all';
-let lastReleases    = null;
-let newReleaseIds   = new Set();  // STAP 10
-
-async function loadReleases() {
-  showLoading();
-  try {
-    const d = await apiFetch('/api/releases');
-    if (d.status === 'building') {
-      setContent(`<div class="loading"><div class="spinner"></div>
-        <div>${esc(d.message)}</div>
-        <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
-      setTimeout(() => { if (currentTab === 'releases' || currentTab === 'ontdek') loadReleases(); }, 5_000);
-      return;
-    }
-    lastReleases  = d.releases || [];
-    // STAP 10: Sla nieuwe release-ids op en toon badge
-    newReleaseIds = new Set(d.newReleaseIds || []);
-    updateReleasesBadge(d.newCount || 0);
-    renderReleases();
-  } catch (e) { showError(e.message); }
-}
-
-// STAP 10: Badge updater
-function updateReleasesBadge(count) {
-  const badge = document.getElementById('badge-releases');
-  if (!badge) return;
-  if (count > 0) {
-    badge.textContent = count;
-    badge.style.display = '';
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-// STAP 13.4: Relatieve datum helper
-function relativeDate(dateStr) {
-  if (!dateStr) return '';
-  const rel = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now - rel;
-  const diffDays = Math.floor(diffMs / 86_400_000);
-  if (diffDays === 0) return 'vandaag';
-  if (diffDays === 1) return 'gisteren';
-  if (diffDays < 7)  return `${diffDays} dagen geleden`;
-  return rel.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' });
-}
-
-function renderReleases() {
-  const releases = lastReleases || [];
-  if (!releases.length) {
-    setContent('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>');
-    return;
-  }
-
-  // STAP 2: Type-filter
-  let filtered = releases;
-  if (releasesFilter !== 'all') {
-    filtered = releases.filter(r => (r.type || 'album').toLowerCase() === releasesFilter);
-  }
-  if (!filtered.length) {
-    setContent(`<div class="empty">Geen ${releasesFilter === 'ep' ? "EP's" : releasesFilter + 's'} gevonden voor dit filter.</div>`);
-    return;
-  }
-
-  // STAP 2: Sorteren op basis van releasesSort
-  if (releasesSort === 'listening') {
-    filtered = [...filtered].sort((a, b) => {
-      const playDiff = (b.artistPlaycount || 0) - (a.artistPlaycount || 0);
-      if (playDiff !== 0) return playDiff;
-      return new Date(b.releaseDate) - new Date(a.releaseDate);
-    });
-  } else {
-    filtered = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-  }
-
-  // Update ontdek-sectie header met telling
-  const titleReleases = document.getElementById('hdr-title-releases');
-  if (titleReleases) titleReleases.textContent = `💿 Nieuwe Releases · ${filtered.length} release${filtered.length !== 1 ? 's' : ''}`;
-
-  const typeLabel = t => ({ album: 'Album', single: 'Single', ep: 'EP' })[t?.toLowerCase()] || (t || 'Album');
-  const typeBadgeClass = t => ({ album: 'rel-type-album', single: 'rel-type-single', ep: 'rel-type-ep' })[t?.toLowerCase()] || 'rel-type-album';
-
-  let html = `<div class="section-title">${filtered.length} release${filtered.length !== 1 ? 's' : ''} in de afgelopen 30 dagen</div>
-    <div class="releases-grid">`;
-
-  for (const r of filtered) {
-    const isNew = newReleaseIds.has(`${r.artist}::${r.album}`);  // STAP 10
-    const imgEl = r.image
-      ? `<img class="rel-img" src="${esc(r.image)}" alt="" loading="lazy"
+            <div class="trackrec-meta">${v}${y}</div>
+          </div>`}l+="</div>"}b(l,()=>{s.activeMood&&de(s.activeMood)}),ce();let r=document.getElementById("sec-recs-preview");if(r){let u=t.slice(0,8);r.innerHTML=`<div class="collapsed-thumbs">${u.map((v,y)=>`<div class="collapsed-thumb collapsed-thumb-round" id="recs-thumb-${y}" style="background:${g(v.name)}">
+          <span class="collapsed-thumb-ph">${m(v.name)}</span>
+        </div>`).join("")}${t.length>8?`<span class="collapsed-thumbs-more">+${t.length-8}</span>`:""}</div>`,u.forEach(async(v,y)=>{try{let w=await f(`/api/artist/${encodeURIComponent(v.name)}/info`),$=document.getElementById(`recs-thumb-${y}`);$&&w.image&&($.innerHTML=`<img src="${o(w.image)}" alt="" loading="lazy" onerror="this.remove()">`)}catch{}})}t.forEach(async(u,v)=>{try{let y=await f(`/api/artist/${encodeURIComponent(u.name)}/info`),w=document.getElementById(`rph-${v}`);w&&y.image&&(w.innerHTML=`<img src="${y.image}" alt="" loading="lazy"
+          onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${g(u.name)}\\'>${m(u.name)}</div>'">`);let $=document.getElementById(`rtags-${v}`);$&&($.innerHTML=j(y.tags,3)+'<div style="height:6px"></div>');let x=document.getElementById(`ralb-${v}`);if(x){let C=(y.albums||[]).slice(0,4);if(C.length){let R='<div class="rec-albums-label">Bekende albums</div><div class="rec-albums-list">';for(let P of C){let p=P.image?`<img class="rec-album-img" src="${P.image}" alt="" loading="lazy">`:'<div class="rec-album-ph">\u266A</div>',h=s.plexOk&&P.inPlex?'<span class="rec-album-plex">\u25B6</span>':"";R+=`<div class="rec-album-row">${p}<span class="rec-album-name">${o(P.name)}</span>${h}${N(u.name,P.name,P.inPlex)}</div>`}x.innerHTML=R+"</div>"}else x.innerHTML=""}}catch{let y=document.getElementById(`ralb-${v}`);y&&(y.innerHTML="")}})}catch(e){S(e.message)}}function ce(){document.querySelectorAll(".rec-card[data-inplex]").forEach(e=>{let t=e.dataset.inplex==="true",a=!0;s.recsFilter==="new"&&(a=!t),s.recsFilter==="plex"&&(a=t),e.classList.toggle("hidden",!a)})}function Ze(e){let t=document.getElementById("badge-releases");t&&(e>0?(t.textContent=e,t.style.display=""):t.style.display="none")}function dt(e){if(!e)return"";let t=new Date(e),i=Math.floor((new Date-t)/864e5);return i===0?"vandaag":i===1?"gisteren":i<7?`${i} dagen geleden`:t.toLocaleDateString("nl-NL",{day:"numeric",month:"long"})}async function V(){T();try{let e=await f("/api/releases");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
+        <div>${o(e.message)}</div>
+        <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`),setTimeout(()=>{(s.currentTab==="releases"||s.currentTab==="ontdek")&&V()},5e3);return}s.lastReleases=e.releases||[],s.newReleaseIds=new Set(e.newReleaseIds||[]),Ze(e.newCount||0),D()}catch(e){S(e.message)}}function D(){let e=s.lastReleases||[];if(!e.length){b('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>');return}let t=e;if(s.releasesFilter!=="all"&&(t=e.filter(l=>(l.type||"album").toLowerCase()===s.releasesFilter)),!t.length){b(`<div class="empty">Geen ${s.releasesFilter==="ep"?"EP's":s.releasesFilter+"s"} gevonden voor dit filter.</div>`);return}s.releasesSort==="listening"?t=[...t].sort((l,r)=>(r.artistPlaycount||0)-(l.artistPlaycount||0)||new Date(r.releaseDate)-new Date(l.releaseDate)):t=[...t].sort((l,r)=>new Date(r.releaseDate)-new Date(l.releaseDate));let a=document.getElementById("hdr-title-releases");a&&(a.textContent=`\u{1F4BF} Nieuwe Releases \xB7 ${t.length} release${t.length!==1?"s":""}`);let i=l=>({album:"Album",single:"Single",ep:"EP"})[l?.toLowerCase()]||l||"Album",n=l=>({album:"rel-type-album",single:"rel-type-single",ep:"rel-type-ep"})[l?.toLowerCase()]||"rel-type-album",d=`<div class="section-title">${t.length} release${t.length!==1?"s":""} in de afgelopen 30 dagen</div>
+    <div class="releases-grid">`;for(let l of t){let r=s.newReleaseIds.has(`${l.artist}::${l.album}`),u=l.image?`<img class="rel-img" src="${o(l.image)}" alt="" loading="lazy"
            onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="rel-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</div>`
-      : `<div class="rel-ph" style="background:${gradientFor(r.album)}">${initials(r.album)}</div>`;
-
-    // STAP 13.4: Toon relatieve datum + absolute datum
-    const absDate  = r.releaseDate ? new Date(r.releaseDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' }) : '';
-    const relDate  = relativeDate(r.releaseDate);
-    const dateHtml = absDate ? `<div class="rel-date">${absDate} <span class="rel-date-rel">(${relDate})</span></div>` : '';
-
-    const plexStatus = plexOk
-      ? (r.inPlex
-        ? `<span class="badge plex" style="font-size:9px">▶ In Plex</span>`
-        : (r.artistInPlex
-          ? `<span class="badge new" style="font-size:9px">✦ Artiest in Plex</span>`
-          : ''))
-      : '';
-
-    const deezerLink = r.deezerUrl
-      ? `<a class="rel-deezer-link" href="${esc(r.deezerUrl)}" target="_blank" rel="noopener">Deezer ↗</a>`
-      : '';
-
-    html += `
-      <div class="rel-card${isNew ? ' rel-card-new' : ''}">
-        <div class="rel-cover">${imgEl}</div>
+         <div class="rel-ph" style="display:none;background:${g(l.album)}">${m(l.album)}</div>`:`<div class="rel-ph" style="background:${g(l.album)}">${m(l.album)}</div>`,v=l.releaseDate?new Date(l.releaseDate).toLocaleDateString("nl-NL",{day:"numeric",month:"long"}):"",y=dt(l.releaseDate),w=v?`<div class="rel-date">${v} <span class="rel-date-rel">(${y})</span></div>`:"",$=s.plexOk?l.inPlex?'<span class="badge plex" style="font-size:9px">\u25B6 In Plex</span>':l.artistInPlex?'<span class="badge new" style="font-size:9px">\u2726 Artiest in Plex</span>':"":"",x=l.deezerUrl?`<a class="rel-deezer-link" href="${o(l.deezerUrl)}" target="_blank" rel="noopener">Deezer \u2197</a>`:"";d+=`
+      <div class="rel-card${r?" rel-card-new":""}">
+        <div class="rel-cover">${u}</div>
         <div class="rel-info">
-          <span class="rel-type-badge ${typeBadgeClass(r.type)}">${typeLabel(r.type)}</span>
-          <div class="rel-album">${esc(r.album)}</div>
-          <div class="rel-artist artist-link" data-artist="${esc(r.artist)}">${esc(r.artist)}</div>
-          ${dateHtml}
-          <div class="rel-footer">${plexStatus}${deezerLink}${downloadBtn(r.artist, r.album, r.inPlex)}</div>
+          <span class="rel-type-badge ${n(l.type)}">${i(l.type)}</span>
+          <div class="rel-album">${o(l.album)}</div>
+          <div class="rel-artist artist-link" data-artist="${o(l.artist)}">${o(l.artist)}</div>
+          ${w}
+          <div class="rel-footer">${$}${x}${N(l.artist,l.album,l.inPlex)}</div>
         </div>
-      </div>`;
-  }
-  setContent(html + '</div>');
-
-  const previewEl = document.getElementById('sec-releases-preview');
-  if (previewEl) {
-    const previewItems = filtered.slice(0, 8);
-    previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
-      if (r.image) {
-        return `<div class="collapsed-thumb">
-          <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-          <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
-        </div>`;
-      }
-      return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
-    }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
-  }
-}
-
-// ── Discover (deep: MBZ + album grid) ─────────────────────────────────────
-async function loadDiscover() {
-  showLoading('Ontdekkingen ophalen...');
-  try {
-    const d = await apiFetch('/api/discover');
-    if (d.status === 'building') {
-      setContent(`<div class="loading"><div class="spinner"></div>
-        <div>${esc(d.message)}</div>
-        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-      setTimeout(() => { if (currentTab === 'discover' || currentTab === 'ontdek') loadDiscover(); }, 20_000);
-      return;
-    }
-    lastDiscover = d;
-    if (d.plexConnected) { plexOk = true; }
-    renderDiscover();
-  } catch (e) { showError(e.message); }
-}
-
-function renderDiscover() {
-  if (!lastDiscover) return;
-  const { artists, basedOn } = lastDiscover;
-  if (!artists?.length) { setContent('<div class="empty">Geen ontdekkingen gevonden.</div>'); return; }
-
-  let filtered = artists;
-  if (discFilter === 'new')     filtered = artists.filter(a => !a.inPlex);
-  if (discFilter === 'partial') filtered = artists.filter(a => a.inPlex && a.missingCount > 0);
-
-  if (!filtered.length) { setContent('<div class="empty">Geen artiesten voor dit filter.</div>'); return; }
-
-  // Update ontdek-sectie header met telling
-  const titleDiscover = document.getElementById('hdr-title-discover');
-  if (titleDiscover) titleDiscover.textContent = `🔭 Ontdek Artiesten · ${filtered.length} artiesten`;
-
-  const totalMissing = filtered.reduce((s, a) => s + a.missingCount, 0);
-  let html = `<div class="section-title">Gebaseerd op: ${(basedOn||[]).slice(0,3).join(', ')}
-    &nbsp;·&nbsp; <span style="color:var(--new)">${totalMissing} albums te ontdekken</span></div>
-    <div class="discover-grid">`;
-
-  for (let i = 0; i < filtered.length; i++) {
-    const a = filtered[i];
-    const matchPct = Math.round(a.match * 100);
-    const meta = [
-      countryFlag(a.country),
-      a.country,
-      a.startYear ? `Actief vanaf ${a.startYear}` : null,
-      a.totalAlbums ? `${a.totalAlbums} studio-albums` : null
-    ].filter(Boolean).join(' · ');
-
-    const photo = a.image
-      ? `<img class="discover-photo" src="${esc(a.image)}" alt="" loading="lazy"
+      </div>`}b(d+"</div>");let c=document.getElementById("sec-releases-preview");if(c){let l=t.slice(0,8);c.innerHTML=`<div class="collapsed-thumbs">${l.map(r=>r.image?`<div class="collapsed-thumb">
+          <img src="${o(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <span class="collapsed-thumb-ph" style="display:none;background:${g(r.album)}">${m(r.album)}</span>
+        </div>`:`<div class="collapsed-thumb" style="background:${g(r.album)}"><span class="collapsed-thumb-ph">${m(r.album)}</span></div>`).join("")}${t.length>8?`<span class="collapsed-thumbs-more">+${t.length-8}</span>`:""}</div>`}}async function U(){T("Ontdekkingen ophalen...");try{let e=await f("/api/discover");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
+        <div>${o(e.message)}</div>
+        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`),setTimeout(()=>{(s.currentTab==="discover"||s.currentTab==="ontdek")&&U()},2e4);return}s.lastDiscover=e,e.plexConnected&&(s.plexOk=!0),ee()}catch(e){S(e.message)}}function ee(){if(!s.lastDiscover)return;let{artists:e,basedOn:t}=s.lastDiscover;if(!e?.length){b('<div class="empty">Geen ontdekkingen gevonden.</div>');return}let a=e;if(s.discFilter==="new"&&(a=e.filter(l=>!l.inPlex)),s.discFilter==="partial"&&(a=e.filter(l=>l.inPlex&&l.missingCount>0)),!a.length){b('<div class="empty">Geen artiesten voor dit filter.</div>');return}let i=document.getElementById("hdr-title-discover");i&&(i.textContent=`\u{1F52D} Ontdek Artiesten \xB7 ${a.length} artiesten`);let n=a.reduce((l,r)=>l+r.missingCount,0),d=`<div class="section-title">Gebaseerd op: ${(t||[]).slice(0,3).join(", ")}
+    &nbsp;\xB7&nbsp; <span style="color:var(--new)">${n} albums te ontdekken</span></div>
+    <div class="discover-grid">`;for(let l=0;l<a.length;l++){let r=a[l],u=Math.round(r.match*100),v=[z(r.country),r.country,r.startYear?`Actief vanaf ${r.startYear}`:null,r.totalAlbums?`${r.totalAlbums} studio-albums`:null].filter(Boolean).join(" \xB7 "),y=r.image?`<img class="discover-photo" src="${o(r.image)}" alt="" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
-      : `<div class="discover-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
-
-    const albumCount = a.albums?.length || 0;
-    const albumLabel = `${albumCount} album${albumCount !== 1 ? 's' : ''}`;
-
-    html += `
-      <div class="discover-section collapsed" id="disc-${i}">
-        <div class="discover-card discover-card-toggle" data-disc-id="disc-${i}">
+         <div class="discover-photo-ph" style="display:none;background:${g(r.name,!0)}">${m(r.name)}</div>`:`<div class="discover-photo-ph" style="background:${g(r.name,!0)}">${m(r.name)}</div>`,w=r.albums?.length||0,$=`${w} album${w!==1?"s":""}`;if(d+=`
+      <div class="discover-section collapsed" id="disc-${l}">
+        <div class="discover-card discover-card-toggle" data-disc-id="disc-${l}">
           <div class="discover-card-top">
-            ${photo}
+            ${y}
             <div class="discover-card-info">
               <div class="discover-card-name">
-                <span class="artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</span>
-                ${plexBadge(a.inPlex)}
+                <span class="artist-link" data-artist="${o(r.name)}">${o(r.name)}</span>
+                ${be(r.inPlex)}
               </div>
-              <div class="discover-card-sub">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div>
+              <div class="discover-card-sub">Vergelijkbaar met <strong>${o(r.reason)}</strong></div>
             </div>
-            <span class="discover-match">${matchPct}%</span>
-            ${bookmarkBtn('artist', a.name, '', a.image || '')}
+            <span class="discover-match">${u}%</span>
+            ${O("artist",r.name,"",r.image||"")}
           </div>
-          ${meta ? `<div class="discover-meta">${esc(meta)}</div>` : ''}
-          ${tagsHtml(a.tags, 3)}
-          ${a.missingCount > 0
-            ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
-            : `<div style="font-size:11px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
-          <button class="disc-toggle-btn collapsed" data-disc-id="disc-${i}" data-album-count="${albumCount}"
-            title="Toon/verberg albums" aria-label="Albums tonen/verbergen">Toon ${albumLabel}</button>
-          ${a.albums?.length ? `<div class="discover-preview-row">${a.albums.slice(0, 5).map(alb => {
-            const bg = gradientFor(alb.title || '');
-            return alb.coverUrl
-              ? `<img class="discover-preview-thumb" src="${esc(alb.coverUrl)}" alt="${esc(alb.title)}" loading="lazy" title="${esc(alb.title)}${alb.year ? ' ('+alb.year+')' : ''}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="discover-preview-ph" style="display:none;background:${bg}">${initials(alb.title || '?')}</div>`
-              : `<div class="discover-preview-ph" style="background:${bg}">${initials(alb.title || '?')}</div>`;
-          }).join('')}${a.albums.length > 5 ? `<div class="discover-preview-more">+${a.albums.length - 5}</div>` : ''}</div>` : ''}
+          ${v?`<div class="discover-meta">${o(v)}</div>`:""}
+          ${j(r.tags,3)}
+          ${r.missingCount>0?`<div class="discover-missing">\u2726 ${r.missingCount} ${r.missingCount===1?"album":"albums"} te ontdekken</div>`:'<div style="font-size:11px;color:var(--plex);margin-top:4px">\u25B6 Volledig in Plex</div>'}
+          <button class="disc-toggle-btn collapsed" data-disc-id="disc-${l}" data-album-count="${w}"
+            title="Toon/verberg albums" aria-label="Albums tonen/verbergen">Toon ${$}</button>
+          ${r.albums?.length?`<div class="discover-preview-row">${r.albums.slice(0,5).map(x=>{let C=g(x.title||"");return x.coverUrl?`<img class="discover-preview-thumb" src="${o(x.coverUrl)}" alt="${o(x.title)}" loading="lazy"
+                   title="${o(x.title)}${x.year?" ("+x.year+")":""}"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                 <div class="discover-preview-ph" style="display:none;background:${C}">${m(x.title||"?")}</div>`:`<div class="discover-preview-ph" style="background:${C}">${m(x.title||"?")}</div>`}).join("")}${r.albums.length>5?`<div class="discover-preview-more">+${r.albums.length-5}</div>`:""}</div>`:""}
         </div>
-        <div class="discover-albums-wrap">`;
+        <div class="discover-albums-wrap">`,r.albums?.length){d+='<div class="album-grid">';for(let x of r.albums)d+=J(x,!0,r.name);d+="</div>"}else d+='<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar. Vernieuw straks.</div>';d+="</div></div>"}d+="</div>",b(d);let c=document.getElementById("sec-discover-preview");if(c){let l=a.slice(0,8);c.innerHTML=`<div class="collapsed-thumbs">${l.map(r=>r.image?`<div class="collapsed-thumb collapsed-thumb-round">
+          <img src="${o(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <span class="collapsed-thumb-ph" style="display:none;background:${g(r.name)}">${m(r.name)}</span>
+        </div>`:`<div class="collapsed-thumb collapsed-thumb-round" style="background:${g(r.name)}"><span class="collapsed-thumb-ph">${m(r.name)}</span></div>`).join("")}${a.length>8?`<span class="collapsed-thumbs-more">+${a.length-8}</span>`:""}</div>`}}function ct(){try{let e=localStorage.getItem("ontdek-sections");e&&Object.assign(s.collapsibleSections,JSON.parse(e))}catch{}}function ut(){try{localStorage.setItem("ontdek-sections",JSON.stringify(s.collapsibleSections))}catch{}}function Ye(e,t){e.classList.remove("expanded","collapsed"),e.classList.add(t?"collapsed":"expanded")}function ke(e,t){let a=document.querySelector(`[data-section="${e}"]`);if(!a)return;let i=a.querySelector(".section-toggle-btn");i&&(Ye(i,s.collapsibleSections[t]),i.addEventListener("click",n=>{n.preventDefault(),n.stopPropagation(),s.collapsibleSections[t]=!s.collapsibleSections[t],ut(),Ye(i,s.collapsibleSections[t]),a.classList.toggle("collapsed")}),s.collapsibleSections[t]&&a.classList.add("collapsed"))}async function Q(){ct(),s.currentTab="ontdek",A();let e=s.spotifyEnabled?`
+    <div class="section-block sec-mood-block">
+      <div class="inline-toolbar">
+        <span class="toolbar-label spotify-label">\u{1F3AF} Spotify mood</span>
+        <span class="toolbar-sep"></span>
+        <button class="tool-btn${s.activeMood==="energiek"?" sel-mood":""}" data-mood="energiek">\u26A1 Energiek</button>
+        <button class="tool-btn${s.activeMood==="chill"?" sel-mood":""}" data-mood="chill">\u{1F30A} Chill</button>
+        <button class="tool-btn${s.activeMood==="melancholisch"?" sel-mood":""}" data-mood="melancholisch">\u{1F327} Melancholisch</button>
+        <button class="tool-btn${s.activeMood==="experimenteel"?" sel-mood":""}" data-mood="experimenteel">\u{1F52C} Experimenteel</button>
+        <button class="tool-btn${s.activeMood==="feest"?" sel-mood":""}" data-mood="feest">\u{1F389} Feest</button>
+        ${s.activeMood?'<span class="toolbar-sep"></span><button class="tool-btn" id="btn-clear-mood-inline">\u2715 Wis mood</button>':""}
+      </div>
+    </div>`:"";I.innerHTML=`
+    <div class="ontdek-layout">
+      ${e}
 
-    if (a.albums?.length) {
-      html += `<div class="album-grid">`;
-      for (const alb of a.albums) html += albumCard(alb, true, a.name);
-      html += `</div>`;
-    } else {
-      html += `<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar. Vernieuw straks.</div>`;
-    }
-    html += `</div></div>`;
-  }
-  html += `</div>`;
-  setContent(html);
-
-  const previewEl = document.getElementById('sec-discover-preview');
-  if (previewEl) {
-    const previewItems = filtered.slice(0, 8);
-    previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(a => {
-      if (a.image) {
-        return `<div class="collapsed-thumb collapsed-thumb-round">
-          <img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-          <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</span>
-        </div>`;
-      }
-      return `<div class="collapsed-thumb collapsed-thumb-round" style="background:${gradientFor(a.name)}"><span class="collapsed-thumb-ph">${initials(a.name)}</span></div>`;
-    }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
-  }
-}
-
-// ── Collection Gaps ────────────────────────────────────────────────────────
-async function loadGaps() {
-  showLoading('Collectiegaten zoeken...');
-  try {
-    const d = await apiFetch('/api/gaps');
-    if (d.status === 'building') {
-      setContent(`<div class="loading"><div class="spinner"></div>
-        <div>${esc(d.message)}</div>
-        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-      setTimeout(() => { if (currentTab === 'gaps') loadGaps(); }, 20_000);
-      return;
-    }
-    lastGaps = d;
-    renderGaps();
-  } catch (e) { showError(e.message); }
-}
-
-function renderGaps() {
-  if (!lastGaps) return;
-  let artists = [...(lastGaps.artists || [])];
-  if (!artists.length) {
-    setContent('<div class="empty">Geen collectiegaten gevonden — je hebt alles al! 🎉</div>');
-    document.getElementById('badge-gaps').textContent = '0';
-    return;
-  }
-
-  if (gapsSort === 'missing') artists.sort((a, b) => b.missingAlbums.length - a.missingAlbums.length);
-  if (gapsSort === 'name')    artists.sort((a, b) => a.name.localeCompare(b.name));
-
-  const totalMissing = artists.reduce((s, a) => s + a.missingAlbums.length, 0);
-  document.getElementById('badge-gaps').textContent = totalMissing;
-
-  let html = `<div class="section-title">${totalMissing} ontbrekende albums bij ${artists.length} artiesten die je al hebt</div>`;
-
-  for (const a of artists) {
-    const pct = Math.round(a.ownedCount / a.totalCount * 100);
-    const meta = [countryFlag(a.country), a.country, a.startYear].filter(Boolean).join(' · ');
-    const photo = a.image
-      ? `<img class="gaps-photo" src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="gaps-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
-      : `<div class="gaps-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
-
-    html += `
-      <div class="gaps-block">
-        <div class="gaps-header">
-          ${photo}
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-              <div class="gaps-artist-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
-              ${bookmarkBtn('artist', a.name, '', a.image || '')}
-            </div>
-            <div class="gaps-artist-meta">${esc(meta)}</div>
-            ${tagsHtml(a.tags, 3)}
-            <div style="height:8px"></div>
-            <div class="comp-bar"><div class="comp-fill" style="width:${pct}%"></div></div>
-            <div class="comp-text">${a.ownedCount} van ${a.totalCount} albums in Plex
-              &nbsp;·&nbsp; <span style="color:var(--new);font-weight:600">${a.missingAlbums.length} ontbreken</span></div>
+      <div class="section-block" data-section="recs">
+        <div class="section-hdr">
+          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
+          <span class="section-hdr-title" id="hdr-title-recs">\u{1F3AF} Aanbevelingen</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${s.recsFilter==="all"?" sel-def":""}" data-filter="all">Alle</button>
+            <button class="tool-btn${s.recsFilter==="new"?" sel-new":""}" data-filter="new">\u2726 Nieuw voor mij</button>
+            <button class="tool-btn${s.recsFilter==="plex"?" sel-plex":""}" data-filter="plex">\u25B6 Al in Plex</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-recs-ontdek">\u21BB</button>
           </div>
         </div>
-        <div class="gaps-sub">Ontbrekende albums</div>
-        <div class="gaps-album-grid">`;
-
-    for (const alb of a.missingAlbums) html += albumCard(alb, false, a.name);
-    html += `</div>`;
-
-    if (a.allAlbums?.filter(x => x.inPlex).length > 0) {
-      html += `<details style="margin-top:12px">
-        <summary style="font-size:11px;color:var(--muted2);cursor:pointer;user-select:none">
-          ▸ ${a.ownedCount} albums die je al hebt
-        </summary>
-        <div class="gaps-album-grid" style="margin-top:10px">
-          ${a.allAlbums.filter(x => x.inPlex).map(alb => albumCard(alb, false, a.name)).join('')}
+        <div class="section-collapsed-preview" id="sec-recs-preview"></div>
+        <div class="section-content" id="sec-recs-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
         </div>
-      </details>`;
-    }
-    html += `</div>`;
-  }
-  setContent(html);
-}
+      </div>
 
-// ── Geliefd ────────────────────────────────────────────────────────────────
-async function loadLoved() {
-  showLoading();
-  try {
-    const d = await apiFetch('/api/loved');
-    const tracks = d.lovedtracks?.track || [];
-    if (!tracks.length) { setContent('<div class="empty">Geen geliefde nummers.</div>'); return; }
-    let html = '<div class="section-title">Geliefde nummers</div><div class="card-list">';
-    for (const t of tracks) {
-      const when = t.date?.uts ? timeAgo(parseInt(t.date.uts)) : '';
-      html += `<div class="card">${trackImg(t.image)}<div class="card-info">
-        <div class="card-title">${esc(t.name)}</div>
-        <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name||'')}</div>
-        </div><div class="card-meta" style="color:var(--red)">♥ ${when}</div>
-        <button class="play-btn" data-artist="${esc(t.artist?.name||'')}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
-        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
-    }
-    setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
-}
+      <div class="ontdek-divider">Nieuwe Releases</div>
+      <div class="section-block" data-section="releases">
+        <div class="section-hdr">
+          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
+          <span class="section-hdr-title" id="hdr-title-releases">\u{1F4BF} Nieuwe Releases</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${s.releasesFilter==="all"?" sel-def":""}" data-rtype="all">Alle</button>
+            <button class="tool-btn${s.releasesFilter==="album"?" sel-def":""}" data-rtype="album">Albums</button>
+            <button class="tool-btn${s.releasesFilter==="single"?" sel-def":""}" data-rtype="single">Singles</button>
+            <button class="tool-btn${s.releasesFilter==="ep"?" sel-def":""}" data-rtype="ep">EP's</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn${s.releasesSort==="listening"?" sel-def":""}" data-rsort="listening">Op luistergedrag</button>
+            <button class="tool-btn${s.releasesSort==="date"?" sel-def":""}" data-rsort="date">Op datum</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-releases-ontdek">\u21BB</button>
+          </div>
+        </div>
+        <div class="section-collapsed-preview" id="sec-releases-preview"></div>
+        <div class="section-content" id="sec-releases-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
 
-// ── Statistieken (5c) ──────────────────────────────────────────────────────
-async function loadStats() {
-  showLoading('Statistieken ophalen...');
-  try {
-    const d = await apiFetch('/api/stats');
-    const chartHtml = `
+      <div class="ontdek-divider">Ontdek Artiesten</div>
+      <div class="section-block" data-section="discover">
+        <div class="section-hdr">
+          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
+          <span class="section-hdr-title" id="hdr-title-discover">\u{1F52D} Ontdek Artiesten</span>
+          <div class="inline-toolbar">
+            <button class="tool-btn${s.discFilter==="all"?" sel-def":""}" data-dfilter="all">Alle artiesten</button>
+            <button class="tool-btn${s.discFilter==="new"?" sel-new":""}" data-dfilter="new">\u2726 Nieuw voor mij</button>
+            <button class="tool-btn${s.discFilter==="partial"?" sel-miss":""}" data-dfilter="partial">\u25B6 Gedeeltelijk in Plex</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-discover-ontdek">\u21BB</button>
+          </div>
+        </div>
+        <div class="section-collapsed-preview" id="sec-discover-preview"></div>
+        <div class="section-content" id="sec-discover-content">
+          <div class="loading"><div class="spinner"></div>Laden...</div>
+        </div>
+      </div>
+    </div>`,I.style.opacity="1",I.style.transform="",document.getElementById("btn-ref-recs-ontdek")?.addEventListener("click",async()=>{await M(document.getElementById("sec-recs-content"),re)}),document.getElementById("btn-ref-releases-ontdek")?.addEventListener("click",async()=>{s.lastReleases=null,await fetch("/api/releases/refresh",{method:"POST"}),await M(document.getElementById("sec-releases-content"),V)}),document.getElementById("btn-ref-discover-ontdek")?.addEventListener("click",async()=>{s.lastDiscover=null,await fetch("/api/discover/refresh",{method:"POST"}),await M(document.getElementById("sec-discover-content"),U)}),document.getElementById("btn-clear-mood-inline")?.addEventListener("click",()=>{s.activeMood=null,document.querySelectorAll(".mood-btn").forEach(t=>t.classList.remove("sel-mood","loading")),G(),Q()});{let t=document.getElementById("sec-recs-content");s.sectionContainerEl=t,await re(),s.sectionContainerEl===t&&(s.sectionContainerEl=null)}(async()=>{try{if(!s.lastReleases){let a=await f("/api/releases");if(a.status==="building")return;s.lastReleases=a.releases||[],s.newReleaseIds=new Set(a.newReleaseIds||[]),Ze(a.newCount||0)}let t=document.getElementById("sec-releases-preview");if(t&&s.lastReleases.length){let a=s.lastReleases;s.releasesFilter!=="all"&&(a=s.lastReleases.filter(d=>(d.type||"album").toLowerCase()===s.releasesFilter)),s.releasesSort==="listening"?a=[...a].sort((d,c)=>(c.artistPlaycount||0)-(d.artistPlaycount||0)||new Date(c.releaseDate)-new Date(d.releaseDate)):a=[...a].sort((d,c)=>new Date(c.releaseDate)-new Date(d.releaseDate));let i=a.slice(0,8);t.innerHTML=`<div class="collapsed-thumbs">${i.map(d=>d.image?`<div class="collapsed-thumb">
+              <img src="${o(d.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <span class="collapsed-thumb-ph" style="display:none;background:${g(d.album)}">${m(d.album)}</span>
+            </div>`:`<div class="collapsed-thumb" style="background:${g(d.album)}"><span class="collapsed-thumb-ph">${m(d.album)}</span></div>`).join("")}${a.length>8?`<span class="collapsed-thumbs-more">+${a.length-8}</span>`:""}</div>`;let n=document.getElementById("hdr-title-releases");n&&(n.textContent=`\u{1F4BF} Nieuwe Releases \xB7 ${a.length} release${a.length!==1?"s":""}`)}}catch{}})(),Z(document.getElementById("sec-releases-content"),()=>{let t=document.getElementById("sec-releases-content");return M(t,V)}),(async()=>{try{if(!s.lastDiscover){let n=await f("/api/discover");if(n.status==="building")return;s.lastDiscover=n,n.plexConnected&&(s.plexOk=!0)}let{artists:t}=s.lastDiscover;if(!t?.length)return;let a=t;s.discFilter==="new"&&(a=t.filter(n=>!n.inPlex)),s.discFilter==="partial"&&(a=t.filter(n=>n.inPlex&&n.missingCount>0));let i=document.getElementById("sec-discover-preview");if(i&&a.length){let n=a.slice(0,8);i.innerHTML=`<div class="collapsed-thumbs">${n.map(c=>c.image?`<div class="collapsed-thumb collapsed-thumb-round">
+              <img src="${o(c.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <span class="collapsed-thumb-ph" style="display:none;background:${g(c.name)}">${m(c.name)}</span>
+            </div>`:`<div class="collapsed-thumb collapsed-thumb-round" style="background:${g(c.name)}"><span class="collapsed-thumb-ph">${m(c.name)}</span></div>`).join("")}${a.length>8?`<span class="collapsed-thumbs-more">+${a.length-8}</span>`:""}</div>`;let d=document.getElementById("hdr-title-discover");d&&(d.textContent=`\u{1F52D} Ontdek Artiesten \xB7 ${a.length} artiesten`)}}catch{}})(),Z(document.getElementById("sec-discover-content"),()=>{let t=document.getElementById("sec-discover-content");return M(t,U)}),ke("recs","recs"),ke("releases","releases"),ke("discover","discover")}async function ue(){let e=document.getElementById("plex-np-wrap");try{let t=await fetch("/api/plex/nowplaying").then(a=>a.json());e.innerHTML=t.playing?`<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
+           <div class="card-info"><div class="card-title">${o(t.track)}</div>
+           <div class="card-sub">${o(t.artist)}${t.album?" \xB7 "+o(t.album):""}</div></div></div>`:""}catch{e.innerHTML=""}}async function Ie(){T(),ue();try{let t=(await f("/api/recent")).recenttracks?.track||[];if(!t.length){b('<div class="empty">Geen recente nummers.</div>');return}let a='<div class="card-list">';for(let i of t){let n=i["@attr"]?.nowplaying,d=i.date?.uts?ae(parseInt(i.date.uts)):"",c=i.artist?.["#text"]||"",l=Y(i.image);n?a+=`<div class="now-playing">${l}<div class="np-dot"></div>
+          <span class="np-label">NU</span>
+          <div class="card-info"><div class="card-title">${o(i.name)}</div>
+          <div class="card-sub artist-link" data-artist="${o(c)}">${o(c)}</div></div></div>`:a+=`<div class="card">${l}<div class="card-info">
+          <div class="card-title">${o(i.name)}</div>
+          <div class="card-sub artist-link" data-artist="${o(c)}">${o(c)}</div>
+          </div><div class="card-meta">${d}</div>
+          <button class="play-btn" data-artist="${o(c)}" data-track="${o(i.name)}" title="Preview afspelen">\u25B6</button>
+          <div class="play-bar"><div class="play-bar-fill"></div></div></div>`}b(a+"</div>")}catch(e){S(e.message)}}function pe(){s.currentTab="recent",A(),Ie()}async function Xe(e,t,a){if(s.previewBtn===e){s.previewAudio.paused?(await s.previewAudio.play(),e.textContent="\u23F8",e.classList.add("playing")):(s.previewAudio.pause(),e.textContent="\u25B6",e.classList.remove("playing"));return}if(s.previewBtn){s.previewAudio.pause(),s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let i=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");i&&(i.style.width="0%")}s.previewBtn=e,e.textContent="\u2026",e.disabled=!0;try{let i=new URLSearchParams({artist:t,track:a}),n=await f(`/api/preview?${i}`);if(!n.preview){e.textContent="\u2014",e.disabled=!1,setTimeout(()=>{e.textContent==="\u2014"&&(e.textContent="\u25B6")},1800),s.previewBtn=null;return}s.previewAudio.src=n.preview,s.previewAudio.currentTime=0,await s.previewAudio.play(),e.textContent="\u23F8",e.disabled=!1,e.classList.add("playing")}catch{e.textContent="\u25B6",e.disabled=!1,s.previewBtn=null}}s.previewAudio.addEventListener("timeupdate",()=>{if(!s.previewBtn||!s.previewAudio.duration)return;let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width=`${(s.previewAudio.currentTime/s.previewAudio.duration*100).toFixed(1)}%`)});s.previewAudio.addEventListener("ended",()=>{if(s.previewBtn){s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width="0%"),s.previewBtn=null}});document.addEventListener("visibilitychange",()=>{document.hidden&&!s.previewAudio.paused&&(s.previewAudio.pause(),s.previewBtn&&(s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing")))});async function pt(e){let t=document.getElementById("search-results");if(e.length<2){t.classList.remove("open");return}try{let a=await f(`/api/search?q=${encodeURIComponent(e)}`);a.results?.length?t.innerHTML=a.results.map(i=>{let n=i.image?`<img class="search-result-img" src="${o(i.image)}" alt="" loading="lazy"
+               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="search-result-ph" style="background:${g(i.name)};display:none">${m(i.name)}</div>`:`<div class="search-result-ph" style="background:${g(i.name)}">${m(i.name)}</div>`,d=i.listeners?`${B(i.listeners)} luisteraars`:"";return`<button class="search-result-item" data-artist="${o(i.name)}">
+          ${n}
+          <div><div class="search-result-name">${o(i.name)}</div>
+          ${d?`<div class="search-result-sub">${d}</div>`:""}</div>
+        </button>`}).join(""):t.innerHTML='<div style="padding:12px 14px;color:var(--muted2);font-size:13px">Geen resultaten</div>',t.classList.add("open")}catch{}}document.getElementById("search-input").addEventListener("input",e=>{clearTimeout(s.searchTimeout);let t=e.target.value.trim();if(!t){document.getElementById("search-results").classList.remove("open");return}s.searchTimeout=setTimeout(()=>pt(t),320)});document.addEventListener("click",e=>{e.target.closest("#search-wrap")||document.getElementById("search-results").classList.remove("open")});function me(e,t){let a=(t||"").toLowerCase().trim(),i=e;if(a&&(i=e.filter(c=>c.artist.toLowerCase().includes(a)||c.album.toLowerCase().includes(a))),!i.length)return`<div class="empty">Geen resultaten voor "<strong>${o(t)}</strong>".</div>`;let n=new Map;for(let c of i)n.has(c.artist)||n.set(c.artist,[]),n.get(c.artist).push(c.album);let d=`<div class="section-title">${n.size} artiesten \xB7 ${B(i.length)} albums</div>
+    <div class="plib-list">`;for(let[c,l]of n)d+=`
+      <div class="plib-artist-block">
+        <div class="plib-artist-header artist-link" data-artist="${o(c)}">
+          <div class="plib-avatar" style="background:${g(c)}">${m(c)}</div>
+          <span class="plib-artist-name">${o(c)}</span>
+          <span class="plib-album-count">${l.length}</span>
+        </div>
+        <div class="plib-albums">
+          ${l.map(r=>`<div class="plib-album-row">
+            <span class="plib-album-badge">\u25B6</span>
+            <span class="plib-album-title" title="${o(r)}">${o(r)}</span>
+          </div>`).join("")}
+        </div>
+      </div>`;return d+"</div>"}async function te(){T();try{let e=await f("/api/plex/library");s.plexLibData=e.library||[];let t=document.getElementById("plib-search");if(t&&(t.value=""),!s.plexLibData.length){b('<div class="empty">Plex bibliotheek is leeg of nog niet gesynchroniseerd.<br>Klik \u21BB Sync Plex om te beginnen.</div>');return}b(me(s.plexLibData,""))}catch(e){S(e.message)}}async function Se(e){T();try{let a=(await f(`/api/topartists?period=${e}`)).topartists?.artist||[];if(!a.length){b('<div class="empty">Geen data.</div>');return}let i=parseInt(a[0]?.playcount||1),n=`<div class="section-title">Top artiesten \xB7 ${W(e)}</div><div class="artist-grid">`;for(let d=0;d<a.length;d++){let c=a[d],l=Math.round(parseInt(c.playcount)/i*100),r=F(c.image,"large")||F(c.image),u=r?`<img src="${r}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+           <div class="ag-photo-ph" style="display:none;background:${g(c.name,!0)}">${m(c.name)}</div>`:`<div class="ag-photo-ph" style="background:${g(c.name,!0)}">${m(c.name)}</div>`;n+=`<div class="ag-card">
+        <div class="ag-photo" id="agp-${d}" style="view-transition-name: artist-${ie(c.name)}">${u}</div>
+        <div class="ag-info">
+          <div class="ag-name artist-link" data-artist="${o(c.name)}">${o(c.name)}</div>
+          <div class="card-bar"><div class="card-bar-fill" style="width:${l}%"></div></div>
+          <div class="ag-plays">${B(c.playcount)} plays</div>
+        </div></div>`}b(n+"</div>"),a.forEach(async(d,c)=>{try{let l=await f(`/api/artist/${encodeURIComponent(d.name)}/info`);if(l.image){let r=document.getElementById(`agp-${c}`);r&&(r.innerHTML=`<img src="${l.image}" alt="" loading="lazy" onerror="this.style.display='none'">`)}}catch{}})}catch(t){S(t.message)}}async function Te(e){T();try{let a=(await f(`/api/toptracks?period=${e}`)).toptracks?.track||[];if(!a.length){b('<div class="empty">Geen data.</div>');return}let i=parseInt(a[0]?.playcount||1),n=`<div class="section-title">Top nummers \xB7 ${W(e)}</div><div class="card-list">`;for(let d of a){let c=Math.round(parseInt(d.playcount)/i*100);n+=`<div class="card">${Y(d.image)}<div class="card-info">
+        <div class="card-title">${o(d.name)}</div>
+        <div class="card-sub artist-link" data-artist="${o(d.artist?.name||"")}">${o(d.artist?.name||"")}</div>
+        <div class="card-bar"><div class="card-bar-fill" style="width:${c}%"></div></div>
+        </div><div class="card-meta">${B(d.playcount)}\xD7</div>
+        <button class="play-btn" data-artist="${o(d.artist?.name||"")}" data-track="${o(d.name)}" title="Preview afspelen">\u25B6</button>
+        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`}b(n+"</div>")}catch(t){S(t.message)}}async function et(){T();try{let t=(await f("/api/loved")).lovedtracks?.track||[];if(!t.length){b('<div class="empty">Geen geliefde nummers.</div>');return}let a='<div class="section-title">Geliefde nummers</div><div class="card-list">';for(let i of t){let n=i.date?.uts?ae(parseInt(i.date.uts)):"";a+=`<div class="card">${Y(i.image)}<div class="card-info">
+        <div class="card-title">${o(i.name)}</div>
+        <div class="card-sub artist-link" data-artist="${o(i.artist?.name||"")}">${o(i.artist?.name||"")}</div>
+        </div><div class="card-meta" style="color:var(--red)">\u2665 ${n}</div>
+        <button class="play-btn" data-artist="${o(i.artist?.name||"")}" data-track="${o(i.name)}" title="Preview afspelen">\u25B6</button>
+        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`}b(a+"</div>")}catch(e){S(e.message)}}async function Be(){T("Statistieken ophalen...");try{let e=await f("/api/stats");b(`
       <div class="stats-grid">
         <div class="stats-card full">
           <div class="stats-card-title">Scrobbles afgelopen 7 dagen</div>
@@ -1450,989 +353,56 @@ async function loadStats() {
           <div class="stats-card-title">Genre verdeling</div>
           <div class="chart-wrap"><canvas id="chart-genres"></canvas></div>
         </div>
-      </div>`;
-    setContent(chartHtml, () => renderStatsCharts(d));
-  } catch (e) { showError(e.message); }
-}
-
-function renderStatsCharts(d) {
-  if (typeof Chart === 'undefined') return;
-
-  const isDark = !window.matchMedia('(prefers-color-scheme: light)').matches;
-  const gridColor   = isDark ? '#2c2c2c' : '#ddd';
-  const tickColor   = isDark ? '#888' : '#777';
-  const labelColor  = isDark ? '#efefef' : '#111';
-
-  Chart.defaults.color = tickColor;
-  Chart.defaults.borderColor = gridColor;
-
-  // Daily scrobbles bar chart
-  const dc = document.getElementById('chart-daily');
-  if (dc) {
-    new Chart(dc, {
-      type: 'bar',
-      data: {
-        labels: d.dailyScrobbles.map(x => {
-          const dt = new Date(x.date + 'T12:00:00');
-          return dt.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric' });
-        }),
-        datasets: [{ data: d.dailyScrobbles.map(x => x.count), backgroundColor: 'rgba(213,16,7,0.75)', borderRadius: 4 }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw} scrobbles` } } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: tickColor } },
-          y: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true }
-        }
-      }
-    });
-  }
-
-  // Top artists horizontal bar
-  const tc = document.getElementById('chart-top');
-  if (tc && d.topArtists?.length) {
-    new Chart(tc, {
-      type: 'bar',
-      data: {
-        labels: d.topArtists.map(a => a.name),
-        datasets: [{ data: d.topArtists.map(a => a.playcount), backgroundColor: 'rgba(229,160,13,0.75)', borderRadius: 4 }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw} plays` } } },
-        scales: {
-          x: { grid: { color: gridColor }, ticks: { color: tickColor }, beginAtZero: true },
-          y: { grid: { display: false }, ticks: { color: labelColor, font: { size: 11 } } }
-        }
-      }
-    });
-  }
-
-  // Genre donut
-  const gc = document.getElementById('chart-genres');
-  if (gc && d.genres?.length) {
-    const colors = ['#d51007','#e5a00d','#6c5ce7','#00b894','#fd79a8','#0984e3','#e17055','#a29bfe'];
-    new Chart(gc, {
-      type: 'doughnut',
-      data: {
-        labels: d.genres.map(g => g.name),
-        datasets: [{ data: d.genres.map(g => g.count), backgroundColor: colors.slice(0, d.genres.length), borderWidth: 0 }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: 'right', labels: { color: tickColor, boxWidth: 12, padding: 10, font: { size: 11 } } } }
-      }
-    });
-  }
-}
-
-// ── Tidarr / Tidal ────────────────────────────────────────────────────────
-async function loadTidarrStatus() {
-  try {
-    const d = await apiFetch('/api/tidarr/status');
-    const pill = document.getElementById('tidarr-status-pill');
-    const text = document.getElementById('tidarr-status-text');
-    tidarrOk = !!d.connected;
-    if (pill && text) {
-      pill.className = `tidarr-status-pill ${tidarrOk ? 'on' : 'off'}`;
-      text.textContent = tidarrOk
-        ? `Tidarr · verbonden${d.quality ? ' · ' + d.quality : ''}`
-        : 'Tidarr offline';
-    }
-  } catch {
-    tidarrOk = false;
-    const text = document.getElementById('tidarr-status-text');
-    if (text) text.textContent = 'Tidarr offline';
-  }
-}
-
-async function refreshTidarrQueueBadge() {
-  try {
-    const d = await apiFetch('/api/tidarr/queue');
-    const count = (d.items || []).length;
-    const badges = [document.getElementById('badge-tidarr-queue'), document.getElementById('badge-tidarr-queue-inline')];
-    for (const b of badges) {
-      if (!b) continue;
-      if (count > 0) { b.textContent = count; b.style.display = ''; }
-      else           { b.style.display = 'none'; }
-    }
-  } catch {}
-}
-
-function tidalResultCard(item) {
-  const imgEl = item.image
-    ? `<img class="tidal-img" src="${esc(item.image)}" alt="" loading="lazy"
-         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-       <div class="tidal-ph" style="display:none;background:${gradientFor(item.title)}">${initials(item.title)}</div>`
-    : `<div class="tidal-ph" style="background:${gradientFor(item.title)}">${initials(item.title)}</div>`;
-  const meta = [
-    item.type === 'album' ? 'Album' : 'Nummer',
-    item.year,
-    item.album && item.type === 'track' ? item.album : null,
-    item.tracks ? `${item.tracks} nummers` : null
-  ].filter(Boolean).join(' · ');
-  return `
-    <div class="tidal-card">
-      <div class="tidal-cover">${imgEl}</div>
-      <div class="tidal-info">
-        <div class="tidal-title">${esc(item.title)}</div>
-        <div class="tidal-artist artist-link" data-artist="${esc(item.artist)}">${esc(item.artist)}</div>
-        <div class="tidal-meta">${esc(meta)}</div>
-      </div>
-      <button class="tidal-dl-btn" data-dlurl="${esc(item.url)}" title="Download via Tidarr">⬇ Download</button>
-    </div>`;
-}
-
-async function renderTidalSearch(query) {
-  const target = document.getElementById('tidal-content');
-  if (!target) return;
-  const q = (query || '').trim();
-  if (q.length < 2) {
-    target.innerHTML = `<div class="empty">Begin met typen om te zoeken op Tidal.</div>`;
-    return;
-  }
-  target.innerHTML = `<div class="loading"><div class="spinner"></div>Zoeken op Tidal…</div>`;
-  try {
-    const d = await apiFetch(`/api/tidarr/search?q=${encodeURIComponent(q)}`);
-    tidalSearchResults = d.results || [];
-    if (d.error) {
-      target.innerHTML = `<div class="error-box">⚠️ ${esc(d.error)}</div>`;
-      return;
-    }
-    if (!tidalSearchResults.length) {
-      target.innerHTML = `<div class="empty">Geen resultaten op Tidal voor "<strong>${esc(q)}</strong>".</div>`;
-      return;
-    }
-    const albums = tidalSearchResults.filter(r => r.type === 'album');
-    const tracks = tidalSearchResults.filter(r => r.type === 'track');
-    let html = '';
-    if (albums.length) {
-      html += `<div class="section-title">Albums (${albums.length})</div>
-        <div class="tidal-grid">${albums.map(tidalResultCard).join('')}</div>`;
-    }
-    if (tracks.length) {
-      html += `<div class="section-title" style="margin-top:1.5rem">Nummers (${tracks.length})</div>
-        <div class="tidal-grid">${tracks.map(tidalResultCard).join('')}</div>`;
-    }
-    target.innerHTML = html;
-  } catch (e) {
-    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
-  }
-}
-
-function queueItemRow(item, isHistory = false) {
-  const statusClass = {
-    queued:      'q-pending',
-    pending:     'q-pending',
-    downloading: 'q-active',
-    processing:  'q-active',
-    completed:   'q-done',
-    done:        'q-done',
-    error:       'q-error',
-    failed:      'q-error'
-  }[String(item.status || '').toLowerCase()] || 'q-pending';
-  const pct = typeof item.progress === 'number' ? Math.round(item.progress) : null;
-  const progHtml = pct !== null
-    ? `<div class="q-bar"><div class="q-bar-fill" style="width:${pct}%"></div></div>
-       <div class="q-pct">${pct}%</div>`
-    : '';
-  const actionHtml = isHistory
-    ? ''
-    : `<button class="q-remove" data-qid="${esc(item.id)}" title="Verwijder uit queue">✕</button>`;
-  return `
-    <div class="q-row">
-      <div class="q-info">
-        <div class="q-title">${esc(item.title || '(onbekend)')}</div>
-        ${item.artist ? `<div class="q-artist artist-link" data-artist="${esc(item.artist)}">${esc(item.artist)}</div>` : ''}
-        <span class="q-status ${statusClass}">${esc(item.status || 'queued')}</span>
-      </div>
-      ${progHtml}
-      ${actionHtml}
-    </div>`;
-}
-
-function renderTidalQueue() {
-  const target = document.getElementById('tidal-content');
-  if (!target) return;
-  const items = tidarrQueueItems;
-  if (!items.length) {
-    target.innerHTML = `<div class="empty">De download-queue is leeg.</div>`;
-    return;
-  }
-  const statusLabel = {
-    queue_download:   'In wachtrij',
-    queue_processing: 'Verwerken (wacht)',
-    download:         'Downloaden…',
-    processing:       'Verwerken…',
-    finished:         'Klaar',
-    error:            'Fout'
-  };
-  const statusClass = {
-    queue_download:   'q-pending',
-    queue_processing: 'q-pending',
-    download:         'q-active',
-    processing:       'q-active',
-    finished:         'q-done',
-    error:            'q-error'
-  };
-  target.innerHTML = `
-    <div class="section-title">${items.length} item${items.length !== 1 ? 's' : ''} in queue</div>
-    <div class="q-list">${items.map(it => {
-      const sc  = statusClass[it.status]  || 'q-pending';
-      const lbl = statusLabel[it.status]  || it.status || 'In wachtrij';
-      const pct = it.progress?.current && it.progress?.total
-        ? Math.round(it.progress.current / it.progress.total * 100) : null;
-      const progHtml = pct !== null
-        ? `<div class="q-bar"><div class="q-bar-fill" style="width:${pct}%"></div></div><div class="q-pct">${pct}%</div>`
-        : '';
-      const isDone = it.status === 'finished' || it.status === 'error';
-      const removeBtn = `<button class="q-remove" data-qid="${esc(it.id)}" title="Verwijder">✕</button>`;
-      return `<div class="q-row">
-        <div class="q-info">
-          <div class="q-title">${esc(it.title || '(onbekend)')}</div>
-          ${it.artist ? `<div class="q-artist">${esc(it.artist)}</div>` : ''}
-          <span class="q-status ${sc}">${esc(lbl)}</span>
-        </div>
-        ${progHtml}
-        ${removeBtn}
-      </div>`;
-    }).join('')}</div>`;
-}
-
-async function renderTidalHistory() {
-  const target = document.getElementById('tidal-content');
-  if (!target) return;
-  target.innerHTML = `<div class="loading"><div class="spinner"></div>Geschiedenis ophalen…</div>`;
-  try {
-    const items = await apiFetch('/api/downloads');
-    if (!items.length) {
-      target.innerHTML = `<div class="empty">Nog geen downloads opgeslagen.</div>`;
-      return;
-    }
-    const qualityLabel = { max: '24-bit', high: 'Lossless', normal: 'AAC', low: '96kbps' };
-    target.innerHTML = `
-      <div class="section-title">${items.length} gedownloade albums
-        <button class="tool-btn" id="dl-history-clear" style="margin-left:auto;font-size:11px">🗑 Wis alles</button>
-      </div>
-      <div class="q-list">${items.map(it => {
-        const date = it.queued_at ? new Date(it.queued_at).toLocaleDateString('nl-NL', { day:'numeric', month:'short', year:'numeric' }) : '';
-        const ql   = qualityLabel[it.quality] || it.quality || '';
-        return `<div class="q-row">
-          <div class="q-info">
-            <div class="q-title">${esc(it.title)}</div>
-            ${it.artist ? `<div class="q-artist artist-link" data-artist="${esc(it.artist)}">${esc(it.artist)}</div>` : ''}
-            <span class="q-status q-done">✓ gedownload${ql ? ' · ' + ql : ''}${date ? ' · ' + date : ''}</span>
-          </div>
-          <button class="q-remove" data-dlid="${it.id}" title="Verwijder uit geschiedenis">✕</button>
-        </div>`;
-      }).join('')}</div>`;
-
-    document.getElementById('dl-history-clear')?.addEventListener('click', async () => {
-      if (!confirm('Wis de volledige download-geschiedenis?')) return;
-      await fetch('/api/downloads', { method: 'DELETE' }).catch(() => {});
-      // Verwijder elk item apart (geen bulk-endpoint, dus per item)
-      for (const it of items) {
-        await fetch(`/api/downloads/${it.id}`, { method: 'DELETE' }).catch(() => {});
-      }
-      downloadedSet.clear();
-      renderTidalHistory();
-    });
-  } catch (e) {
-    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
-  }
-}
-
-function setTidalView(view) {
-  tidalView = view;
-  document.querySelectorAll('[data-tidal-view]').forEach(b => {
-    b.classList.toggle('sel-def', b.dataset.tidalView === view);
-  });
-  if (view === 'search') renderTidalSearch(document.getElementById('tidal-search')?.value || '');
-  else if (view === 'queue')   renderTidalQueue();
-  else if (view === 'history') renderTidalHistory();
-}
-
-// ── Tidarr SSE: real-time queue updates ───────────────────────────────────
-function startTidarrSSE() {
-  if (tidarrSseSource) return;
-  const es = new EventSource('/api/tidarr/stream');
-  tidarrSseSource = es;
-
-  es.onmessage = (e) => {
-    try {
-      tidarrQueueItems = JSON.parse(e.data) || [];
-    } catch { tidarrQueueItems = []; }
-
-    // Badge bijwerken (tab + inline + FAB)
-    const active = tidarrQueueItems.filter(i => i.status !== 'finished' && i.status !== 'error');
-    const badges = [document.getElementById('badge-tidarr-queue'), document.getElementById('badge-tidarr-queue-inline')];
-    for (const b of badges) {
-      if (!b) continue;
-      if (active.length > 0) { b.textContent = active.length; b.style.display = ''; }
-      else                    { b.style.display = 'none'; }
-    }
-    updateQueueFab(tidarrQueueItems);
-    // Queue-tab live bijwerken als die open is
-    if (currentTab === 'tidal' && tidalView === 'queue') renderTidalQueue();
-    // Queue popover live bijwerken als die open is
-    if (document.getElementById('queue-popover')?.classList.contains('open')) renderQueuePopover();
-  };
-
-  es.onerror = () => {
-    es.close();
-    tidarrSseSource = null;
-    // Herverbind na 10 seconden
-    setTimeout(startTidarrSSE, 10_000);
-  };
-}
-function stopTidarrSSE() {
-  if (tidarrSseSource) { tidarrSseSource.close(); tidarrSseSource = null; }
-}
-
-// Legacy polling (fallback badge refresh voor als SSE niet werkt)
-function startTidarrQueuePolling() { startTidarrSSE(); }
-function stopTidarrQueuePolling()  { /* SSE blijft actief */ }
-
-async function loadTidal() {
-  setContent(`<div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>`);
-  await loadTidarrStatus();
-  await refreshTidarrQueueBadge();
-  setTidalView(tidalView);
-  startTidarrQueuePolling();
-}
-
-// ── Artiest-normalisatie voor vergelijking ─────────────────────────────────
-function normalizeArtist(s) {
-  return (s || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-}
-function artistMatches(found, wanted) {
-  const f = normalizeArtist(found);
-  const w = normalizeArtist(wanted);
-  if (!f || !w) return true; // onbekend → geen mismatch
-  return f === w || f.includes(w) || w.includes(f);
-}
-
-// ── Bevestigingsdialog voor download ─────────────────────────────────────
-let _dlResolve = null; // callback van openDownloadConfirm
-
-function openDownloadConfirm(candidates, wantedArtist, wantedAlbum, btn) {
-  return new Promise(resolve => {
-    _dlResolve = resolve;
-
-    const modal   = document.getElementById('dl-confirm-modal');
-    const content = document.getElementById('dl-confirm-cards');
-
-    document.getElementById('dl-confirm-wanted').textContent =
-      `"${wantedAlbum}"${wantedArtist ? ' – ' + wantedArtist : ''}`;
-
-    content.innerHTML = candidates.map((c, i) => {
-      const mismatch = !artistMatches(c.artist, wantedArtist);
-      const imgEl = c.image
-        ? `<img class="dlc-img" src="${esc(c.image)}" alt="" loading="lazy"
-             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-           <div class="dlc-ph" style="display:none">${initials(c.title)}</div>`
-        : `<div class="dlc-ph">${initials(c.title)}</div>`;
-      const artistHtml = mismatch
-        ? `<div class="dlc-artist dlc-artist-warn">⚠ ${esc(c.artist)}</div>`
-        : `<div class="dlc-artist">${esc(c.artist)}</div>`;
-      const scorePct = c.score ?? 0;
-      return `
-        <button class="dlc-card${i === 0 ? ' dlc-best' : ''}" data-dlc-idx="${i}">
-          <div class="dlc-cover">${imgEl}</div>
-          <div class="dlc-info">
-            <div class="dlc-title">${esc(c.title)}</div>
-            ${artistHtml}
-            <div class="dlc-meta">${c.year ? esc(c.year) : ''}${c.year && c.tracks ? ' · ' : ''}${c.tracks ? c.tracks + ' nrs' : ''}</div>
-            <div class="dlc-score-bar"><div class="dlc-score-fill" style="width:${scorePct}%"></div></div>
-            <div class="dlc-score-label">${scorePct}% overeenkomst</div>
-          </div>
-          ${i === 0 ? '<span class="dlc-badge-best">Beste match</span>' : ''}
-        </button>`;
-    }).join('');
-
-    // Klik op kandidaat → bevestig met die optie
-    content.querySelectorAll('.dlc-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const idx = parseInt(card.dataset.dlcIdx);
-        closeDownloadConfirm();
-        resolve({ chosen: candidates[idx], btn });
-      });
-    });
-
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  });
-}
-
-function closeDownloadConfirm() {
-  document.getElementById('dl-confirm-modal')?.classList.remove('open');
-  document.body.style.overflow = '';
-  if (_dlResolve) { _dlResolve({ chosen: null }); _dlResolve = null; }
-}
-
-document.getElementById('dl-confirm-cancel')?.addEventListener('click', () => {
-  closeDownloadConfirm();
-});
-document.getElementById('dl-confirm-modal')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('dl-confirm-modal')) closeDownloadConfirm();
-});
-
-// ── Download uitvoeren met een gekozen kandidaat ───────────────────────────
-async function executeDownload(chosen, wantedArtist, wantedAlbum, btn) {
-  const res = await fetch('/api/tidarr/download', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      url:     chosen.url,
-      type:    chosen.type   || 'album',
-      title:   chosen.title  || wantedAlbum  || '',
-      artist:  chosen.artist || wantedArtist || '',
-      id:      String(chosen.id || ''),
-      quality: getDownloadQuality()
-    })
-  });
-  const data = await res.json();
-  if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
-  markDownloaded(chosen.artist || wantedArtist || '', chosen.title || wantedAlbum || '');
-  if (btn) { btn.textContent = '✓'; btn.classList.add('dl-done'); btn.disabled = false; }
-  await refreshTidarrQueueBadge();
-}
-
-// Download-knop klik: haalt top-3 kandidaten op, toont confirm-dialog als artiest afwijkt.
-async function triggerTidarrDownload(artist, album, btn) {
-  if (!tidarrOk) {
-    alert('Tidarr is niet verbonden. Controleer TIDARR_URL en TIDARR_API_KEY.');
-    return;
-  }
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  try {
-    const params = new URLSearchParams();
-    if (artist) params.set('artist', artist);
-    if (album)  params.set('album',  album);
-
-    // Haal top-3 kandidaten op voor mogelijke confirm-dialog
-    const candRes = await fetch(`/api/tidarr/candidates?${params}`);
-
-    if (!candRes.ok) {
-      if (candRes.status === 401) {
-        alert('Niet ingelogd bij TIDAL.\nGa naar de 🎛️ Tidarr-tab en koppel je TIDAL-account eerst.');
-      } else {
-        alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer het handmatig via de 🌊 Tidal-tab.`);
-      }
-      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
-      return;
-    }
-
-    const { candidates } = await candRes.json();
-    if (!candidates?.length) {
-      alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}`);
-      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
-      return;
-    }
-
-    const best = candidates[0];
-
-    // Toon confirm-dialog als de beste match een andere artiest heeft
-    if (artist && !artistMatches(best.artist, artist)) {
-      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
-      const { chosen } = await openDownloadConfirm(candidates, artist, album, btn);
-      if (!chosen) return; // gebruiker heeft geannuleerd
-      if (btn) { btn.disabled = true; btn.textContent = '…'; }
-      await executeDownload(chosen, artist, album, btn);
-    } else {
-      // Artiest klopt → direct downloaden
-      await executeDownload(best, artist, album, btn);
-    }
-  } catch (e) {
-    alert('Downloaden mislukt: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
-  }
-}
-
-// ── Queue FAB (floating queue knop) ───────────────────────────────────────
-function updateQueueFab(items) {
-  const fab   = document.getElementById('queue-fab');
-  const badge = document.getElementById('fab-queue-badge');
-  if (!fab) return;
-  const active = (items || []).filter(i => i.status !== 'finished' && i.status !== 'error');
-  if (items && items.length > 0) {
-    fab.style.display = '';
-    if (active.length > 0) { badge.textContent = active.length; badge.style.display = ''; }
-    else                    { badge.style.display = 'none'; }
-  } else {
-    fab.style.display = 'none';
-    document.getElementById('queue-popover')?.classList.remove('open');
-  }
-}
-
-function renderQueuePopover() {
-  const list = document.getElementById('queue-popover-list');
-  if (!list) return;
-  const items = tidarrQueueItems;
-  if (!items.length) {
-    list.innerHTML = `<div class="qpop-empty">Queue is leeg</div>`;
-    return;
-  }
-  const statusLabel = {
-    queue_download:   'In wachtrij',
-    queue_processing: 'Verwerken',
-    download:         'Downloaden…',
-    processing:       'Verwerken…',
-    finished:         'Klaar ✓',
-    error:            'Fout'
-  };
-  const statusClass = {
-    queue_download:   'q-pending',
-    queue_processing: 'q-pending',
-    download:         'q-active',
-    processing:       'q-active',
-    finished:         'q-done',
-    error:            'q-error'
-  };
-  list.innerHTML = items.map(it => {
-    const sc  = statusClass[it.status]  || 'q-pending';
-    const lbl = statusLabel[it.status]  || it.status || 'In wachtrij';
-    const pct = it.progress?.current && it.progress?.total
-      ? Math.round(it.progress.current / it.progress.total * 100) : null;
-    const progHtml = pct !== null
-      ? `<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${pct}%"></div></div>`
-      : '';
-    return `<div class="qpop-row">
-      <div class="qpop-title">${esc(it.title || '(onbekend)')}</div>
-      ${it.artist ? `<div class="qpop-artist">${esc(it.artist)}</div>` : ''}
-      <span class="q-status ${sc}">${esc(lbl)}</span>
-      ${progHtml}
-    </div>`;
-  }).join('');
-}
-
-function toggleQueuePopover() {
-  const pop = document.getElementById('queue-popover');
-  if (!pop) return;
-  const isOpen = pop.classList.toggle('open');
-  if (isOpen) renderQueuePopover();
-}
-
-function closeQueuePopover() {
-  document.getElementById('queue-popover')?.classList.remove('open');
-}
-
-document.getElementById('queue-fab')?.addEventListener('click', toggleQueuePopover);
-document.getElementById('qpop-close')?.addEventListener('click', e => { e.stopPropagation(); closeQueuePopover(); });
-document.getElementById('qpop-goto-tidal')?.addEventListener('click', () => {
-  closeQueuePopover();
-  document.querySelector('.tab[data-tab="downloads"]')?.click();
-  setTimeout(() => setTidalView('queue'), 150);
-});
-// Klik buiten popover → sluiten
-document.addEventListener('click', e => {
-  const pop = document.getElementById('queue-popover');
-  const fab = document.getElementById('queue-fab');
-  if (pop?.classList.contains('open') && !pop.contains(e.target) && !fab?.contains(e.target)) {
-    closeQueuePopover();
-  }
-}, true);
-
-// ── Navigatie ──────────────────────────────────────────────────────────────
-
-// ── Lazy-load helper via IntersectionObserver ──────────────────────────────
-function setupLazyLoad(el, callback) {
-  if (!el) return;
-  if (!('IntersectionObserver' in window)) { callback(); return; }
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) { obs.unobserve(entry.target); callback(); }
-    });
-  }, { rootMargin: '300px' });
-  obs.observe(el);
-}
-
-// ── Mutex voor sectionContainerEl ──────────────────────────────────────────
-// Voorkomt race conditions wanneer meerdere async functies tegelijk
-// sectionContainerEl willen gebruiken (bijv. lazy-load callbacks in Ontdek).
-let _sectionMutex = Promise.resolve();
-function runWithSection(el, fn) {
-  const result = _sectionMutex.then(async () => {
-    sectionContainerEl = el;
-    try {
-      await fn();
-    } finally {
-      sectionContainerEl = null;
-    }
-  });
-  // Zorg dat een fout de keten niet breekt voor volgende aanroepen
-  _sectionMutex = result.catch(() => {});
-  return result;
-}
-
-// ── Composiet loader: Nu ────────────────────────────────────────────────────
-function loadNu() {
-  currentTab = 'recent';
-  hideTidarrUI();
-  stopTidarrQueuePolling();
-  loadRecent();
-}
-
-// ── Collapsible sections state management ────────────────────────────────────
-const collapsibleSections = {
-  recs: false,      // false = expanded, true = collapsed
-  releases: false,
-  discover: false
-};
-
-function loadCollapsibleState() {
-  try {
-    const saved = localStorage.getItem('ontdek-sections');
-    if (saved) {
-      const state = JSON.parse(saved);
-      Object.assign(collapsibleSections, state);
-    }
-  } catch (e) {
-    // fallback to defaults if localStorage fails
-  }
-}
-
-function saveCollapsibleState() {
-  try {
-    localStorage.setItem('ontdek-sections', JSON.stringify(collapsibleSections));
-  } catch (e) {
-    // ignore if localStorage is full
-  }
-}
-
-function setupSectionToggle(sectionId, sectionKey) {
-  const block = document.querySelector(`[data-section="${sectionId}"]`);
-  if (!block) return;
-
-  const btn = block.querySelector('.section-toggle-btn');
-  if (!btn) return;
-
-  // Update button state based on collapsibleSections
-  updateToggleButtonState(btn, collapsibleSections[sectionKey]);
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    collapsibleSections[sectionKey] = !collapsibleSections[sectionKey];
-    saveCollapsibleState();
-    updateToggleButtonState(btn, collapsibleSections[sectionKey]);
-    block.classList.toggle('collapsed');
-  });
-
-  // Apply initial collapsed state
-  if (collapsibleSections[sectionKey]) {
-    block.classList.add('collapsed');
-  }
-}
-
-function updateToggleButtonState(btn, isCollapsed) {
-  btn.classList.remove('expanded', 'collapsed');
-  btn.classList.add(isCollapsed ? 'collapsed' : 'expanded');
-}
-
-// ── Composiet loader: Ontdek ────────────────────────────────────────────────
-async function loadOntdek() {
-  loadCollapsibleState();
-  currentTab = 'ontdek';
-  hideTidarrUI();
-  stopTidarrQueuePolling();
-
-  const moodHtml = spotifyEnabled ? `
-    <div class="section-block sec-mood-block">
-      <div class="inline-toolbar">
-        <span class="toolbar-label spotify-label">🎯 Spotify mood</span>
-        <span class="toolbar-sep"></span>
-        <button class="tool-btn${activeMood==='energiek'?' sel-mood':''}" data-mood="energiek">⚡ Energiek</button>
-        <button class="tool-btn${activeMood==='chill'?' sel-mood':''}" data-mood="chill">🌊 Chill</button>
-        <button class="tool-btn${activeMood==='melancholisch'?' sel-mood':''}" data-mood="melancholisch">🌧 Melancholisch</button>
-        <button class="tool-btn${activeMood==='experimenteel'?' sel-mood':''}" data-mood="experimenteel">🔬 Experimenteel</button>
-        <button class="tool-btn${activeMood==='feest'?' sel-mood':''}" data-mood="feest">🎉 Feest</button>
-        ${activeMood ? `<span class="toolbar-sep"></span><button class="tool-btn" id="btn-clear-mood-inline">✕ Wis mood</button>` : ''}
-      </div>
-    </div>` : '';
-
-  contentEl.innerHTML = `
-    <div class="ontdek-layout">
-      ${moodHtml}
-
-      <div class="section-block" data-section="recs">
-        <div class="section-hdr">
-          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title" id="hdr-title-recs">🎯 Aanbevelingen</span>
-          <div class="inline-toolbar">
-            <button class="tool-btn${recsFilter==='all'?' sel-def':''}" data-filter="all">Alle</button>
-            <button class="tool-btn${recsFilter==='new'?' sel-new':''}" data-filter="new">✦ Nieuw voor mij</button>
-            <button class="tool-btn${recsFilter==='plex'?' sel-plex':''}" data-filter="plex">▶ Al in Plex</button>
-            <span class="toolbar-sep"></span>
-            <button class="tool-btn refresh-btn" id="btn-ref-recs-ontdek">↻</button>
+      </div>`,()=>mt(e))}catch(e){S(e.message)}}function mt(e){if(typeof Chart>"u")return;let t=!window.matchMedia("(prefers-color-scheme: light)").matches,a=t?"#2c2c2c":"#ddd",i=t?"#888":"#777",n=t?"#efefef":"#111";Chart.defaults.color=i,Chart.defaults.borderColor=a;let d=document.getElementById("chart-daily");d&&new Chart(d,{type:"bar",data:{labels:e.dailyScrobbles.map(r=>new Date(r.date+"T12:00:00").toLocaleDateString("nl-NL",{weekday:"short",day:"numeric"})),datasets:[{data:e.dailyScrobbles.map(r=>r.count),backgroundColor:"rgba(213,16,7,0.75)",borderRadius:4}]},options:{responsive:!0,plugins:{legend:{display:!1},tooltip:{callbacks:{label:r=>`${r.raw} scrobbles`}}},scales:{x:{grid:{display:!1},ticks:{color:i}},y:{grid:{color:a},ticks:{color:i},beginAtZero:!0}}}});let c=document.getElementById("chart-top");c&&e.topArtists?.length&&new Chart(c,{type:"bar",data:{labels:e.topArtists.map(r=>r.name),datasets:[{data:e.topArtists.map(r=>r.playcount),backgroundColor:"rgba(229,160,13,0.75)",borderRadius:4}]},options:{indexAxis:"y",responsive:!0,plugins:{legend:{display:!1},tooltip:{callbacks:{label:r=>`${r.raw} plays`}}},scales:{x:{grid:{color:a},ticks:{color:i},beginAtZero:!0},y:{grid:{display:!1},ticks:{color:n,font:{size:11}}}}}});let l=document.getElementById("chart-genres");if(l&&e.genres?.length){let r=["#d51007","#e5a00d","#6c5ce7","#00b894","#fd79a8","#0984e3","#e17055","#a29bfe"];new Chart(l,{type:"doughnut",data:{labels:e.genres.map(u=>u.name),datasets:[{data:e.genres.map(u=>u.count),backgroundColor:r.slice(0,e.genres.length),borderWidth:0}]},options:{responsive:!0,plugins:{legend:{position:"right",labels:{color:i,boxWidth:12,padding:10,font:{size:11}}}}}})}}async function _(){T("Collectiegaten zoeken...");try{let e=await f("/api/gaps");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
+        <div>${o(e.message)}</div>
+        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`),setTimeout(()=>{s.currentTab==="gaps"&&_()},2e4);return}s.lastGaps=e,se()}catch(e){S(e.message)}}function se(){if(!s.lastGaps)return;let e=[...s.lastGaps.artists||[]];if(!e.length){b('<div class="empty">Geen collectiegaten gevonden \u2014 je hebt alles al! \u{1F389}</div>'),document.getElementById("badge-gaps").textContent="0";return}s.gapsSort==="missing"&&e.sort((i,n)=>n.missingAlbums.length-i.missingAlbums.length),s.gapsSort==="name"&&e.sort((i,n)=>i.name.localeCompare(n.name));let t=e.reduce((i,n)=>i+n.missingAlbums.length,0);document.getElementById("badge-gaps").textContent=t;let a=`<div class="section-title">${t} ontbrekende albums bij ${e.length} artiesten die je al hebt</div>`;for(let i of e){let n=Math.round(i.ownedCount/i.totalCount*100),d=[z(i.country),i.country,i.startYear].filter(Boolean).join(" \xB7 "),c=i.image?`<img class="gaps-photo" src="${o(i.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="gaps-photo-ph" style="display:none;background:${g(i.name)}">${m(i.name)}</div>`:`<div class="gaps-photo-ph" style="background:${g(i.name)}">${m(i.name)}</div>`;a+=`
+      <div class="gaps-block">
+        <div class="gaps-header">
+          ${c}
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+              <div class="gaps-artist-name artist-link" data-artist="${o(i.name)}">${o(i.name)}</div>
+              ${O("artist",i.name,"",i.image||"")}
+            </div>
+            <div class="gaps-artist-meta">${o(d)}</div>
+            ${j(i.tags,3)}
+            <div style="height:8px"></div>
+            <div class="comp-bar"><div class="comp-fill" style="width:${n}%"></div></div>
+            <div class="comp-text">${i.ownedCount} van ${i.totalCount} albums in Plex
+              &nbsp;\xB7&nbsp; <span style="color:var(--new);font-weight:600">${i.missingAlbums.length} ontbreken</span></div>
           </div>
         </div>
-        <div class="section-collapsed-preview" id="sec-recs-preview"></div>
-        <div class="section-content" id="sec-recs-content">
-          <div class="loading"><div class="spinner"></div>Laden...</div>
+        <div class="gaps-sub">Ontbrekende albums</div>
+        <div class="gaps-album-grid">`;for(let l of i.missingAlbums)a+=J(l,!1,i.name);a+="</div>",i.allAlbums?.filter(l=>l.inPlex).length>0&&(a+=`<details style="margin-top:12px">
+        <summary style="font-size:11px;color:var(--muted2);cursor:pointer;user-select:none">
+          \u25B8 ${i.ownedCount} albums die je al hebt
+        </summary>
+        <div class="gaps-album-grid" style="margin-top:10px">
+          ${i.allAlbums.filter(l=>l.inPlex).map(l=>J(l,!1,i.name)).join("")}
         </div>
-      </div>
-
-      <div class="ontdek-divider">Nieuwe Releases</div>
-      <div class="section-block" data-section="releases">
-        <div class="section-hdr">
-          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title" id="hdr-title-releases">💿 Nieuwe Releases</span>
-          <div class="inline-toolbar">
-            <button class="tool-btn${releasesFilter==='all'?' sel-def':''}" data-rtype="all">Alle</button>
-            <button class="tool-btn${releasesFilter==='album'?' sel-def':''}" data-rtype="album">Albums</button>
-            <button class="tool-btn${releasesFilter==='single'?' sel-def':''}" data-rtype="single">Singles</button>
-            <button class="tool-btn${releasesFilter==='ep'?' sel-def':''}" data-rtype="ep">EP's</button>
-            <span class="toolbar-sep"></span>
-            <button class="tool-btn${releasesSort==='listening'?' sel-def':''}" data-rsort="listening">Op luistergedrag</button>
-            <button class="tool-btn${releasesSort==='date'?' sel-def':''}" data-rsort="date">Op datum</button>
-            <span class="toolbar-sep"></span>
-            <button class="tool-btn refresh-btn" id="btn-ref-releases-ontdek">↻</button>
-          </div>
-        </div>
-        <div class="section-collapsed-preview" id="sec-releases-preview"></div>
-        <div class="section-content" id="sec-releases-content">
-          <div class="loading"><div class="spinner"></div>Laden...</div>
-        </div>
-      </div>
-
-      <div class="ontdek-divider">Ontdek Artiesten</div>
-      <div class="section-block" data-section="discover">
-        <div class="section-hdr">
-          <button class="section-toggle-btn expanded" title="Vouw in/uit"></button>
-          <span class="section-hdr-title" id="hdr-title-discover">🔭 Ontdek Artiesten</span>
-          <div class="inline-toolbar">
-            <button class="tool-btn${discFilter==='all'?' sel-def':''}" data-dfilter="all">Alle artiesten</button>
-            <button class="tool-btn${discFilter==='new'?' sel-new':''}" data-dfilter="new">✦ Nieuw voor mij</button>
-            <button class="tool-btn${discFilter==='partial'?' sel-miss':''}" data-dfilter="partial">▶ Gedeeltelijk in Plex</button>
-            <span class="toolbar-sep"></span>
-            <button class="tool-btn refresh-btn" id="btn-ref-discover-ontdek">↻</button>
-          </div>
-        </div>
-        <div class="section-collapsed-preview" id="sec-discover-preview"></div>
-        <div class="section-content" id="sec-discover-content">
-          <div class="loading"><div class="spinner"></div>Laden...</div>
-        </div>
-      </div>
-    </div>`;
-
-  contentEl.style.opacity = '1';
-  contentEl.style.transform = '';
-
-  // Inline refresh-knoppen
-  document.getElementById('btn-ref-recs-ontdek')?.addEventListener('click', async () => {
-    await runWithSection(document.getElementById('sec-recs-content'), loadRecs);
-  });
-  document.getElementById('btn-ref-releases-ontdek')?.addEventListener('click', async () => {
-    lastReleases = null;
-    await fetch('/api/releases/refresh', { method: 'POST' });
-    await runWithSection(document.getElementById('sec-releases-content'), loadReleases);
-  });
-  document.getElementById('btn-ref-discover-ontdek')?.addEventListener('click', async () => {
-    lastDiscover = null;
-    await fetch('/api/discover/refresh', { method: 'POST' });
-    await runWithSection(document.getElementById('sec-discover-content'), loadDiscover);
-  });
-  document.getElementById('btn-clear-mood-inline')?.addEventListener('click', () => {
-    activeMood = null;
-    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel-mood', 'loading'));
-    clearSpotifyRecs();
-    loadOntdek(); // herbouw zonder clear-knop
-  });
-
-  // 1. Laad recs onmiddellijk
-  {
-    const myTarget = document.getElementById('sec-recs-content');
-    sectionContainerEl = myTarget;
-    await loadRecs();
-    if (sectionContainerEl === myTarget) sectionContainerEl = null;
-  }
-
-  // 2. Eager preview: haal releases data op en render alleen de collapsed-thumbs
-  (async () => {
-    try {
-      if (!lastReleases) {
-        const d = await apiFetch('/api/releases');
-        if (d.status === 'building') return;
-        lastReleases = d.releases || [];
-        newReleaseIds = new Set(d.newReleaseIds || []);
-        updateReleasesBadge(d.newCount || 0);
-      }
-      const previewEl = document.getElementById('sec-releases-preview');
-      if (previewEl && lastReleases.length) {
-        let filtered = lastReleases;
-        if (releasesFilter !== 'all') {
-          filtered = lastReleases.filter(r => (r.type || 'album').toLowerCase() === releasesFilter);
-        }
-        if (releasesSort === 'listening') {
-          filtered = [...filtered].sort((a, b) => (b.artistPlaycount || 0) - (a.artistPlaycount || 0) || new Date(b.releaseDate) - new Date(a.releaseDate));
-        } else {
-          filtered = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-        }
-        const previewItems = filtered.slice(0, 8);
-        previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
-          if (r.image) {
-            return `<div class="collapsed-thumb">
-              <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-              <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
-            </div>`;
-          }
-          return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
-        }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
-        // Update header title
-        const titleReleases = document.getElementById('hdr-title-releases');
-        if (titleReleases) titleReleases.textContent = `💿 Nieuwe Releases · ${filtered.length} release${filtered.length !== 1 ? 's' : ''}`;
-      }
-    } catch {}
-  })();
-
-  // 3. Lazy-load releases en discover — via mutex om race condition op
-  //    sectionContainerEl te voorkomen wanneer beide callbacks tegelijk vuren.
-  setupLazyLoad(document.getElementById('sec-releases-content'), () => {
-    const myTarget = document.getElementById('sec-releases-content');
-    return runWithSection(myTarget, loadReleases);
-  });
-  // 4. Eager preview: haal discover data op en render alleen de collapsed-thumbs
-  (async () => {
-    try {
-      if (!lastDiscover) {
-        const d = await apiFetch('/api/discover');
-        if (d.status === 'building') return;
-        lastDiscover = d;
-        if (d.plexConnected) plexOk = true;
-      }
-      const { artists } = lastDiscover;
-      if (!artists?.length) return;
-      let filtered = artists;
-      if (discFilter === 'new') filtered = artists.filter(a => !a.inPlex);
-      if (discFilter === 'partial') filtered = artists.filter(a => a.inPlex && a.missingCount > 0);
-      const previewEl = document.getElementById('sec-discover-preview');
-      if (previewEl && filtered.length) {
-        const previewItems = filtered.slice(0, 8);
-        previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(a => {
-          if (a.image) {
-            return `<div class="collapsed-thumb collapsed-thumb-round">
-              <img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-              <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</span>
-            </div>`;
-          }
-          return `<div class="collapsed-thumb collapsed-thumb-round" style="background:${gradientFor(a.name)}"><span class="collapsed-thumb-ph">${initials(a.name)}</span></div>`;
-        }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
-        // Update header title
-        const titleDiscover = document.getElementById('hdr-title-discover');
-        if (titleDiscover) titleDiscover.textContent = `🔭 Ontdek Artiesten · ${filtered.length} artiesten`;
-      }
-    } catch {}
-  })();
-
-  setupLazyLoad(document.getElementById('sec-discover-content'), () => {
-    const myTarget = document.getElementById('sec-discover-content');
-    return runWithSection(myTarget, loadDiscover);
-  });
-
-  // 5. Setup collapsible sections
-  setupSectionToggle('recs', 'recs');
-  setupSectionToggle('releases', 'releases');
-  setupSectionToggle('discover', 'discover');
-}
-
-// ── Composiet loader: Bibliotheek sub-tab wisselen ──────────────────────────
-async function switchBibSubTab(subTab) {
-  bibSubTab = subTab;
-  const bibContent = document.getElementById('bib-sub-content');
-  const bibToolbar = document.getElementById('bib-subtoolbar');
-  if (!bibContent) return;
-
-  document.querySelectorAll('.bib-tab').forEach(b =>
-    b.classList.toggle('active', b.dataset.bibtab === subTab));
-
-  if (bibToolbar) {
-    if (subTab === 'collectie') {
-      bibToolbar.innerHTML = `
+      </details>`),a+="</div>"}b(a)}async function Ke(e){s.bibSubTab=e;let t=document.getElementById("bib-sub-content"),a=document.getElementById("bib-subtoolbar");if(!t)return;document.querySelectorAll(".bib-tab").forEach(n=>n.classList.toggle("active",n.dataset.bibtab===e)),a&&(e==="collectie"?(a.innerHTML=`
         <div class="inline-toolbar" style="margin-bottom:12px">
           <input class="plib-search" id="plib-search-bib" type="text"
-            placeholder="🔍  Zoek artiest of album…" autocomplete="off" style="flex:1;min-width:0">
-          <button class="tool-btn" id="btn-sync-plex-bib">↻ Sync Plex</button>
-        </div>`;
-      document.getElementById('plib-search-bib')?.addEventListener('input', e => {
-        if (!plexLibData) return;
-        bibContent.innerHTML = buildPlexLibraryHtml(plexLibData, e.target.value);
-      });
-      document.getElementById('btn-sync-plex-bib')?.addEventListener('click', async () => {
-        const btn = document.getElementById('btn-sync-plex-bib');
-        const orig = btn.textContent;
-        btn.disabled = true; btn.textContent = '↻ Bezig…';
-        try {
-          await fetch('/api/plex/refresh', { method: 'POST' });
-          await loadPlexStatus();
-          plexLibData = null;
-          const myTarget = bibContent;
-          sectionContainerEl = myTarget;
-          await loadPlexLibrary();
-          if (sectionContainerEl === myTarget) sectionContainerEl = null;
-        } catch (e) {}
-        finally { btn.disabled = false; btn.textContent = orig; }
-      });
-    } else if (subTab === 'gaten') {
-      bibToolbar.innerHTML = `
+            placeholder="\u{1F50D}  Zoek artiest of album\u2026" autocomplete="off" style="flex:1;min-width:0">
+          <button class="tool-btn" id="btn-sync-plex-bib">\u21BB Sync Plex</button>
+        </div>`,document.getElementById("plib-search-bib")?.addEventListener("input",n=>{s.plexLibData&&(t.innerHTML=me(s.plexLibData,n.target.value))}),document.getElementById("btn-sync-plex-bib")?.addEventListener("click",async()=>{let n=document.getElementById("btn-sync-plex-bib"),d=n.textContent;n.disabled=!0,n.textContent="\u21BB Bezig\u2026";try{await fetch("/api/plex/refresh",{method:"POST"}),await H(),s.plexLibData=null;let c=t;s.sectionContainerEl=c,await te(),s.sectionContainerEl===c&&(s.sectionContainerEl=null)}catch{}finally{n.disabled=!1,n.textContent=d}})):e==="gaten"?(a.innerHTML=`
         <div class="inline-toolbar" style="margin-bottom:12px">
-          <button class="tool-btn${gapsSort==='missing'?' sel-def':''}" data-gsort="missing">Meest ontbrekend</button>
-          <button class="tool-btn${gapsSort==='name'?' sel-def':''}" data-gsort="name">A–Z</button>
+          <button class="tool-btn${s.gapsSort==="missing"?" sel-def":""}" data-gsort="missing">Meest ontbrekend</button>
+          <button class="tool-btn${s.gapsSort==="name"?" sel-def":""}" data-gsort="name">A\u2013Z</button>
           <span class="toolbar-sep"></span>
-          <button class="tool-btn refresh-btn" id="btn-ref-gaps-bib">↻ Vernieuwen</button>
-        </div>`;
-      document.getElementById('btn-ref-gaps-bib')?.addEventListener('click', async () => {
-        lastGaps = null;
-        await fetch('/api/gaps/refresh', { method: 'POST' });
-        const myTarget = document.getElementById('bib-sub-content');
-        sectionContainerEl = myTarget;
-        await loadGaps();
-        if (sectionContainerEl === myTarget) sectionContainerEl = null;
-      });
-    } else {
-      bibToolbar.innerHTML = '';
-    }
-  }
-
-  const myTarget = bibContent;
-  sectionContainerEl = myTarget;
-  try {
-    if (subTab === 'collectie') {
-      currentTab = 'plexlib';
-      await loadPlexLibrary();
-    } else if (subTab === 'gaten') {
-      currentTab = 'gaps';
-      await loadGaps();
-    } else if (subTab === 'lijst') {
-      currentTab = 'wishlist';
-      await loadWishlist();
-    }
-  } finally {
-    if (sectionContainerEl === myTarget) sectionContainerEl = null;
-  }
-}
-
-// ── Composiet loader: Bibliotheek ───────────────────────────────────────────
-async function loadBibliotheek() {
-  currentTab = 'plexlib';
-  hideTidarrUI();
-  stopTidarrQueuePolling();
-
-  contentEl.innerHTML = `
+          <button class="tool-btn refresh-btn" id="btn-ref-gaps-bib">\u21BB Vernieuwen</button>
+        </div>`,document.getElementById("btn-ref-gaps-bib")?.addEventListener("click",async()=>{s.lastGaps=null,await fetch("/api/gaps/refresh",{method:"POST"});let n=document.getElementById("bib-sub-content");s.sectionContainerEl=n,await _(),s.sectionContainerEl===n&&(s.sectionContainerEl=null)})):a.innerHTML="");let i=t;s.sectionContainerEl=i;try{e==="collectie"?(s.currentTab="plexlib",await te()):e==="gaten"?(s.currentTab="gaps",await _()):e==="lijst"&&(s.currentTab="wishlist",await K())}finally{s.sectionContainerEl===i&&(s.sectionContainerEl=null)}}async function Ce(){s.currentTab="plexlib",A(),I.innerHTML=`
     <div class="bib-layout">
       <div class="bib-strips-wrap">
         <div class="scroll-strip">
-          <div class="strip-label">Top artiesten <span class="strip-period">(${periodLabel(currentPeriod)})</span></div>
+          <div class="strip-label">Top artiesten <span class="strip-period">(${W(s.currentPeriod)})</span></div>
           <div class="strip-body" id="strip-artists-body">
             <div class="loading"><div class="spinner"></div></div>
           </div>
         </div>
         <div class="scroll-strip" style="margin-top:16px">
-          <div class="strip-label">Top nummers <span class="strip-period">(${periodLabel(currentPeriod)})</span></div>
+          <div class="strip-label">Top nummers <span class="strip-period">(${W(s.currentPeriod)})</span></div>
           <div class="strip-body" id="strip-tracks-body">
             <div class="loading"><div class="spinner"></div></div>
           </div>
@@ -2440,9 +410,9 @@ async function loadBibliotheek() {
       </div>
 
       <div class="bib-subtabs" id="bib-subtabs">
-        <button class="bib-tab${bibSubTab==='collectie'?' active':''}" data-bibtab="collectie">Collectie</button>
-        <button class="bib-tab${bibSubTab==='gaten'?' active':''}" data-bibtab="gaten">Gaten <span class="bib-tab-badge" id="badge-gaps-bib"></span></button>
-        <button class="bib-tab${bibSubTab==='lijst'?' active':''}" data-bibtab="lijst">Lijst</button>
+        <button class="bib-tab${s.bibSubTab==="collectie"?" active":""}" data-bibtab="collectie">Collectie</button>
+        <button class="bib-tab${s.bibSubTab==="gaten"?" active":""}" data-bibtab="gaten">Gaten <span class="bib-tab-badge" id="badge-gaps-bib"></span></button>
+        <button class="bib-tab${s.bibSubTab==="lijst"?" active":""}" data-bibtab="lijst">Lijst</button>
       </div>
 
       <div id="bib-subtoolbar"></div>
@@ -2458,671 +428,19 @@ async function loadBibliotheek() {
           <div class="loading"><div class="spinner"></div>Laden...</div>
         </div>
       </div>
-    </div>`;
-
-  contentEl.style.opacity = '1';
-  contentEl.style.transform = '';
-
-  // Badges synchroniseren
-  const gapsBibBadge = document.getElementById('badge-gaps-bib');
-  const mainGapsBadge = document.getElementById('badge-gaps');
-  if (gapsBibBadge && mainGapsBadge) gapsBibBadge.textContent = mainGapsBadge.textContent;
-
-  // Sub-tab klik-handlers
-  document.querySelectorAll('.bib-tab').forEach(btn => {
-    btn.addEventListener('click', () => switchBibSubTab(btn.dataset.bibtab));
-  });
-
-  // Strips laden (sequentieel om sectionContainerEl-conflict te vermijden)
-  {
-    const myTarget = document.getElementById('strip-artists-body');
-    sectionContainerEl = myTarget;
-    await loadTopArtists(currentPeriod);
-    if (sectionContainerEl === myTarget) sectionContainerEl = null;
-  }
-
-  {
-    const myTarget = document.getElementById('strip-tracks-body');
-    sectionContainerEl = myTarget;
-    await loadTopTracks(currentPeriod);
-    if (sectionContainerEl === myTarget) sectionContainerEl = null;
-  }
-
-  // Initieel sub-tab laden
-  await switchBibSubTab(bibSubTab);
-
-  // Stats lazy-loaden — via mutex om conflict met strip-loads te voorkomen
-  setupLazyLoad(document.getElementById('bib-stats-content'), () => {
-    const myTarget = document.getElementById('bib-stats-content');
-    return runWithSection(myTarget, loadStats);
-  });
-}
-
-// ── Composiet loader: Downloads ─────────────────────────────────────────────
-function loadDownloads() {
-  currentTab = 'tidal';
-  hideTidarrUI();
-  document.getElementById('tb-tidal')?.classList.add('visible');
-  loadTidal();
-}
-
-const tabLoaders = {
-  // ── Nieuwe 4-tab navigatie ────────────────────────────────────────────────
-  nu:          () => loadNu(),
-  ontdek:      () => loadOntdek(),
-  bibliotheek: () => loadBibliotheek(),
-  downloads:   () => loadDownloads(),
-  // ── Backward-compat (voor 'r' shortcut en sub-tab loaders) ───────────────
-  discover:    () => loadDiscover(),
-  gaps:        () => loadGaps(),
-  recent:      () => loadRecent(),
-  recs:        () => loadRecs(),
-  releases:    () => loadReleases(),
-  topartists:  () => loadTopArtists(currentPeriod),
-  toptracks:   () => loadTopTracks(currentPeriod),
-  loved:       () => loadLoved(),
-  stats:       () => loadStats(),
-  wishlist:    () => loadWishlist(),
-  plexlib:     () => loadPlexLibrary(),
-  tidal:       () => loadTidal(),
-  'tidarr-ui': () => loadTidarrUI()
-};
-
-// ── Tidarr UI (iframe) ─────────────────────────────────────────────────────
-function loadTidarrUI() {
-  const iframe  = document.getElementById('tidarr-iframe');
-  const wrap    = document.getElementById('tidarr-ui-wrap');
-  const content = document.getElementById('content');
-  wrap.style.display    = 'flex';
-  content.style.display = 'none';
-  // Laad de iframe de eerste keer dat de tab wordt geopend
-  if (!iframe.dataset.loaded) {
-    iframe.src          = iframe.dataset.src;
-    iframe.dataset.loaded = '1';
-  }
-}
-
-function hideTidarrUI() {
-  document.getElementById('tidarr-ui-wrap').style.display = 'none';
-  document.getElementById('content').style.display        = '';
-}
-
-document.getElementById('btn-tidarr-reload')?.addEventListener('click', () => {
-  const iframe = document.getElementById('tidarr-iframe');
-  iframe.src = iframe.dataset.src;
-});
-
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    const allTabs = document.querySelectorAll('.tab');
-    const currentTabEl = document.querySelector('.tab.active');
-    const oldIndex = Array.from(allTabs).indexOf(currentTabEl);
-    const newIndex = Array.from(allTabs).indexOf(btn);
-    const direction = newIndex > oldIndex ? 'rtl' : 'ltr'; // right-to-left of left-to-right
-
-    // Set CSS variable voor directionele animatie
-    document.documentElement.style.setProperty('--tab-direction', direction === 'ltr' ? '-1' : '1');
-
-    allTabs.forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    currentMainTab = tab;
-
-    // Alle externe toolbars verbergen; composiet-tabs beheren hun eigen inline toolbars
-    ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
-     'tb-gaps','tb-plexlib','tb-tidarr-ui'].forEach(id =>
-      document.getElementById(id)?.classList.remove('visible'));
-
-    // Tidal-toolbar alleen tonen voor Downloads-tab
-    document.getElementById('tb-tidal')?.classList.toggle('visible', tab === 'downloads');
-
-    // Tidarr UI verbergen tenzij in Downloads-context
-    if (tab !== 'downloads') hideTidarrUI();
-    if (tab !== 'downloads') stopTidarrQueuePolling();
-
-    // Gebruik View Transitions API als beschikbaar
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        tabLoaders[tab]?.();
-      }).finished.catch(() => {});
-    } else {
-      tabLoaders[tab]?.();
-    }
-  });
-});
-
-document.querySelectorAll('[data-period]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    currentPeriod = btn.dataset.period;
-    tabLoaders[currentTab]?.();
-  });
-});
-
-document.querySelectorAll('[data-filter]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
-    recsFilter = btn.dataset.filter;
-    btn.classList.add(recsFilter === 'all' ? 'sel-def' : recsFilter === 'new' ? 'sel-new' : 'sel-plex');
-    applyRecsFilter();
-  });
-});
-
-document.querySelectorAll('[data-dfilter]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
-    discFilter = btn.dataset.dfilter;
-    btn.classList.add(discFilter === 'all' ? 'sel-def' : discFilter === 'new' ? 'sel-new' : 'sel-miss');
-    renderDiscover();
-  });
-});
-
-document.querySelectorAll('[data-gsort]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    gapsSort = btn.dataset.gsort;
-    renderGaps();
-  });
-});
-
-document.querySelectorAll('[data-rtype]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    releasesFilter = btn.dataset.rtype;
-    renderReleases();
-  });
-});
-
-// STAP 2: Sorteer-knoppen voor releases
-document.querySelectorAll('[data-rsort]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    releasesSort = btn.dataset.rsort;
-    renderReleases();
-  });
-});
-
-document.getElementById('btn-refresh-releases').addEventListener('click', async () => {
-  lastReleases = null;
-  await fetch('/api/releases/refresh', { method: 'POST' });
-  loadReleases();
-});
-
-document.getElementById('btn-refresh-discover').addEventListener('click', async () => {
-  lastDiscover = null;
-  await fetch('/api/discover/refresh', { method: 'POST' });
-  loadDiscover();
-});
-
-document.getElementById('btn-refresh-gaps').addEventListener('click', async () => {
-  lastGaps = null;
-  await fetch('/api/gaps/refresh', { method: 'POST' });
-  loadGaps();
-});
-
-// ── Plex bibliotheek: live zoeken ─────────────────────────────────────────
-document.getElementById('plib-search').addEventListener('input', e => {
-  if (!plexLibData || currentTab !== 'plexlib') return;
-  contentEl.innerHTML = buildPlexLibraryHtml(plexLibData, e.target.value);
-});
-
-// ── Plex sync knop in toolbar ─────────────────────────────────────────────
-document.getElementById('btn-sync-plex').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-sync-plex');
-  const orig = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '↻ Bezig…';
-  try {
-    await fetch('/api/plex/refresh', { method: 'POST' });
-    await loadPlexStatus();
-    plexLibData = null;
-    if (currentTab === 'plexlib') await loadPlexLibrary();
-  } catch (e) { /* stil falen */ }
-  finally {
-    btn.disabled = false;
-    btn.textContent = orig;
-  }
-});
-
-// ── Plex refresh-knop in de pill ──────────────────────────────────────────
-document.getElementById('plex-refresh-btn').addEventListener('click', async () => {
-  const btn = document.getElementById('plex-refresh-btn');
-  btn.classList.add('spinning');
-  btn.disabled = true;
-  try {
-    await fetch('/api/plex/refresh', { method: 'POST' });
-    await loadPlexStatus();
-    plexLibData = null; // forceer verse load volgende keer de tab wordt geopend
-  } catch (e) { /* stil falen */ }
-  finally {
-    btn.classList.remove('spinning');
-    btn.disabled = false;
-  }
-});
-
-// ── Globale event delegation ───────────────────────────────────────────────
-document.addEventListener('click', async e => {
-  // Play-knop → audio preview
-  const playBtn = e.target.closest('.play-btn');
-  if (playBtn) {
-    e.stopPropagation();
-    playPreview(playBtn, playBtn.dataset.artist, playBtn.dataset.track);
-    return;
-  }
-
-  // Discover album-sectie toggle (knop of kaart-klik, maar NIET op artiest-link/bookmark)
-  const discToggleBtn = e.target.closest('.disc-toggle-btn');
-  if (discToggleBtn) {
-    e.stopPropagation();
-    const sectionId = discToggleBtn.dataset.discId;
-    const section = document.getElementById(sectionId);
-    if (section) {
-      const isCollapsed = section.classList.toggle('collapsed');
-      // Sync alle toggle-knoppen en pas tekst aan
-      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
-        b.classList.toggle('expanded', !isCollapsed);
-        b.classList.toggle('collapsed', isCollapsed);
-        const n = parseInt(b.dataset.albumCount, 10) || 0;
-        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
-        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
-      });
-    }
-    return;
-  }
-
-  // Klik op discover-kaart zelf (niet op artiest-link, bookmark of toggle)
-  const discCard = e.target.closest('.discover-card-toggle');
-  if (discCard && !e.target.closest('.artist-link') && !e.target.closest('.bookmark-btn') && !e.target.closest('.disc-toggle-btn')) {
-    const sectionId = discCard.dataset.discId;
-    const section = document.getElementById(sectionId);
-    if (section) {
-      const isCollapsed = section.classList.toggle('collapsed');
-      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
-        b.classList.toggle('expanded', !isCollapsed);
-        b.classList.toggle('collapsed', isCollapsed);
-        const n = parseInt(b.dataset.albumCount, 10) || 0;
-        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
-        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
-      });
-    }
-    return;
-  }
-
-  // Artiest-link → open panel
-  const link = e.target.closest('[data-artist]');
-  if (link?.dataset.artist && !link.classList.contains('bookmark-btn')) {
-    // Skip search result items (handled separately)
-    if (link.classList.contains('search-result-item')) {
-      document.getElementById('search-results').classList.remove('open');
-      document.getElementById('search-input').value = '';
-    }
-    openArtistPanel(link.dataset.artist);
-    return;
-  }
-
-  // Bookmark toggle
-  const bBtn = e.target.closest('.bookmark-btn');
-  if (bBtn) {
-    e.stopPropagation();
-    const { btype, bname, bartist, bimage } = bBtn.dataset;
-    const added = await toggleWishlist(btype, bname, bartist, bimage);
-    bBtn.classList.toggle('saved', added);
-    bBtn.title = added ? 'Verwijder uit lijst' : 'Sla op in lijst';
-    // Sync bookmark buttons elsewhere that have same key
-    document.querySelectorAll(`.bookmark-btn[data-bname="${CSS.escape(bname)}"][data-btype="${btype}"]`).forEach(b => {
-      b.classList.toggle('saved', added);
-    });
-    return;
-  }
-
-  // Verlanglijst verwijderen
-  const wRemove = e.target.closest('.wish-remove[data-wid]');
-  if (wRemove) {
-    await fetch(`/api/wishlist/${wRemove.dataset.wid}`, { method: 'DELETE' });
-    wishlistMap.forEach((v, k) => { if (String(v) === wRemove.dataset.wid) wishlistMap.delete(k); });
-    updateWishlistBadge();
-    loadWishlist();
-    return;
-  }
-
-  // Soortgelijke artiest chip → nieuwe panel
-  const chip = e.target.closest('.panel-similar-chip[data-artist]');
-  if (chip) {
-    openArtistPanel(chip.dataset.artist);
-    return;
-  }
-
-  // Tidarr: download-knop (vanuit Gaps, Discover, Tidal tab)
-  const dlBtn = e.target.closest('.download-btn, .tidal-dl-btn');
-  if (dlBtn) {
-    e.stopPropagation();
-    if (dlBtn.classList.contains('tidal-dl-btn')) {
-      const url = dlBtn.dataset.dlurl;
-      if (!url) return;
-      dlBtn.disabled = true;
-      const orig = dlBtn.textContent;
-      dlBtn.textContent = '…';
-      try {
-        const res  = await fetch('/api/tidarr/download', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ url })
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
-        dlBtn.textContent = '✓ Toegevoegd';
-        dlBtn.classList.add('downloaded');
-        refreshTidarrQueueBadge();
-      } catch (err) {
-        alert('Downloaden mislukt: ' + err.message);
-        dlBtn.textContent = orig;
-        dlBtn.disabled = false;
-      }
-      return;
-    }
-    const { dlartist, dlalbum } = dlBtn.dataset;
-    await triggerTidarrDownload(dlartist, dlalbum, dlBtn);
-    return;
-  }
-
-  // Tidarr: item uit queue verwijderen
-  const qRemove = e.target.closest('.q-remove[data-qid]');
-  if (qRemove) {
-    e.stopPropagation();
-    const id = qRemove.dataset.qid;
-    try {
-      await fetch('/api/tidarr/queue/' + encodeURIComponent(id), { method: 'DELETE' });
-    } catch (err) { alert('Verwijderen mislukt: ' + err.message); }
-    return;
-  }
-
-  // Downloads: item uit geschiedenis verwijderen
-  const dlRemove = e.target.closest('.q-remove[data-dlid]');
-  if (dlRemove) {
-    e.stopPropagation();
-    const id = dlRemove.dataset.dlid;
-    try {
-      await fetch(`/api/downloads/${id}`, { method: 'DELETE' });
-      dlRemove.closest('.q-row')?.remove();
-    } catch (err) { alert('Verwijderen mislukt: ' + err.message); }
-    return;
-  }
-
-  // ── Inline toolbar: recs-filter ───────────────────────────────────────────
-  const inlineFilter = e.target.closest('.inline-toolbar [data-filter]');
-  if (inlineFilter) {
-    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
-    recsFilter = inlineFilter.dataset.filter;
-    inlineFilter.classList.add(recsFilter==='all'?'sel-def':recsFilter==='new'?'sel-new':'sel-plex');
-    applyRecsFilter();
-    return;
-  }
-
-  // ── Inline toolbar: releases type-filter ──────────────────────────────────
-  const inlineRtype = e.target.closest('.inline-toolbar [data-rtype]');
-  if (inlineRtype) {
-    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
-    releasesFilter = inlineRtype.dataset.rtype;
-    inlineRtype.classList.add('sel-def');
-    const secRel = document.getElementById('sec-releases-content');
-    if (secRel && currentMainTab === 'ontdek') {
-      const myTarget = secRel;
-      sectionContainerEl = myTarget;
-      renderReleases();
-      if (sectionContainerEl === myTarget) sectionContainerEl = null;
-    } else { renderReleases(); }
-    return;
-  }
-
-  // ── Inline toolbar: releases sortering ────────────────────────────────────
-  const inlineRsort = e.target.closest('.inline-toolbar [data-rsort]');
-  if (inlineRsort) {
-    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
-    releasesSort = inlineRsort.dataset.rsort;
-    inlineRsort.classList.add('sel-def');
-    const secRel = document.getElementById('sec-releases-content');
-    if (secRel && currentMainTab === 'ontdek') {
-      const myTarget = secRel;
-      sectionContainerEl = myTarget;
-      renderReleases();
-      if (sectionContainerEl === myTarget) sectionContainerEl = null;
-    } else { renderReleases(); }
-    return;
-  }
-
-  // ── Inline toolbar: discover-filter ───────────────────────────────────────
-  const inlineDfilter = e.target.closest('.inline-toolbar [data-dfilter]');
-  if (inlineDfilter) {
-    document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
-    discFilter = inlineDfilter.dataset.dfilter;
-    inlineDfilter.classList.add(discFilter==='all'?'sel-def':discFilter==='new'?'sel-new':'sel-miss');
-    const secDisc = document.getElementById('sec-discover-content');
-    if (secDisc && currentMainTab === 'ontdek') {
-      const myTarget = secDisc;
-      sectionContainerEl = myTarget;
-      renderDiscover();
-      if (sectionContainerEl === myTarget) sectionContainerEl = null;
-    } else { renderDiscover(); }
-    return;
-  }
-
-  // ── Inline toolbar: gaps-sortering (Bibliotheek) ───────────────────────────
-  const inlineGsort = e.target.closest('.inline-toolbar [data-gsort]');
-  if (inlineGsort) {
-    document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
-    gapsSort = inlineGsort.dataset.gsort;
-    inlineGsort.classList.add('sel-def');
-    const secGaps = document.getElementById('bib-sub-content');
-    if (secGaps && currentMainTab === 'bibliotheek') {
-      const myTarget = secGaps;
-      sectionContainerEl = myTarget;
-      renderGaps();
-      if (sectionContainerEl === myTarget) sectionContainerEl = null;
-    } else { renderGaps(); }
-    return;
-  }
-
-  // ── Inline mood-knoppen (Ontdek) ───────────────────────────────────────────
-  const inlineMoodBtn = e.target.closest('.sec-mood-block [data-mood]');
-  if (inlineMoodBtn) {
-    const mood = inlineMoodBtn.dataset.mood;
-    if (activeMood === mood) {
-      activeMood = null;
-      document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood', 'loading'));
-      clearSpotifyRecs();
-      loadOntdek(); // herbouw zonder clear-knop
-      return;
-    }
-    activeMood = mood;
-    document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood', 'loading'));
-    inlineMoodBtn.classList.add('sel-mood');
-    // Voeg clear-knop toe als die er nog niet is
-    const itb = inlineMoodBtn.closest('.inline-toolbar');
-    if (itb && !document.getElementById('btn-clear-mood-inline')) {
-      const sep = document.createElement('span'); sep.className = 'toolbar-sep';
-      const clr = document.createElement('button'); clr.className = 'tool-btn';
-      clr.id = 'btn-clear-mood-inline'; clr.textContent = '✕ Wis mood';
-      clr.addEventListener('click', () => {
-        activeMood = null;
-        document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood','loading'));
-        clearSpotifyRecs(); loadOntdek();
-      });
-      itb.appendChild(sep); itb.appendChild(clr);
-    }
-    loadSpotifyRecs(mood);
-    return;
-  }
-
-  // Tidal: view-knop (zoeken / queue / geschiedenis / tidarr)
-  const tvBtn = e.target.closest('[data-tidal-view]');
-  if (tvBtn) {
-    const view = tvBtn.dataset.tidalView;
-    if (view === 'tidarr') {
-      document.getElementById('tb-tidal')?.classList.remove('visible');
-      document.getElementById('tb-tidarr-ui')?.classList.add('visible');
-      loadTidarrUI();
-    } else {
-      hideTidarrUI();
-      document.getElementById('tb-tidal')?.classList.add('visible');
-      document.getElementById('tb-tidarr-ui')?.classList.remove('visible');
-      setTidalView(view);
-    }
-    return;
-  }
-
-  // Panel overlay backdrop click → sluiten
-  if (e.target === document.getElementById('panel-overlay')) {
-    closeArtistPanel();
-    return;
-  }
-});
-
-// Tidal zoekbalk input
-document.getElementById('tidal-search')?.addEventListener('input', e => {
-  clearTimeout(tidalSearchTimeout);
-  const q = e.target.value.trim();
-  tidalSearchTimeout = setTimeout(() => {
-    if (currentTab === 'tidal' && tidalView === 'search') renderTidalSearch(q);
-  }, 400);
-});
-
-document.getElementById('panel-close').addEventListener('click', closeArtistPanel);
-
-// STAP 13.2: Keyboard shortcuts
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    closeArtistPanel();
-    document.getElementById('search-results').classList.remove('open');
-    return;
-  }
-
-  // Niet triggeren als in een invoerveld
-  const inInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-
-  // '/' → focus zoekbalk
-  if (e.key === '/' && !inInput) {
-    e.preventDefault();
-    document.getElementById('search-input').focus();
-    return;
-  }
-
-  // 'r' → refresh huidige tab (composiet tabs herladen als geheel)
-  if (e.key === 'r' && !inInput) {
-    if (currentMainTab === 'ontdek') loadOntdek();
-    else if (currentMainTab === 'bibliotheek') loadBibliotheek();
-    else tabLoaders[currentTab]?.();
-    return;
-  }
-
-  // Cijfertoetsen 1–4 → activeer één van de 4 hoofdtabs
-  if (!inInput && /^[1-4]$/.test(e.key)) {
-    const tabs = document.querySelectorAll('.tab');
-    const idx  = parseInt(e.key) - 1;
-    if (tabs[idx]) tabs[idx].click();
-    return;
-  }
-});
-
-// STAP 7: Bottom nav click handlers
-document.querySelectorAll('.bnav-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    // Sync met de gewone tabs
-    const desktopTab = document.querySelector(`.tab[data-tab="${tab}"]`);
-    if (desktopTab) {
-      if (document.startViewTransition) {
-        document.startViewTransition(() => {
-          desktopTab.click();
-        }).finished.catch(() => {});
-      } else {
-        desktopTab.click();
-      }
-    }
-    // Update bottom nav active state
-    document.querySelectorAll('.bnav-btn').forEach(b => b.classList.toggle('active', b === btn));
-  });
-});
-
-// Sync bottom nav wanneer desktop tab wordt geklikt
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.bnav-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tab);
-    });
-  });
-});
-
-// STAP 9: Dark/light mode toggle
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
-}
-
-(function initTheme() {
-  const saved = localStorage.getItem('theme');
-  if (saved) {
-    applyTheme(saved);
-  } else {
-    applyTheme('light');
-  }
-})();
-
-document.getElementById('theme-toggle')?.addEventListener('click', () => {
-  const current = document.documentElement.dataset.theme;
-  const next    = current === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  localStorage.setItem('theme', next);
-});
-
-// ── Download kwaliteit ─────────────────────────────────────────────────────
-const VALID_QUALITIES = ['max', 'high', 'normal', 'low'];
-
-function getDownloadQuality() {
-  return localStorage.getItem('downloadQuality') || 'high';
-}
-
-(function initQuality() {
-  const saved = getDownloadQuality();
-  const sel   = document.getElementById('download-quality');
-  if (sel && VALID_QUALITIES.includes(saved)) sel.value = saved;
-})();
-
-document.getElementById('download-quality')?.addEventListener('change', (e) => {
-  localStorage.setItem('downloadQuality', e.target.value);
-});
-
-// ── Gebruikersprofiel ──────────────────────────────────────────────────────
-async function loadUser() {
-  try {
-    const d = await apiFetch('/api/user');
-    const u = d.user;
-    const src = getImg(u.image, 'large');
-    const av = src
-      ? `<img class="user-avatar" src="${src}" alt="">`
-      : `<div class="user-avatar-ph">${(u.name||'U')[0].toUpperCase()}</div>`;
-    const year = new Date(parseInt(u.registered?.unixtime) * 1000).getFullYear();
-    document.getElementById('user-wrap').innerHTML = `
-      <div class="user-card">${av}
-        <div><div class="user-name">${esc(u.realname || u.name)}</div>
-        <div class="user-sub">${fmt(u.playcount)} scrobbles · lid sinds ${year}</div></div>
-      </div>`;
-  } catch (e) {}
-}
-
-// ── Init ───────────────────────────────────────────────────────────────────
-loadPlexStatus();
-loadPlexNP();
-loadUser();
-loadWishlistState();
-loadTidarrStatus();
-loadDownloadHistory();   // laad persistente download-geschiedenis voor groene vinkjes
-startTidarrSSE();        // real-time queue via SSE
-checkSpotifyStatus();    // toon mood-toolbar als SPOTIFY_CLIENT_ID aanwezig is
-loadNu();
-setInterval(loadPlexNP, 30_000);
+    </div>`,I.style.opacity="1",I.style.transform="";let e=document.getElementById("badge-gaps-bib"),t=document.getElementById("badge-gaps");e&&t&&(e.textContent=t.textContent),document.querySelectorAll(".bib-tab").forEach(a=>a.addEventListener("click",()=>Ke(a.dataset.bibtab)));{let a=document.getElementById("strip-artists-body");s.sectionContainerEl=a,await Se(s.currentPeriod),s.sectionContainerEl===a&&(s.sectionContainerEl=null)}{let a=document.getElementById("strip-tracks-body");s.sectionContainerEl=a,await Te(s.currentPeriod),s.sectionContainerEl===a&&(s.sectionContainerEl=null)}await Ke(s.bibSubTab),Z(document.getElementById("bib-stats-content"),()=>{let a=document.getElementById("bib-stats-content");return M(a,Be)})}function qe(e){let t=document.getElementById("panel-overlay"),a=document.getElementById("panel-content"),i=ie(e),n=()=>{a.innerHTML=`<div style="height:260px;background:var(--surface2)"></div>
+      <div class="panel-body"><div class="loading" style="padding:2rem 0"><div class="spinner"></div>Laden...</div></div>`,t.classList.add("open"),document.body.style.overflow="hidden"};document.startViewTransition?document.startViewTransition(n).finished.catch(()=>{}):n(),Promise.allSettled([f(`/api/artist/${encodeURIComponent(e)}/info`),f(`/api/artist/${encodeURIComponent(e)}/similar`)]).then(([d,c])=>{let l=d.status==="fulfilled"?d.value:{},r=c.status==="fulfilled"?c.value.similar||[]:[],u=l.image?`<img src="${o(l.image)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="panel-photo-ph" style="background:${g(e)};display:none">${m(e)}</div>`:`<div class="panel-photo-ph" style="background:${g(e)}">${m(e)}</div>`,v=[l.country?z(l.country)+" "+l.country:null,l.startYear?`Actief vanaf ${l.startYear}`:null,s.plexOk&&l.inPlex!==void 0?l.inPlex?"\u25B6 In Plex":"\u2726 Nieuw voor jou":null].filter(Boolean).join(" \xB7 "),y="";if(l.albums?.length){y='<div class="panel-section">Albums</div><div class="panel-albums">';for(let $ of l.albums){let x=$.image?`<img class="panel-album-img" src="${o($.image)}" alt="" loading="lazy" onerror="this.onerror=null;this.remove()">`:'<div class="panel-album-ph">\u266A</div>',C=s.plexOk&&$.inPlex?'<span class="badge plex" style="font-size:9px">\u25B6</span>':"";y+=`<div class="panel-album-row">${x}
+          <span class="panel-album-name">${o($.name)}</span>${C}${N(e,$.name,$.inPlex)}</div>`}y+="</div>"}let w="";if(r.length){w='<div class="panel-section">Vergelijkbare artiesten</div><div class="panel-similar">';for(let $ of r)w+=`<button class="panel-similar-chip artist-link" data-artist="${o($.name)}">${o($.name)}</button>`;w+="</div>"}a.innerHTML=`
+      <div class="panel-photo-wrap" style="view-transition-name: artist-${i}">${u}</div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div class="panel-artist-name">${o(e)}</div>
+          ${O("artist",e,"",l.image||"")}
+        </div>
+        ${v?`<div class="panel-meta">${o(v)}</div>`:""}
+        ${j(l.tags,6)}
+        ${y}
+        ${w}
+      </div>`})}function ve(){document.getElementById("panel-overlay").classList.remove("open"),document.body.style.overflow=""}var ge={nu:()=>pe(),ontdek:()=>Q(),bibliotheek:()=>Ce(),downloads:()=>We(),discover:()=>U(),gaps:()=>_(),recent:()=>Ie(),recs:()=>re(),releases:()=>V(),topartists:()=>Se(s.currentPeriod),toptracks:()=>Te(s.currentPeriod),loved:()=>et(),stats:()=>Be(),wishlist:()=>K(),plexlib:()=>te(),tidal:()=>Ee()};document.querySelectorAll(".tab").forEach(e=>{e.addEventListener("click",()=>{let t=e.dataset.tab,a=document.querySelectorAll(".tab"),i=document.querySelector(".tab.active"),n=Array.from(a).indexOf(i),c=Array.from(a).indexOf(e)>n?"rtl":"ltr";document.documentElement.style.setProperty("--tab-direction",c==="ltr"?"-1":"1"),a.forEach(l=>l.classList.remove("active")),e.classList.add("active"),s.currentMainTab=t,["tb-period","tb-recs","tb-mood","tb-releases","tb-discover","tb-gaps","tb-plexlib","tb-tidarr-ui"].forEach(l=>document.getElementById(l)?.classList.remove("visible")),document.getElementById("tb-tidal")?.classList.toggle("visible",t==="downloads"),t!=="downloads"&&A(),t!=="downloads"&&void 0,document.startViewTransition?document.startViewTransition(()=>{ge[t]?.()}).finished.catch(()=>{}):ge[t]?.()})});document.querySelectorAll("[data-period]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-period]").forEach(t=>t.classList.remove("sel-def")),e.classList.add("sel-def"),s.currentPeriod=e.dataset.period,ge[s.currentTab]?.()})});document.querySelectorAll("[data-filter]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-filter]").forEach(t=>t.classList.remove("sel-def","sel-new","sel-plex")),s.recsFilter=e.dataset.filter,e.classList.add(s.recsFilter==="all"?"sel-def":s.recsFilter==="new"?"sel-new":"sel-plex"),ce()})});document.querySelectorAll("[data-dfilter]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-dfilter]").forEach(t=>t.classList.remove("sel-def","sel-new","sel-miss")),s.discFilter=e.dataset.dfilter,e.classList.add(s.discFilter==="all"?"sel-def":s.discFilter==="new"?"sel-new":"sel-miss"),ee()})});document.querySelectorAll("[data-gsort]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-gsort]").forEach(t=>t.classList.remove("sel-def")),e.classList.add("sel-def"),s.gapsSort=e.dataset.gsort,se()})});document.querySelectorAll("[data-rtype]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-rtype]").forEach(t=>t.classList.remove("sel-def")),e.classList.add("sel-def"),s.releasesFilter=e.dataset.rtype,D()})});document.querySelectorAll("[data-rsort]").forEach(e=>{e.addEventListener("click",()=>{document.querySelectorAll("[data-rsort]").forEach(t=>t.classList.remove("sel-def")),e.classList.add("sel-def"),s.releasesSort=e.dataset.rsort,D()})});document.getElementById("btn-refresh-releases")?.addEventListener("click",async()=>{s.lastReleases=null,await fetch("/api/releases/refresh",{method:"POST"}),V()});document.getElementById("btn-refresh-discover")?.addEventListener("click",async()=>{s.lastDiscover=null,await fetch("/api/discover/refresh",{method:"POST"}),U()});document.getElementById("btn-refresh-gaps")?.addEventListener("click",async()=>{s.lastGaps=null,await fetch("/api/gaps/refresh",{method:"POST"}),_()});document.getElementById("plib-search")?.addEventListener("input",e=>{!s.plexLibData||s.currentTab!=="plexlib"||(I.innerHTML=me(s.plexLibData,e.target.value))});document.getElementById("btn-sync-plex")?.addEventListener("click",async()=>{let e=document.getElementById("btn-sync-plex"),t=e.textContent;e.disabled=!0,e.textContent="\u21BB Bezig\u2026";try{await fetch("/api/plex/refresh",{method:"POST"}),await H(),s.plexLibData=null,s.currentTab==="plexlib"&&await te()}catch{}finally{e.disabled=!1,e.textContent=t}});document.getElementById("plex-refresh-btn")?.addEventListener("click",async()=>{let e=document.getElementById("plex-refresh-btn");e.classList.add("spinning"),e.disabled=!0;try{await fetch("/api/plex/refresh",{method:"POST"}),await H(),s.plexLibData=null}catch{}finally{e.classList.remove("spinning"),e.disabled=!1}});document.getElementById("tidal-search")?.addEventListener("input",e=>{clearTimeout(s.tidalSearchTimeout);let t=e.target.value.trim();s.tidalSearchTimeout=setTimeout(()=>{s.currentTab==="tidal"&&s.tidalView==="search"&&we(t)},400)});document.getElementById("panel-close")?.addEventListener("click",ve);document.addEventListener("click",async e=>{let t=e.target.closest(".play-btn");if(t){e.stopPropagation(),Xe(t,t.dataset.artist,t.dataset.track);return}let a=e.target.closest(".disc-toggle-btn");if(a){e.stopPropagation();let p=a.dataset.discId,h=document.getElementById(p);if(h){let E=h.classList.toggle("collapsed");h.querySelectorAll(".disc-toggle-btn").forEach(k=>{k.classList.toggle("expanded",!E),k.classList.toggle("collapsed",E);let L=parseInt(k.dataset.albumCount,10)||0,q=`${L} album${L!==1?"s":""}`;k.textContent=E?`Toon ${q}`:q})}return}let i=e.target.closest(".discover-card-toggle");if(i&&!e.target.closest(".artist-link")&&!e.target.closest(".bookmark-btn")&&!e.target.closest(".disc-toggle-btn")){let p=i.dataset.discId,h=document.getElementById(p);if(h){let E=h.classList.toggle("collapsed");h.querySelectorAll(".disc-toggle-btn").forEach(k=>{k.classList.toggle("expanded",!E),k.classList.toggle("collapsed",E);let L=parseInt(k.dataset.albumCount,10)||0,q=`${L} album${L!==1?"s":""}`;k.textContent=E?`Toon ${q}`:q})}return}let n=e.target.closest("[data-artist]");if(n?.dataset.artist&&!n.classList.contains("bookmark-btn")){n.classList.contains("search-result-item")&&(document.getElementById("search-results").classList.remove("open"),document.getElementById("search-input").value=""),qe(n.dataset.artist);return}let d=e.target.closest(".bookmark-btn");if(d){e.stopPropagation();let{btype:p,bname:h,bartist:E,bimage:k}=d.dataset,L=await He(p,h,E,k);d.classList.toggle("saved",L),d.title=L?"Verwijder uit lijst":"Sla op in lijst",document.querySelectorAll(`.bookmark-btn[data-bname="${CSS.escape(h)}"][data-btype="${p}"]`).forEach(q=>{q.classList.toggle("saved",L)});return}let c=e.target.closest(".wish-remove[data-wid]");if(c){await fetch(`/api/wishlist/${c.dataset.wid}`,{method:"DELETE"}),s.wishlistMap.forEach((p,h)=>{String(p)===c.dataset.wid&&s.wishlistMap.delete(h)}),X(),K();return}let l=e.target.closest(".panel-similar-chip[data-artist]");if(l){qe(l.dataset.artist);return}let r=e.target.closest(".download-btn, .tidal-dl-btn");if(r){if(e.stopPropagation(),r.classList.contains("tidal-dl-btn")){let E=r.dataset.dlurl;if(!E)return;r.disabled=!0;let k=r.textContent;r.textContent="\u2026";try{let L=await fetch("/api/tidarr/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:E})}),q=await L.json();if(!L.ok||!q.ok)throw new Error(q.error||"download mislukt");r.textContent="\u2713 Toegevoegd",r.classList.add("downloaded"),ne()}catch(L){alert("Downloaden mislukt: "+L.message),r.textContent=k,r.disabled=!1}return}let{dlartist:p,dlalbum:h}=r.dataset;await _e(p,h,r);return}let u=e.target.closest(".q-remove[data-qid]");if(u){e.stopPropagation();try{await fetch("/api/tidarr/queue/"+encodeURIComponent(u.dataset.qid),{method:"DELETE"})}catch(p){alert("Verwijderen mislukt: "+p.message)}return}let v=e.target.closest(".q-remove[data-dlid]");if(v){e.stopPropagation();try{await fetch(`/api/downloads/${v.dataset.dlid}`,{method:"DELETE"}),v.closest(".q-row")?.remove()}catch(p){alert("Verwijderen mislukt: "+p.message)}return}let y=e.target.closest(".inline-toolbar [data-filter]");if(y){document.querySelectorAll("[data-filter]").forEach(p=>p.classList.remove("sel-def","sel-new","sel-plex")),s.recsFilter=y.dataset.filter,y.classList.add(s.recsFilter==="all"?"sel-def":s.recsFilter==="new"?"sel-new":"sel-plex"),ce();return}let w=e.target.closest(".inline-toolbar [data-rtype]");if(w){document.querySelectorAll("[data-rtype]").forEach(h=>h.classList.remove("sel-def")),s.releasesFilter=w.dataset.rtype,w.classList.add("sel-def");let p=document.getElementById("sec-releases-content");p&&s.currentMainTab==="ontdek"?(s.sectionContainerEl=p,D(),s.sectionContainerEl===p&&(s.sectionContainerEl=null)):D();return}let $=e.target.closest(".inline-toolbar [data-rsort]");if($){document.querySelectorAll("[data-rsort]").forEach(h=>h.classList.remove("sel-def")),s.releasesSort=$.dataset.rsort,$.classList.add("sel-def");let p=document.getElementById("sec-releases-content");p&&s.currentMainTab==="ontdek"?(s.sectionContainerEl=p,D(),s.sectionContainerEl===p&&(s.sectionContainerEl=null)):D();return}let x=e.target.closest(".inline-toolbar [data-dfilter]");if(x){document.querySelectorAll("[data-dfilter]").forEach(h=>h.classList.remove("sel-def","sel-new","sel-miss")),s.discFilter=x.dataset.dfilter,x.classList.add(s.discFilter==="all"?"sel-def":s.discFilter==="new"?"sel-new":"sel-miss");let p=document.getElementById("sec-discover-content");p&&s.currentMainTab==="ontdek"?(s.sectionContainerEl=p,ee(),s.sectionContainerEl===p&&(s.sectionContainerEl=null)):ee();return}let C=e.target.closest(".inline-toolbar [data-gsort]");if(C){document.querySelectorAll("[data-gsort]").forEach(h=>h.classList.remove("sel-def")),s.gapsSort=C.dataset.gsort,C.classList.add("sel-def");let p=document.getElementById("bib-sub-content");p&&s.currentMainTab==="bibliotheek"?(s.sectionContainerEl=p,se(),s.sectionContainerEl===p&&(s.sectionContainerEl=null)):se();return}let R=e.target.closest(".sec-mood-block [data-mood]");if(R){let p=R.dataset.mood;if(s.activeMood===p){s.activeMood=null,document.querySelectorAll("[data-mood]").forEach(E=>E.classList.remove("sel-mood","loading")),G(),Q();return}s.activeMood=p,document.querySelectorAll("[data-mood]").forEach(E=>E.classList.remove("sel-mood","loading")),R.classList.add("sel-mood");let h=R.closest(".inline-toolbar");if(h&&!document.getElementById("btn-clear-mood-inline")){let E=document.createElement("span");E.className="toolbar-sep";let k=document.createElement("button");k.className="tool-btn",k.id="btn-clear-mood-inline",k.textContent="\u2715 Wis mood",k.addEventListener("click",()=>{s.activeMood=null,document.querySelectorAll("[data-mood]").forEach(L=>L.classList.remove("sel-mood","loading")),G(),Q()}),h.appendChild(E),h.appendChild(k)}de(p);return}let P=e.target.closest("[data-tidal-view]");if(P){let p=P.dataset.tidalView;p==="tidarr"?(document.getElementById("tb-tidal")?.classList.remove("visible"),document.getElementById("tb-tidarr-ui")?.classList.add("visible"),Ue()):(A(),document.getElementById("tb-tidal")?.classList.add("visible"),document.getElementById("tb-tidarr-ui")?.classList.remove("visible"),le(p));return}if(e.target===document.getElementById("panel-overlay")){ve();return}});document.addEventListener("keydown",e=>{if(e.key==="Escape"){ve(),document.getElementById("search-results").classList.remove("open");return}let t=["INPUT","TEXTAREA"].includes(document.activeElement?.tagName);if(e.key==="/"&&!t){e.preventDefault(),document.getElementById("search-input").focus();return}if(e.key==="r"&&!t){s.currentMainTab==="ontdek"?Q():s.currentMainTab==="bibliotheek"?Ce():ge[s.currentTab]?.();return}if(!t&&/^[1-4]$/.test(e.key)){let a=document.querySelectorAll(".tab"),i=parseInt(e.key)-1;a[i]&&a[i].click();return}});document.querySelectorAll(".bnav-btn").forEach(e=>{e.addEventListener("click",()=>{let t=e.dataset.tab,a=document.querySelector(`.tab[data-tab="${t}"]`);a&&(document.startViewTransition?document.startViewTransition(()=>{a.click()}).finished.catch(()=>{}):a.click()),document.querySelectorAll(".bnav-btn").forEach(i=>i.classList.toggle("active",i===e))})});document.querySelectorAll(".tab").forEach(e=>{e.addEventListener("click",()=>{let t=e.dataset.tab;document.querySelectorAll(".bnav-btn").forEach(a=>a.classList.toggle("active",a.dataset.tab===t))})});fe&&document.documentElement.setAttribute("data-reduce-motion","true");function tt(e){document.documentElement.dataset.theme=e;let t=document.getElementById("theme-toggle");t&&(t.textContent=e==="dark"?"\u2600\uFE0F":"\u{1F319}")}(function(){let t=localStorage.getItem("theme");tt(t||"light")})();document.getElementById("theme-toggle")?.addEventListener("click",()=>{let t=document.documentElement.dataset.theme==="dark"?"light":"dark";tt(t),localStorage.setItem("theme",t)});(function(){let t=localStorage.getItem("downloadQuality")||"high",a=document.getElementById("download-quality");a&&s.VALID_QUALITIES.includes(t)&&(a.value=t)})();document.getElementById("download-quality")?.addEventListener("change",e=>{localStorage.setItem("downloadQuality",e.target.value)});H();ue();je();ye();he();Re();oe();Je();pe();setInterval(ue,3e4);})();

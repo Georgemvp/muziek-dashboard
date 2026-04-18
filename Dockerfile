@@ -70,11 +70,18 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
-RUN npm install --production
+# Installeer inclusief devDependencies (esbuild) voor de build-stap
+RUN npm install
+
+# Bouw de frontend bundle (ES modules → gebundeld app.js)
+COPY public/ ./public/
+RUN npm run build
+
+# Verwijder devDependencies na het builden
+RUN npm prune --production
 
 COPY server.js db.js ./
 COPY services/         ./services/
-COPY public/           ./public/
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
