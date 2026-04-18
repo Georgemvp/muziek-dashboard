@@ -2225,18 +2225,89 @@ async function loadOntdek() {
     if (sectionContainerEl === myTarget) sectionContainerEl = null;
   }
 
-  // 2. Lazy-load releases en discover — via mutex om race condition op
+  // 2. Eager preview: haal releases data op en render alleen de collapsed-thumbs
+  (async () => {
+    try {
+      if (!lastReleases) {
+        const d = await apiFetch('/api/releases');
+        if (d.status === 'building') return;
+        lastReleases = d.releases || [];
+        newReleaseIds = new Set(d.newReleaseIds || []);
+        updateReleasesBadge(d.newCount || 0);
+      }
+      const previewEl = document.getElementById('sec-releases-preview');
+      if (previewEl && lastReleases.length) {
+        let filtered = lastReleases;
+        if (releasesFilter !== 'all') {
+          filtered = lastReleases.filter(r => (r.type || 'album').toLowerCase() === releasesFilter);
+        }
+        if (releasesSort === 'listening') {
+          filtered = [...filtered].sort((a, b) => (b.artistPlaycount || 0) - (a.artistPlaycount || 0) || new Date(b.releaseDate) - new Date(a.releaseDate));
+        } else {
+          filtered = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
+        }
+        const previewItems = filtered.slice(0, 8);
+        previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
+          if (r.image) {
+            return `<div class="collapsed-thumb">
+              <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
+            </div>`;
+          }
+          return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
+        }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
+        // Update header title
+        const titleReleases = document.getElementById('hdr-title-releases');
+        if (titleReleases) titleReleases.textContent = `💿 Nieuwe Releases · ${filtered.length} release${filtered.length !== 1 ? 's' : ''}`;
+      }
+    } catch {}
+  })();
+
+  // 3. Lazy-load releases en discover — via mutex om race condition op
   //    sectionContainerEl te voorkomen wanneer beide callbacks tegelijk vuren.
   setupLazyLoad(document.getElementById('sec-releases-content'), () => {
     const myTarget = document.getElementById('sec-releases-content');
     return runWithSection(myTarget, loadReleases);
   });
+  // 4. Eager preview: haal discover data op en render alleen de collapsed-thumbs
+  (async () => {
+    try {
+      if (!lastDiscover) {
+        const d = await apiFetch('/api/discover');
+        if (d.status === 'building') return;
+        lastDiscover = d;
+        if (d.plexConnected) plexOk = true;
+      }
+      const { artists } = lastDiscover;
+      if (!artists?.length) return;
+      let filtered = artists;
+      if (discFilter === 'new') filtered = artists.filter(a => !a.inPlex);
+      if (discFilter === 'partial') filtered = artists.filter(a => a.inPlex && a.missingCount > 0);
+      const previewEl = document.getElementById('sec-discover-preview');
+      if (previewEl && filtered.length) {
+        const previewItems = filtered.slice(0, 8);
+        previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(a => {
+          if (a.image) {
+            return `<div class="collapsed-thumb collapsed-thumb-round">
+              <img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</span>
+            </div>`;
+          }
+          return `<div class="collapsed-thumb collapsed-thumb-round" style="background:${gradientFor(a.name)}"><span class="collapsed-thumb-ph">${initials(a.name)}</span></div>`;
+        }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
+        // Update header title
+        const titleDiscover = document.getElementById('hdr-title-discover');
+        if (titleDiscover) titleDiscover.textContent = `🔭 Ontdek Artiesten · ${filtered.length} artiesten`;
+      }
+    } catch {}
+  })();
+
   setupLazyLoad(document.getElementById('sec-discover-content'), () => {
     const myTarget = document.getElementById('sec-discover-content');
     return runWithSection(myTarget, loadDiscover);
   });
 
-  // 3. Setup collapsible sections
+  // 5. Setup collapsible sections
   setupSectionToggle('recs', 'recs');
   setupSectionToggle('releases', 'releases');
   setupSectionToggle('discover', 'discover');
