@@ -207,23 +207,38 @@ async function apiFetch(url) {
 const contentEl = document.getElementById('content');
 function setContent(html, callback) {
   const target = sectionContainerEl || contentEl;
-  target.innerHTML = html;
-  if (!sectionContainerEl) {
-    contentEl.style.opacity = '0';
-    contentEl.style.transform = 'translateY(6px)';
-    requestAnimationFrame(() => {
-      void contentEl.offsetHeight; // force reflow
-      contentEl.style.opacity = '1';
-      contentEl.style.transform = '';
-      // STAP 6: Staggered fade-in voor grid-children
+
+  // Gebruik View Transitions API als beschikbaar
+  if (!sectionContainerEl && document.startViewTransition) {
+    document.startViewTransition(() => {
+      target.innerHTML = html;
+      // Staggered fade-in voor grid-children
       document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
         el.classList.add('stagger-in');
         el.style.animationDelay = `${i * 30}ms`;
       });
       if (callback) requestAnimationFrame(callback);
-    });
+    }).finished.catch(() => {});
   } else {
-    if (callback) callback();
+    target.innerHTML = html;
+    if (!sectionContainerEl) {
+      // Fallback voor browsers zonder View Transitions API
+      contentEl.style.opacity = '0';
+      contentEl.style.transform = 'translateY(6px)';
+      requestAnimationFrame(() => {
+        void contentEl.offsetHeight; // force reflow
+        contentEl.style.opacity = '1';
+        contentEl.style.transform = '';
+        // STAP 6: Staggered fade-in voor grid-children
+        document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
+          el.classList.add('stagger-in');
+          el.style.animationDelay = `${i * 30}ms`;
+        });
+        if (callback) requestAnimationFrame(callback);
+      });
+    } else {
+      if (callback) callback();
+    }
   }
 }
 const showError = msg => setContent(`<div class="error-box">⚠️ ${esc(msg)}</div>`);
@@ -436,14 +451,33 @@ async function loadPlexLibrary() {
   } catch (e) { showError(e.message); }
 }
 
+// ── Helper: zet artiesnaam om naar CSS-safe string ──
+function sanitizeArtistName(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 50);
+}
+
 // ── Artiest panel (5b) ─────────────────────────────────────────────────────
 function openArtistPanel(name) {
   const overlay  = document.getElementById('panel-overlay');
   const panelContent = document.getElementById('panel-content');
-  panelContent.innerHTML = `<div style="height:260px;background:var(--surface2)"></div>
-    <div class="panel-body"><div class="loading" style="padding:2rem 0"><div class="spinner"></div>Laden...</div></div>`;
-  overlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
+  const sanitized = sanitizeArtistName(name);
+
+  const doOpen = () => {
+    panelContent.innerHTML = `<div style="height:260px;background:var(--surface2)"></div>
+      <div class="panel-body"><div class="loading" style="padding:2rem 0"><div class="spinner"></div>Laden...</div></div>`;
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  if (document.startViewTransition) {
+    document.startViewTransition(doOpen).finished.catch(() => {});
+  } else {
+    doOpen();
+  }
 
   Promise.allSettled([
     apiFetch(`/api/artist/${encodeURIComponent(name)}/info`),
@@ -488,7 +522,7 @@ function openArtistPanel(name) {
     }
 
     panelContent.innerHTML = `
-      <div class="panel-photo-wrap">${photoHtml}</div>
+      <div class="panel-photo-wrap" style="view-transition-name: artist-${sanitized}">${photoHtml}</div>
       <div class="panel-body">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
           <div class="panel-artist-name">${esc(name)}</div>
@@ -624,7 +658,7 @@ async function loadTopArtists(period) {
         ? `<img src="${lfmImg}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
           + `<div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
         : `<div class="ag-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
-      html += `<div class="ag-card"><div class="ag-photo" id="agp-${i}">${photoHtml}</div>
+      html += `<div class="ag-card"><div class="ag-photo" id="agp-${i}" style="view-transition-name: artist-${sanitizeArtistName(a.name)}">${photoHtml}</div>
         <div class="ag-info"><div class="ag-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
         <div class="ag-plays">${fmt(a.playcount)} plays</div></div></div>`;
@@ -2342,7 +2376,14 @@ document.querySelectorAll('.tab').forEach(btn => {
     if (tab !== 'downloads') hideTidarrUI();
     if (tab !== 'downloads') stopTidarrQueuePolling();
 
-    tabLoaders[tab]?.();
+    // Gebruik View Transitions API als beschikbaar
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        tabLoaders[tab]?.();
+      }).finished.catch(() => {});
+    } else {
+      tabLoaders[tab]?.();
+    }
   });
 });
 
@@ -2773,7 +2814,15 @@ document.querySelectorAll('.bnav-btn').forEach(btn => {
     const tab = btn.dataset.tab;
     // Sync met de gewone tabs
     const desktopTab = document.querySelector(`.tab[data-tab="${tab}"]`);
-    if (desktopTab) desktopTab.click();
+    if (desktopTab) {
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          desktopTab.click();
+        }).finished.catch(() => {});
+      } else {
+        desktopTab.click();
+      }
+    }
     // Update bottom nav active state
     document.querySelectorAll('.bnav-btn').forEach(b => b.classList.toggle('active', b === btn));
   });
