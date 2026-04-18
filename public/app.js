@@ -2140,6 +2140,8 @@ async function loadOntdek() {
             <button class="tool-btn${recsFilter==='all'?' sel-def':''}" data-filter="all">Alle</button>
             <button class="tool-btn${recsFilter==='new'?' sel-new':''}" data-filter="new">✦ Nieuw voor mij</button>
             <button class="tool-btn${recsFilter==='plex'?' sel-plex':''}" data-filter="plex">▶ Al in Plex</button>
+            <span class="toolbar-sep"></span>
+            <button class="tool-btn refresh-btn" id="btn-ref-recs-ontdek">↻</button>
           </div>
         </div>
         <div class="section-collapsed-preview" id="sec-recs-preview"></div>
@@ -2195,6 +2197,9 @@ async function loadOntdek() {
   contentEl.style.transform = '';
 
   // Inline refresh-knoppen
+  document.getElementById('btn-ref-recs-ontdek')?.addEventListener('click', async () => {
+    await runWithSection(document.getElementById('sec-recs-content'), loadRecs);
+  });
   document.getElementById('btn-ref-releases-ontdek')?.addEventListener('click', async () => {
     lastReleases = null;
     await fetch('/api/releases/refresh', { method: 'POST' });
@@ -2213,16 +2218,23 @@ async function loadOntdek() {
   });
 
   // 1. Laad recs onmiddellijk
-  sectionContainerEl = document.getElementById('sec-recs-content');
-  await loadRecs();
-  sectionContainerEl = null;
+  {
+    const myTarget = document.getElementById('sec-recs-content');
+    sectionContainerEl = myTarget;
+    await loadRecs();
+    if (sectionContainerEl === myTarget) sectionContainerEl = null;
+  }
 
   // 2. Lazy-load releases en discover — via mutex om race condition op
   //    sectionContainerEl te voorkomen wanneer beide callbacks tegelijk vuren.
-  setupLazyLoad(document.getElementById('sec-releases-content'), () =>
-    runWithSection(document.getElementById('sec-releases-content'), loadReleases));
-  setupLazyLoad(document.getElementById('sec-discover-content'), () =>
-    runWithSection(document.getElementById('sec-discover-content'), loadDiscover));
+  setupLazyLoad(document.getElementById('sec-releases-content'), () => {
+    const myTarget = document.getElementById('sec-releases-content');
+    return runWithSection(myTarget, loadReleases);
+  });
+  setupLazyLoad(document.getElementById('sec-discover-content'), () => {
+    const myTarget = document.getElementById('sec-discover-content');
+    return runWithSection(myTarget, loadDiscover);
+  });
 
   // 3. Setup collapsible sections
   setupSectionToggle('recs', 'recs');
@@ -2260,9 +2272,10 @@ async function switchBibSubTab(subTab) {
           await fetch('/api/plex/refresh', { method: 'POST' });
           await loadPlexStatus();
           plexLibData = null;
-          sectionContainerEl = bibContent;
+          const myTarget = bibContent;
+          sectionContainerEl = myTarget;
           await loadPlexLibrary();
-          sectionContainerEl = null;
+          if (sectionContainerEl === myTarget) sectionContainerEl = null;
         } catch (e) {}
         finally { btn.disabled = false; btn.textContent = orig; }
       });
@@ -2277,16 +2290,18 @@ async function switchBibSubTab(subTab) {
       document.getElementById('btn-ref-gaps-bib')?.addEventListener('click', async () => {
         lastGaps = null;
         await fetch('/api/gaps/refresh', { method: 'POST' });
-        sectionContainerEl = document.getElementById('bib-sub-content');
+        const myTarget = document.getElementById('bib-sub-content');
+        sectionContainerEl = myTarget;
         await loadGaps();
-        sectionContainerEl = null;
+        if (sectionContainerEl === myTarget) sectionContainerEl = null;
       });
     } else {
       bibToolbar.innerHTML = '';
     }
   }
 
-  sectionContainerEl = bibContent;
+  const myTarget = bibContent;
+  sectionContainerEl = myTarget;
   try {
     if (subTab === 'collectie') {
       currentTab = 'plexlib';
@@ -2299,7 +2314,7 @@ async function switchBibSubTab(subTab) {
       await loadWishlist();
     }
   } finally {
-    sectionContainerEl = null;
+    if (sectionContainerEl === myTarget) sectionContainerEl = null;
   }
 }
 
@@ -2361,20 +2376,28 @@ async function loadBibliotheek() {
   });
 
   // Strips laden (sequentieel om sectionContainerEl-conflict te vermijden)
-  sectionContainerEl = document.getElementById('strip-artists-body');
-  await loadTopArtists(currentPeriod);
-  sectionContainerEl = null;
+  {
+    const myTarget = document.getElementById('strip-artists-body');
+    sectionContainerEl = myTarget;
+    await loadTopArtists(currentPeriod);
+    if (sectionContainerEl === myTarget) sectionContainerEl = null;
+  }
 
-  sectionContainerEl = document.getElementById('strip-tracks-body');
-  await loadTopTracks(currentPeriod);
-  sectionContainerEl = null;
+  {
+    const myTarget = document.getElementById('strip-tracks-body');
+    sectionContainerEl = myTarget;
+    await loadTopTracks(currentPeriod);
+    if (sectionContainerEl === myTarget) sectionContainerEl = null;
+  }
 
   // Initieel sub-tab laden
   await switchBibSubTab(bibSubTab);
 
   // Stats lazy-loaden — via mutex om conflict met strip-loads te voorkomen
-  setupLazyLoad(document.getElementById('bib-stats-content'), () =>
-    runWithSection(document.getElementById('bib-stats-content'), loadStats));
+  setupLazyLoad(document.getElementById('bib-stats-content'), () => {
+    const myTarget = document.getElementById('bib-stats-content');
+    return runWithSection(myTarget, loadStats);
+  });
 }
 
 // ── Composiet loader: Downloads ─────────────────────────────────────────────
@@ -2740,7 +2763,10 @@ document.addEventListener('click', async e => {
     inlineRtype.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
     if (secRel && currentMainTab === 'ontdek') {
-      sectionContainerEl = secRel; renderReleases(); sectionContainerEl = null;
+      const myTarget = secRel;
+      sectionContainerEl = myTarget;
+      renderReleases();
+      if (sectionContainerEl === myTarget) sectionContainerEl = null;
     } else { renderReleases(); }
     return;
   }
@@ -2753,7 +2779,10 @@ document.addEventListener('click', async e => {
     inlineRsort.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
     if (secRel && currentMainTab === 'ontdek') {
-      sectionContainerEl = secRel; renderReleases(); sectionContainerEl = null;
+      const myTarget = secRel;
+      sectionContainerEl = myTarget;
+      renderReleases();
+      if (sectionContainerEl === myTarget) sectionContainerEl = null;
     } else { renderReleases(); }
     return;
   }
@@ -2766,7 +2795,10 @@ document.addEventListener('click', async e => {
     inlineDfilter.classList.add(discFilter==='all'?'sel-def':discFilter==='new'?'sel-new':'sel-miss');
     const secDisc = document.getElementById('sec-discover-content');
     if (secDisc && currentMainTab === 'ontdek') {
-      sectionContainerEl = secDisc; renderDiscover(); sectionContainerEl = null;
+      const myTarget = secDisc;
+      sectionContainerEl = myTarget;
+      renderDiscover();
+      if (sectionContainerEl === myTarget) sectionContainerEl = null;
     } else { renderDiscover(); }
     return;
   }
@@ -2779,7 +2811,10 @@ document.addEventListener('click', async e => {
     inlineGsort.classList.add('sel-def');
     const secGaps = document.getElementById('bib-sub-content');
     if (secGaps && currentMainTab === 'bibliotheek') {
-      sectionContainerEl = secGaps; renderGaps(); sectionContainerEl = null;
+      const myTarget = secGaps;
+      sectionContainerEl = myTarget;
+      renderGaps();
+      if (sectionContainerEl === myTarget) sectionContainerEl = null;
     } else { renderGaps(); }
     return;
   }
