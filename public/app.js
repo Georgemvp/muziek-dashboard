@@ -1236,6 +1236,12 @@ function renderDiscover() {
             : `<div style="font-size:11px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
           <button class="disc-toggle-btn collapsed" data-disc-id="disc-${i}" data-album-count="${albumCount}"
             title="Toon/verberg albums" aria-label="Albums tonen/verbergen">Toon ${albumLabel}</button>
+          ${a.albums?.length ? `<div class="discover-preview-row">${a.albums.slice(0, 5).map(alb => {
+            const bg = gradientFor(alb.title || '');
+            return alb.coverUrl
+              ? `<img class="discover-preview-thumb" src="${esc(alb.coverUrl)}" alt="${esc(alb.title)}" loading="lazy" title="${esc(alb.title)}${alb.year ? ' ('+alb.year+')' : ''}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="discover-preview-ph" style="display:none;background:${bg}">${initials(alb.title || '?')}</div>`
+              : `<div class="discover-preview-ph" style="background:${bg}">${initials(alb.title || '?')}</div>`;
+          }).join('')}${a.albums.length > 5 ? `<div class="discover-preview-more">+${a.albums.length - 5}</div>` : ''}</div>` : ''}
         </div>
         <div class="discover-albums-wrap">`;
 
