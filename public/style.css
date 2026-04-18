@@ -1864,3 +1864,58 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   flex-shrink: 0;
 }
 
+
+/* ── Collapsed section preview thumbnails ── */
+.section-collapsed-preview {
+  display: none;
+  padding: 0 0 4px;
+}
+.section-block.collapsed .section-collapsed-preview {
+  display: block;
+}
+.collapsed-thumbs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow: hidden;
+  padding: 2px 0 8px;
+}
+.collapsed-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  border: 1px solid var(--border);
+  transition: transform 0.15s var(--ease);
+}
+.collapsed-thumb:hover {
+  transform: scale(1.08);
+}
+.collapsed-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.collapsed-thumb-round {
+  border-radius: 50%;
+}
+.collapsed-thumb-ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+}
+.collapsed-thumbs-more {
+  font-size: 11px;
+  color: var(--muted2);
+  font-weight: 600;
+  padding: 0 6px;
+  flex-shrink: 0;
+}

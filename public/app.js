@@ -986,6 +986,23 @@ async function loadRecs() {
     });
     applyRecsFilter();
 
+    const previewEl = document.getElementById('sec-recs-preview');
+    if (previewEl) {
+      const previewItems = recs.slice(0, 8);
+      previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map((r, i) =>
+        `<div class="collapsed-thumb collapsed-thumb-round" id="recs-thumb-${i}" style="background:${gradientFor(r.name)}">
+          <span class="collapsed-thumb-ph">${initials(r.name)}</span>
+        </div>`
+      ).join('')}${recs.length > 8 ? `<span class="collapsed-thumbs-more">+${recs.length - 8}</span>` : ''}</div>`;
+      previewItems.forEach(async (r, i) => {
+        try {
+          const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
+          const el = document.getElementById(`recs-thumb-${i}`);
+          if (el && info.image) el.innerHTML = `<img src="${esc(info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
+        } catch {}
+      });
+    }
+
     recs.forEach(async (r, i) => {
       try {
         const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
@@ -1155,6 +1172,20 @@ function renderReleases() {
       </div>`;
   }
   setContent(html + '</div>');
+
+  const previewEl = document.getElementById('sec-releases-preview');
+  if (previewEl) {
+    const previewItems = filtered.slice(0, 8);
+    previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
+      if (r.image) {
+        return `<div class="collapsed-thumb">
+          <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
+        </div>`;
+      }
+      return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
+    }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
+  }
 }
 
 // ── Discover (deep: MBZ + album grid) ─────────────────────────────────────
@@ -1256,6 +1287,20 @@ function renderDiscover() {
   }
   html += `</div>`;
   setContent(html);
+
+  const previewEl = document.getElementById('sec-discover-preview');
+  if (previewEl) {
+    const previewItems = filtered.slice(0, 8);
+    previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(a => {
+      if (a.image) {
+        return `<div class="collapsed-thumb collapsed-thumb-round">
+          <img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</span>
+        </div>`;
+      }
+      return `<div class="collapsed-thumb collapsed-thumb-round" style="background:${gradientFor(a.name)}"><span class="collapsed-thumb-ph">${initials(a.name)}</span></div>`;
+    }).join('')}${filtered.length > 8 ? `<span class="collapsed-thumbs-more">+${filtered.length - 8}</span>` : ''}</div>`;
+  }
 }
 
 // ── Collection Gaps ────────────────────────────────────────────────────────
@@ -2097,6 +2142,7 @@ async function loadOntdek() {
             <button class="tool-btn${recsFilter==='plex'?' sel-plex':''}" data-filter="plex">▶ Al in Plex</button>
           </div>
         </div>
+        <div class="section-collapsed-preview" id="sec-recs-preview"></div>
         <div class="section-content" id="sec-recs-content">
           <div class="loading"><div class="spinner"></div>Laden...</div>
         </div>
@@ -2119,6 +2165,7 @@ async function loadOntdek() {
             <button class="tool-btn refresh-btn" id="btn-ref-releases-ontdek">↻</button>
           </div>
         </div>
+        <div class="section-collapsed-preview" id="sec-releases-preview"></div>
         <div class="section-content" id="sec-releases-content">
           <div class="loading"><div class="spinner"></div>Laden...</div>
         </div>
@@ -2137,6 +2184,7 @@ async function loadOntdek() {
             <button class="tool-btn refresh-btn" id="btn-ref-discover-ontdek">↻</button>
           </div>
         </div>
+        <div class="section-collapsed-preview" id="sec-discover-preview"></div>
         <div class="section-content" id="sec-discover-content">
           <div class="loading"><div class="spinner"></div>Laden...</div>
         </div>
