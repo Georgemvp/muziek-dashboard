@@ -42,9 +42,10 @@ function timeAgo(ts) {
 
 function gradientFor(name) {
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffff;
+  for (let i = 0; i < name.length; i++)
+    h = (h * 31 + name.charCodeAt(i)) & 0xffffff;
   const hue = h % 360;
-  return `linear-gradient(135deg,hsl(${hue},45%,20%),hsl(${(hue+45)%360},55%,14%))`;
+  return `linear-gradient(135deg, hsl(${hue}, 65%, 28%), hsl(${(hue + 40) % 360}, 55%, 18%))`;
 }
 
 function countryFlag(code) {
