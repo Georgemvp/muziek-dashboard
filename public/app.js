@@ -32,6 +32,12 @@ let activeMood      = null;    // momenteel geselecteerde mood
 const _previewAudio = new Audio();
 let   _previewBtn   = null; // de actieve play-knop
 
+// ── Animation preferences ──────────────────────────────────────────────────
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (prefersReducedMotion) {
+  document.documentElement.setAttribute('data-reduce-motion', 'true');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 const getImg = (imgs, size = 'medium') => {
   if (!imgs) return null;
@@ -51,12 +57,20 @@ function timeAgo(ts) {
   return `${Math.floor(s/86400)}d`;
 }
 
-function gradientFor(name) {
+function gradientFor(name, useRadial = false) {
   let h = 0;
   for (let i = 0; i < name.length; i++)
     h = (h * 31 + name.charCodeAt(i)) & 0xffffff;
   const hue = h % 360;
-  return `linear-gradient(135deg, hsl(${hue}, 65%, 28%), hsl(${(hue + 40) % 360}, 55%, 18%))`;
+  const sat1 = 45 + (h % 31); // 45-75% variatie
+  const sat2 = 50 + ((h >> 8) % 26); // 50-75% variatie
+  const lightness1 = 20 + ((h >> 16) % 16); // 20-35% variatie
+  const lightness2 = 15 + ((h >> 10) % 11); // 15-25% variatie
+
+  if (useRadial) {
+    return `radial-gradient(circle, hsl(${hue}, ${sat1}%, ${lightness1}%), hsl(${(hue + 40) % 360}, ${sat2}%, ${lightness2}%))`;
+  }
+  return `linear-gradient(135deg, hsl(${hue}, ${sat1}%, ${lightness1}%), hsl(${(hue + 40) % 360}, ${sat2}%, ${lightness2}%))`;
 }
 
 function countryFlag(code) {
@@ -205,6 +219,27 @@ async function apiFetch(url) {
 }
 
 const contentEl = document.getElementById('content');
+function applyStaggeredAnimations() {
+  // Skip animaties als prefers-reduced-motion is ingesteld
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReducedMotion) return;
+
+  // Bepaal stagger delay per kaarttype
+  const staggerConfigs = {
+    '.rec-grid > *': 60,    // Grote kaarten: 60ms stagger
+    '.card-list > *': 25,   // Lijsten: 25ms stagger
+    '.artist-grid > *': 40, // 4-kolommen grid: 40ms stagger
+    '.releases-grid > *': 40,
+    '.wishlist-grid > *': 40,
+  };
+
+  Object.entries(staggerConfigs).forEach(([selector, delayMs]) => {
+    document.querySelectorAll(selector).forEach((el, i) => {
+      el.style.animationDelay = `${i * delayMs}ms`;
+    });
+  });
+}
+
 function setContent(html, callback) {
   const target = sectionContainerEl || contentEl;
 
@@ -212,11 +247,7 @@ function setContent(html, callback) {
   if (!sectionContainerEl && document.startViewTransition) {
     document.startViewTransition(() => {
       target.innerHTML = html;
-      // Staggered fade-in voor grid-children
-      document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
-        el.classList.add('stagger-in');
-        el.style.animationDelay = `${i * 30}ms`;
-      });
+      applyStaggeredAnimations();
       if (callback) requestAnimationFrame(callback);
     }).finished.catch(() => {});
   } else {
@@ -229,11 +260,7 @@ function setContent(html, callback) {
         void contentEl.offsetHeight; // force reflow
         contentEl.style.opacity = '1';
         contentEl.style.transform = '';
-        // STAP 6: Staggered fade-in voor grid-children
-        document.querySelectorAll('.card-list > *, .artist-grid > *, .rec-grid > *, .releases-grid > *, .wishlist-grid > *').forEach((el, i) => {
-          el.classList.add('stagger-in');
-          el.style.animationDelay = `${i * 30}ms`;
-        });
+        applyStaggeredAnimations();
         if (callback) requestAnimationFrame(callback);
       });
     } else {
@@ -656,8 +683,8 @@ async function loadTopArtists(period) {
       const lfmImg = getImg(a.image, 'large') || getImg(a.image);
       const photoHtml = lfmImg
         ? `<img src="${lfmImg}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-          + `<div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
-        : `<div class="ag-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
+          + `<div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
+        : `<div class="ag-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
       html += `<div class="ag-card"><div class="ag-photo" id="agp-${i}" style="view-transition-name: artist-${sanitizeArtistName(a.name)}">${photoHtml}</div>
         <div class="ag-info"><div class="ag-name artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
@@ -1239,8 +1266,8 @@ function renderDiscover() {
     const photo = a.image
       ? `<img class="discover-photo" src="${esc(a.image)}" alt="" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
-      : `<div class="discover-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
+         <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
+      : `<div class="discover-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
 
     const albumCount = a.albums?.length || 0;
     const albumLabel = `${albumCount} album${albumCount !== 1 ? 's' : ''}`;
@@ -2528,7 +2555,16 @@ document.getElementById('btn-tidarr-reload')?.addEventListener('click', () => {
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const allTabs = document.querySelectorAll('.tab');
+    const currentTabEl = document.querySelector('.tab.active');
+    const oldIndex = Array.from(allTabs).indexOf(currentTabEl);
+    const newIndex = Array.from(allTabs).indexOf(btn);
+    const direction = newIndex > oldIndex ? 'rtl' : 'ltr'; // right-to-left of left-to-right
+
+    // Set CSS variable voor directionele animatie
+    document.documentElement.style.setProperty('--tab-direction', direction === 'ltr' ? '-1' : '1');
+
+    allTabs.forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     currentMainTab = tab;
 
