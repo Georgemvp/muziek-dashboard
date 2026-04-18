@@ -53,6 +53,40 @@ const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./ser
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Voert `tasks` (een array van functies die een Promise teruggeven) uit
+ * met maximaal `limit` gelijktijdige uitvoeringen.
+ * Geeft een array van PromiseSettledResult-objecten terug (zelfde interface als Promise.allSettled).
+ */
+function limitConcurrency(tasks, limit) {
+  return new Promise((resolve) => {
+    if (tasks.length === 0) return resolve([]);
+    const results = new Array(tasks.length);
+    let started   = 0;
+    let completed = 0;
+
+    function runNext() {
+      while (started < tasks.length && (started - completed) < limit) {
+        const idx = started++;
+        Promise.resolve()
+          .then(() => tasks[idx]())
+          .then(
+            (val) => { results[idx] = { status: 'fulfilled', value: val }; },
+            (err) => { results[idx] = { status: 'rejected',  reason: err }; }
+          )
+          .finally(() => {
+            completed++;
+            if (completed === tasks.length) resolve(results);
+            else runNext();
+          });
+      }
+    }
+    runNext();
+  });
+}
+
 // ── API: Last.fm ───────────────────────────────────────────────────────────
 
 // ── Last.fm bereikbaarheidsstatus ──────────────────────────────────────────
@@ -224,6 +258,7 @@ app.get('/api/preview', async (req, res) => {
 // ── API: Aanbevelingen ─────────────────────────────────────────────────────
 
 app.get('/api/recs', async (req, res) => {
+  const t0 = Date.now();
   try {
     // Cache key rotates every 2 hours to ensure fresh seed rotation
     const cacheKeyRotation = Math.floor(Date.now() / 7_200_000);
@@ -237,9 +272,7 @@ app.get('/api/recs', async (req, res) => {
 
     // ── 1. SEED-DIVERSITEIT: Top-5 + 5 random uit posities 10-30 ──────────
     const seedArtists = [];
-    // Top-5 seeds
     seedArtists.push(...topArtists.slice(0, 5));
-    // 5 random uit posities 10-30
     const candidateRange = topArtists.slice(10, 30);
     if (candidateRange.length > 0) {
       const randomIndices = new Set();
@@ -250,19 +283,27 @@ app.get('/api/recs', async (req, res) => {
     }
 
     // ── Genre tracking voor genre-spreiding ──────────────────────────────
-    const genreCount = {}; // { 'rock': 2, 'pop': 1, ... }
+    const genreCount = {};
     const stopwords = new Set(['seen live', 'listened', 'favourite', 'favorites', 'love', 'loved', 'awesome', 'cool', 'good', 'great']);
 
-    // Verzamel genres van seed artiesten
+    // Helper: haal top-3 tags op met 24-uurs cache per artiest
+    async function getArtistTags(artist) {
+      const tagCacheKey = `tags:${artist.toLowerCase()}`;
+      const tagCached = getCache(tagCacheKey, 86_400_000); // 24 uur TTL
+      if (tagCached) return tagCached;
+      const result = await lfm({ method: 'artist.gettoptags', artist }, { includeUser: false });
+      const tags = (result.toptags?.tag || []).slice(0, 3);
+      setCache(tagCacheKey, tags);
+      return tags;
+    }
+
+    // Verzamel genres van seed artiesten (parallel)
     const seedGenreResults = await Promise.allSettled(
-      seedArtists.map(artist =>
-        lfm({ method: 'artist.gettoptags', artist }, { includeUser: false })
-      )
+      seedArtists.map(artist => getArtistTags(artist))
     );
     for (const result of seedGenreResults) {
       if (result.status === 'fulfilled') {
-        const tags = (result.value.toptags?.tag || []).slice(0, 3);
-        for (const tag of tags) {
+        for (const tag of result.value) {
           const name = tag.name.toLowerCase().trim();
           if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
             genreCount[name] = (genreCount[name] || 0) + 1;
@@ -272,108 +313,109 @@ app.get('/api/recs', async (req, res) => {
     }
 
     // ── Artiest-aanbevelingen ──────────────────────────────────────────
-    let recs = [];
     const simResults = await Promise.all(
       seedArtists.map(async artist => {
         try {
-          // 2. MAX PER SEED: Beperk tot 3 similar artists (in plaats van 15)
           return { artist, similar: await getSimilarArtists(artist, 3) };
         }
         catch { return { artist, similar: [] }; }
       })
     );
 
+    // Verzamel unieke kandidaten (deduplicatie vóór tag-calls)
+    const candidates = [];
+    const seenNames  = new Set();
     for (const { artist, similar } of simResults) {
       for (const s of similar) {
-        if (!topArtists.includes(s.name) && !recs.find(x => x.name === s.name)) {
-          const inPlex = artistInPlex(s.name);
-          let adjustedMatch = parseFloat(s.match) * (inPlex ? 0.9 : 1.4); // 4. NIEUW-VOORKEUR: 1.15 → 1.4
-
-          // ── 3. GENRE-SPREIDING: Penaliseer artiesten met oververtegenwoordigde genres ──
-          try {
-            const tagsResult = await lfm({ method: 'artist.gettoptags', artist: s.name }, { includeUser: false });
-            const tags = (tagsResult.toptags?.tag || []).slice(0, 3);
-            let hasOnlyCommonGenres = true;
-            let commonGenreCount = 0;
-
-            for (const tag of tags) {
-              const name = tag.name.toLowerCase().trim();
-              if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
-                const count = genreCount[name] || 0;
-                if (count < 3) {
-                  hasOnlyCommonGenres = false;
-                  break;
-                } else {
-                  commonGenreCount++;
-                }
-              }
-            }
-
-            // Als alle genres al 3+ keer voorkomen, penaliseer met 50%
-            if (hasOnlyCommonGenres && commonGenreCount > 0) {
-              adjustedMatch *= 0.5;
-            }
-          } catch {
-            // Genre-check fout: gebruik ongewijzigde adjustedMatch
-          }
-
-          recs.push({
-            name: s.name,
-            reason: artist,
-            match: parseFloat(s.match),
-            adjustedMatch,
-            inPlex
-          });
+        if (!topArtists.includes(s.name) && !seenNames.has(s.name)) {
+          seenNames.add(s.name);
+          candidates.push({ name: s.name, reason: artist, match: parseFloat(s.match) });
         }
       }
     }
 
+    // ── 2. BATCH genre-tags: max 5 concurrent, 24h gecached ──────────────
+    const tagTasks   = candidates.map(c => () => getArtistTags(c.name));
+    const tagResults = await limitConcurrency(tagTasks, 5);
+
+    // Bereken adjustedMatch met genre-penalisatie
+    const recs = candidates.map((c, i) => {
+      const inPlex = artistInPlex(c.name);
+      let adjustedMatch = c.match * (inPlex ? 0.9 : 1.4);
+
+      const tagResult = tagResults[i];
+      if (tagResult?.status === 'fulfilled') {
+        let hasOnlyCommonGenres = true;
+        let commonGenreCount    = 0;
+
+        for (const tag of tagResult.value) {
+          const name = tag.name.toLowerCase().trim();
+          if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
+            const count = genreCount[name] || 0;
+            if (count < 3) {
+              hasOnlyCommonGenres = false;
+              break;
+            } else {
+              commonGenreCount++;
+            }
+          }
+        }
+
+        // Als alle genres al 3+ keer voorkomen, penaliseer met 50%
+        if (hasOnlyCommonGenres && commonGenreCount > 0) {
+          adjustedMatch *= 0.5;
+        }
+      }
+
+      return { name: c.name, reason: c.reason, match: c.match, adjustedMatch, inPlex };
+    });
+
     recs.sort((a, b) => b.adjustedMatch - a.adjustedMatch);
     const topRecs = recs.slice(0, 30);
+    const top8    = topRecs.slice(0, 8);
 
-    // ── Album-aanbevelingen ───────────────────────────────────────────────
-    const top8 = topRecs.slice(0, 8);
-    const albumResults = await Promise.allSettled(
-      top8.map(async rec => {
-        try {
-          const data = await lfm({ method: 'artist.gettopalbums', artist: rec.name, limit: 3 }, { includeUser: false });
-          const albums = (data.topalbums?.album || [])
-            .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-            .map(a => {
-              const img = a.image?.find(i => i.size === 'large')?.['#text'] || a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-              return {
-                album:  a.name,
-                artist: rec.name,
-                reason: rec.reason,
-                image:  (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
-                inPlex: albumInPlex(rec.name, a.name)
-              };
-            });
-          return albums;
-        } catch { return []; }
-      })
-    );
+    // ── 3. Album- én track-aanbevelingen PARALLEL ────────────────────────
+    const [albumResults, trackResults] = await Promise.all([
+      Promise.allSettled(
+        top8.map(async rec => {
+          try {
+            const data = await lfm({ method: 'artist.gettopalbums', artist: rec.name, limit: 3 }, { includeUser: false });
+            return (data.topalbums?.album || [])
+              .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
+              .map(a => {
+                const img = a.image?.find(i => i.size === 'large')?.['#text'] || a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+                return {
+                  album:  a.name,
+                  artist: rec.name,
+                  reason: rec.reason,
+                  image:  (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
+                  inPlex: albumInPlex(rec.name, a.name)
+                };
+              });
+          } catch { return []; }
+        })
+      ),
+      Promise.allSettled(
+        top8.map(async rec => {
+          try {
+            const data = await lfm({ method: 'artist.gettoptracks', artist: rec.name, limit: 3 }, { includeUser: false });
+            return (data.toptracks?.track || []).map(t => ({
+              track:     t.name,
+              artist:    rec.name,
+              reason:    rec.reason,
+              playcount: parseInt(t.playcount) || 0,
+              url:       t.url || null
+            }));
+          } catch { return []; }
+        })
+      )
+    ]);
+
     const albumRecs = albumResults
       .filter(r => r.status === 'fulfilled')
       .flatMap(r => r.value)
       .slice(0, 20);
 
-    // ── Track-aanbevelingen ───────────────────────────────────────────────
-    const trackResults = await Promise.allSettled(
-      top8.map(async rec => {
-        try {
-          const data = await lfm({ method: 'artist.gettoptracks', artist: rec.name, limit: 3 }, { includeUser: false });
-          const tracks = (data.toptracks?.track || []).map(t => ({
-            track:     t.name,
-            artist:    rec.name,
-            reason:    rec.reason,
-            playcount: parseInt(t.playcount) || 0,
-            url:       t.url || null
-          }));
-          return tracks;
-        } catch { return []; }
-      })
-    );
     const trackRecs = trackResults
       .filter(r => r.status === 'fulfilled')
       .flatMap(r => r.value)
@@ -385,15 +427,17 @@ app.get('/api/recs', async (req, res) => {
       albumRecs,
       trackRecs,
       basedOn:          topArtists,
-      seedArtists:      seedArtists, // Transparantie: laat zien welke seeds gebruikt zijn
+      seedArtists,      // Transparantie: laat zien welke seeds gebruikt zijn
       plexConnected:    ok,
       plexArtistCount:  artistCount
     };
     markLastFmUp();
     setCache(cacheKey, result); // Cache per 2-uur rotatie
+    console.log(`[/api/recs] voltooid in ${Date.now() - t0}ms`);
     res.json(result);
   } catch (e) {
     markLastFmDown();
+    console.log(`[/api/recs] fout na ${Date.now() - t0}ms: ${e.message}`);
     // Probeer huidige rotatie-sleutel (stale), daarna vorige rotatie
     const currentKey  = `api:recs:${Math.floor(Date.now() / 7_200_000)}`;
     const previousKey = `api:recs:${Math.floor(Date.now() / 7_200_000) - 1}`;
