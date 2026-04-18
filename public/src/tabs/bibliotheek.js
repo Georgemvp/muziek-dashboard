@@ -5,7 +5,7 @@ import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, downloadBtn,
   countryFlag, albumCard, showLoading, setContent, showError,
   setupLazyLoad, runWithSection, contentEl, sanitizeArtistName, periodLabel,
-  getImg, trackImg, timeAgo
+  getImg, trackImg, timeAgo, proxyImg
 } from '../helpers.js';
 import { loadWishlist } from '../components/wishlist.js';
 import { loadPlexStatus } from '../api.js';
@@ -75,8 +75,9 @@ export async function loadTopArtists(period) {
       const a = artists[i];
       const pct = Math.round(parseInt(a.playcount) / max * 100);
       const lfmImg = getImg(a.image, 'large') || getImg(a.image);
-      const photoHtml = lfmImg
-        ? `<img src="${lfmImg}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      const agImgSrc = proxyImg(lfmImg, 120) || lfmImg;
+      const photoHtml = agImgSrc
+        ? `<img src="${agImgSrc}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
            <div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
         : `<div class="ag-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
       html += `<div class="ag-card">
@@ -93,7 +94,7 @@ export async function loadTopArtists(period) {
         const info = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`);
         if (info.image) {
           const el = document.getElementById(`agp-${i}`);
-          if (el) el.innerHTML = `<img src="${info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
+          if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
         }
       } catch {}
     });
@@ -271,8 +272,9 @@ export function renderGaps() {
   for (const a of artists) {
     const pct  = Math.round(a.ownedCount / a.totalCount * 100);
     const meta = [countryFlag(a.country), a.country, a.startYear].filter(Boolean).join(' · ');
-    const photo = a.image
-      ? `<img class="gaps-photo" src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    const gapsImgSrc = proxyImg(a.image, 56) || a.image;
+    const photo = gapsImgSrc
+      ? `<img class="gaps-photo" src="${esc(gapsImgSrc)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="gaps-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
       : `<div class="gaps-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
     html += `

@@ -38,6 +38,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 }));
 
 // ── Services ───────────────────────────────────────────────────────────────
+const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
 const { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
@@ -792,6 +793,40 @@ app.get('/api/spotify/recs', async (req, res) => {
 // Geeft de beschikbare moods + of Spotify geconfigureerd is.
 app.get('/api/spotify/status', (req, res) => {
   res.json({ enabled: SPOTIFY_OK, moods: SPOTIFY_OK ? Object.keys(MOODS) : [] });
+});
+
+// ── API: Image proxy ───────────────────────────────────────────────────────
+// GET /api/img?url=ENCODED_URL&w=120&h=120
+// Resizet en converteert externe afbeeldingen naar WebP (met disk-cache).
+// Fallback: redirect naar de originele URL als sharp faalt (bijv. SVG).
+
+app.get('/api/img', async (req, res) => {
+  const url = (req.query.url || '').trim();
+  if (!url) return res.status(400).json({ error: 'url parameter is verplicht' });
+
+  // Basisvalidatie: sta alleen http(s)-URLs toe
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'Ongeldige URL' });
+  }
+
+  const w      = parseInt(req.query.w) || 120;
+  const h      = parseInt(req.query.h) || 0;
+  const format = (req.query.fmt || 'webp') === 'jpeg' ? 'jpeg' : 'webp';
+  const mime   = format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+
+  try {
+    const buffer = await proxyImage(url, w, h, format);
+    res.set({
+      'Content-Type':  mime,
+      'Cache-Control': 'public, max-age=604800, immutable',
+      'X-Proxy-Cache': 'hit'
+    });
+    return res.send(buffer);
+  } catch (err) {
+    // Als sharp faalt (bijv. SVG of corrupt bestand): stuur redirect
+    console.warn(`[/api/img] proxy mislukt voor ${url}: ${err.message}`);
+    return res.redirect(302, url);
+  }
 });
 
 // ── Health check ───────────────────────────────────────────────────────────

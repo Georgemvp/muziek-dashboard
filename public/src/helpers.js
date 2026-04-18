@@ -8,6 +8,18 @@ export const prefersReducedMotion =
 // ── DOM root ──────────────────────────────────────────────────────────────
 export const contentEl = document.getElementById('content');
 
+// ── Image proxy helper ────────────────────────────────────────────────────
+/**
+ * Bouw een /api/img URL die de originele afbeelding resizet naar WebP.
+ * @param {string|null} url   Originele afbeelding-URL
+ * @param {number}      size  Gewenste breedte én hoogte in px
+ * @returns {string|null}
+ */
+export function proxyImg(url, size = 120) {
+  if (!url) return null;
+  return `/api/img?url=${encodeURIComponent(url)}&w=${size}&h=${size}`;
+}
+
 // ── Pure helpers ──────────────────────────────────────────────────────────
 export const getImg = (imgs, size = 'medium') => {
   if (!imgs) return null;

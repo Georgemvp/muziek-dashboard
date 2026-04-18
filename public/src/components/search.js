@@ -1,7 +1,7 @@
 // ── Zoekbalk ──────────────────────────────────────────────────────────────
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
-import { esc, fmt, gradientFor, initials } from '../helpers.js';
+import { esc, fmt, gradientFor, initials, proxyImg } from '../helpers.js';
 
 export async function doSearch(q) {
   const results = document.getElementById('search-results');
@@ -13,8 +13,9 @@ export async function doSearch(q) {
         `<div style="padding:12px 14px;color:var(--muted2);font-size:13px">Geen resultaten</div>`;
     } else {
       results.innerHTML = data.results.map(a => {
-        const imgEl = a.image
-          ? `<img class="search-result-img" src="${esc(a.image)}" alt="" loading="lazy"
+        const imgSrc = proxyImg(a.image, 56) || a.image;
+        const imgEl = imgSrc
+          ? `<img class="search-result-img" src="${esc(imgSrc)}" alt="" loading="lazy"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
              <div class="search-result-ph" style="background:${gradientFor(a.name)};display:none">${initials(a.name)}</div>`
           : `<div class="search-result-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;

@@ -4,7 +4,7 @@ import { apiFetch } from '../api.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, plexBadge, bookmarkBtn,
   downloadBtn, countryFlag, albumCard, showLoading, setContent, showError,
-  setupLazyLoad, runWithSection, contentEl
+  setupLazyLoad, runWithSection, contentEl, proxyImg
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 
@@ -194,8 +194,9 @@ export async function loadRecs() {
       html += `<div class="section-title" style="margin-top:2rem">Aanbevolen Albums</div>
         <div class="albrec-grid">`;
       for (const a of albumRecs) {
-        const imgEl = a.image
-          ? `<img class="albrec-img" src="${esc(a.image)}" alt="" loading="lazy"
+        const albrecImgSrc = proxyImg(a.image, 80) || a.image;
+        const imgEl = albrecImgSrc
+          ? `<img class="albrec-img" src="${esc(albrecImgSrc)}" alt="" loading="lazy"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
              <div class="albrec-ph" style="display:none;background:${gradientFor(a.album)}">${initials(a.album)}</div>`
           : `<div class="albrec-ph" style="background:${gradientFor(a.album)}">${initials(a.album)}</div>`;
@@ -254,7 +255,7 @@ export async function loadRecs() {
         try {
           const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
           const el = document.getElementById(`recs-thumb-${i}`);
-          if (el && info.image) el.innerHTML = `<img src="${esc(info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
+          if (el && info.image) el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
         } catch {}
       });
     }
@@ -263,7 +264,7 @@ export async function loadRecs() {
       try {
         const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
         const ph = document.getElementById(`rph-${i}`);
-        if (ph && info.image) ph.innerHTML = `<img src="${info.image}" alt="" loading="lazy"
+        if (ph && info.image) ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy"
           onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
         const tagsEl = document.getElementById(`rtags-${i}`);
         if (tagsEl) tagsEl.innerHTML = tagsHtml(info.tags, 3) + `<div style="height:6px"></div>`;
@@ -274,7 +275,7 @@ export async function loadRecs() {
             let ah = '<div class="rec-albums-label">Bekende albums</div><div class="rec-albums-list">';
             for (const a of albums) {
               const imgEl = a.image
-                ? `<img class="rec-album-img" src="${a.image}" alt="" loading="lazy">` : `<div class="rec-album-ph">♪</div>`;
+                ? `<img class="rec-album-img" src="${proxyImg(a.image, 48) || a.image}" alt="" loading="lazy">` : `<div class="rec-album-ph">♪</div>`;
               const plexMark = state.plexOk && a.inPlex ? `<span class="rec-album-plex">▶</span>` : '';
               ah += `<div class="rec-album-row">${imgEl}<span class="rec-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(r.name, a.name, a.inPlex)}</div>`;
             }
@@ -454,8 +455,9 @@ export function renderDiscover() {
       a.startYear ? `Actief vanaf ${a.startYear}` : null,
       a.totalAlbums ? `${a.totalAlbums} studio-albums` : null
     ].filter(Boolean).join(' · ');
-    const photo = a.image
-      ? `<img class="discover-photo" src="${esc(a.image)}" alt="" loading="lazy"
+    const discImgSrc = proxyImg(a.image, 120) || a.image;
+    const photo = discImgSrc
+      ? `<img class="discover-photo" src="${esc(discImgSrc)}" alt="" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
       : `<div class="discover-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
