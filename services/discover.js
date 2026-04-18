@@ -8,37 +8,74 @@ const { getCache, setCache, getCacheAge }  = require('../db');
 const CACHE_TTL = 86_400_000; // 24 uur
 let buildPromise = null;
 
+// Verschillende periodes voor afwisseling — elke build pikt er willekeurig een
+const SEED_PERIODS = ['1month', '3month', '6month', '12month', 'overall'];
+
+/** Fisher-Yates shuffle — geeft een nieuwe geschudde array terug. */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 async function buildDiscoverCache() {
-  console.log('Discover cache bouwen...');
-  // STAP 12: Bewaar oude cache voor error recovery
-  const oldCache = getCache('discover');
+  // Kies elke build een andere combinatie van periodes voor variatie
+  const period1 = SEED_PERIODS[Math.floor(Math.random() * SEED_PERIODS.length)];
+  const period2 = SEED_PERIODS[Math.floor(Math.random() * SEED_PERIODS.length)];
+  console.log(`Discover cache bouwen (periodes: ${period1} + ${period2})...`);
   try {
     await syncPlexLibrary();
-    const topData    = await lfm({ method: 'user.gettopartists', period: '6month', limit: 20 });
-    const topArtists = (topData.topartists?.artist || []).map(a => a.name);
 
-    // Gelijkaardige artiesten parallel ophalen
+    // Haal top-artiesten op uit twee willekeurige periodes
+    const [data1, data2] = await Promise.all([
+      lfm({ method: 'user.gettopartists', period: period1, limit: 30 }),
+      lfm({ method: 'user.gettopartists', period: period2, limit: 30 }).catch(() => ({ topartists: { artist: [] } }))
+    ]);
+
+    const names1 = (data1.topartists?.artist || []).map(a => a.name);
+    const names2 = (data2.topartists?.artist || []).map(a => a.name);
+
+    // Combineer en shuffle voor variatie — niet altijd dezelfde volgorde
+    const combined  = [...new Set([...names1, ...names2])];
+    const topArtists = shuffle(combined).slice(0, 30); // 30 seed-artiesten ipv 20
+
+    // Gelijkaardige artiesten parallel ophalen — meer per artiest voor grotere pool
     const candidateMap = new Map();
     const similar = await Promise.all(
-      topArtists.slice(0, 20).map(async artist => {
-        try { return { artist, similar: await getSimilarArtists(artist, 15) }; }
+      topArtists.map(async artist => {
+        try { return { artist, similar: await getSimilarArtists(artist, 20) }; }
         catch { return { artist, similar: [] }; }
       })
     );
     for (const { artist, list } of similar.map(r => ({ artist: r.artist, list: r.similar }))) {
       for (const s of list) {
         if (!topArtists.includes(s.name) && !candidateMap.has(s.name)) {
-          candidateMap.set(s.name, { name: s.name, match: parseFloat(s.match), reason: artist, inPlex: artistInPlex(s.name) });
+          candidateMap.set(s.name, {
+            name:   s.name,
+            match:  parseFloat(s.match),
+            reason: artist,
+            inPlex: artistInPlex(s.name)
+          });
         }
       }
     }
 
-    const sorted = Array.from(candidateMap.values())
-      .sort((a, b) => (b.match * (b.inPlex ? 0.8 : 1.2)) - (a.match * (a.inPlex ? 0.8 : 1.2)))
-      .slice(0, 50);
+    // Sorteer op match-score (niet-Plex artiesten krijgen voorrang als ontdekkingen),
+    // voeg dan wat toeval toe door de top-200 te shufflen voor altijd wisselende volgorde
+    const allCandidates = Array.from(candidateMap.values())
+      .sort((a, b) => (b.match * (b.inPlex ? 0.8 : 1.2)) - (a.match * (a.inPlex ? 0.8 : 1.2)));
+
+    // Splits in top-helft en onderste helft, shuffle beide en pak de beste 60
+    const half    = Math.ceil(allCandidates.length / 2);
+    const topHalf = shuffle(allCandidates.slice(0, half));
+    const botHalf = shuffle(allCandidates.slice(half));
+    const pool    = [...topHalf, ...botHalf].slice(0, 60);
 
     // Verrijken met MBZ + Deezer — parallel (mbzEnqueue regelt rate limiting)
-    const enriched = await Promise.all(sorted.map(async c => {
+    const enriched = await Promise.all(pool.map(async c => {
       try {
         const [mbz, image] = await Promise.all([
           getMBZArtist(c.name).catch(() => null),
@@ -51,10 +88,10 @@ async function buildDiscoverCache() {
         }
         return {
           ...c,
-          mbid:         mbz?.mbid    || null,
-          country:      mbz?.country || null,
+          mbid:         mbz?.mbid      || null,
+          country:      mbz?.country   || null,
           startYear:    mbz?.startYear || null,
-          tags:         mbz?.tags    || [],
+          tags:         mbz?.tags      || [],
           image,
           albums,
           missingCount: albums.filter(a => !a.inPlex).length,
@@ -65,15 +102,13 @@ async function buildDiscoverCache() {
       }
     }));
 
-    setCache('discover', { artists: enriched, basedOn: topArtists, builtAt: Date.now() });
-    console.log(`Discover cache klaar: ${enriched.length} artiesten`);
+    setCache('discover', { artists: enriched, basedOn: topArtists, builtAt: Date.now(), periods: [period1, period2] });
+    console.log(`Discover cache klaar: ${enriched.length} artiesten (periodes: ${period1} + ${period2})`);
   } catch (e) {
     console.error('Discover cache mislukt:', e.message);
-    // STAP 12: Error recovery — bewaar oude cache bij fout
-    if (oldCache) {
-      setCache('discover', oldCache);
-      console.log('Discover: oude cache hersteld na fout.');
-    }
+    // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,
+    // zodat het systeem de volgende keer opnieuw probeert ipv 24u wacht.
+    console.log('Discover: oude cache blijft actief (timestamp behouden voor volgende poging).');
   }
 }
 

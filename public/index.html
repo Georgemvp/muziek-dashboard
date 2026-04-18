@@ -172,6 +172,22 @@
 
 </div>
 
+<!-- Queue FAB + popover -->
+<button id="queue-fab" style="display:none" title="Download queue">
+  <span class="fab-icon">⬇</span>
+  <span class="fab-badge" id="fab-queue-badge" style="display:none">0</span>
+</button>
+<div id="queue-popover" class="queue-popover">
+  <div class="qpop-header">
+    <span class="qpop-title-main">📥 Download queue</span>
+    <button id="qpop-close" class="qpop-close">✕</button>
+  </div>
+  <div id="queue-popover-list" class="qpop-list"></div>
+  <div class="qpop-footer">
+    <button id="qpop-goto-tidal" class="qpop-goto">Alles bekijken in Tidal tab →</button>
+  </div>
+</div>
+
 <!-- Artiest detail panel -->
 <div class="panel-overlay" id="panel-overlay">
   <div class="artist-panel" id="artist-panel">
@@ -179,6 +195,21 @@
     <div id="panel-content">
       <div class="loading"><div class="spinner"></div>Laden...</div>
     </div>
+  </div>
+</div>
+
+<!-- Download bevestigingsdialog -->
+<div id="dl-confirm-modal" class="dl-confirm-overlay">
+  <div class="dl-confirm-box">
+    <div class="dl-confirm-header">
+      <div class="dl-confirm-title">Verkeerde artiest gevonden</div>
+      <div class="dl-confirm-sub">
+        Je zocht: <strong id="dl-confirm-wanted"></strong>
+      </div>
+      <div class="dl-confirm-hint">Kies het juiste album of annuleer:</div>
+    </div>
+    <div id="dl-confirm-cards" class="dl-confirm-cards"></div>
+    <button id="dl-confirm-cancel" class="dl-confirm-cancel">Annuleren — zelf zoeken via Tidal tab</button>
   </div>
 </div>
 

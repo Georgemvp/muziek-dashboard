@@ -45,7 +45,7 @@ const { getDeezerImage }                                            = require('.
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
-const { searchTidal, findBestAlbum, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
+const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
 const { TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 
@@ -431,6 +431,18 @@ app.get('/api/tidarr/find', async (req, res) => {
     const match = await findBestAlbum(artist, album);
     if (!match) return res.status(404).json({ error: 'Niet gevonden', artist, album });
     res.json(match);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Geeft de top-3 kandidaten terug zodat de frontend een keuze-dialog kan tonen.
+app.get('/api/tidarr/candidates', async (req, res) => {
+  const artist = (req.query.artist || '').trim();
+  const album  = (req.query.album  || '').trim();
+  if (!album) return res.status(400).json({ error: 'album is verplicht' });
+  try {
+    const candidates = await findTopAlbums(artist, album, 3);
+    if (!candidates.length) return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    res.json({ candidates });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

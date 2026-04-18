@@ -244,6 +244,54 @@ async function findBestAlbum(artist, album) {
 }
 
 /**
+ * Zoek de top-N best scorende albums voor artiest + albumtitel.
+ * Doorloopt dezelfde strategieën als findBestAlbum maar geeft een gesorteerde lijst terug,
+ * zodat de frontend de gebruiker een keuze kan bieden.
+ */
+async function findTopAlbums(artist, album, topN = 3) {
+  const MIN_SCORE    = 0.15;  // ruimere ondergrens zodat we altijd wat tonen
+  const wantedArtist = (artist || '').trim();
+  const wantedTitle  = (album  || '').trim();
+
+  if (!wantedTitle) return [];
+
+  // Verzamel unieke kandidaten (op id) met hun score
+  const seen   = new Map(); // id → { candidate, score }
+
+  function consider(candidates) {
+    for (const c of candidates) {
+      const s = scoreAlbum(c, wantedArtist, wantedTitle);
+      if (!seen.has(c.id) || s > seen.get(c.id).score) {
+        seen.set(c.id, { candidate: c, score: s });
+      }
+    }
+  }
+
+  // Dezelfde vier strategieën als findBestAlbum
+  const q1 = [wantedArtist, wantedTitle].filter(Boolean).join(' ');
+  consider(await rawSearch(q1));
+
+  if (wantedTitle.split(' ').length >= 2) {
+    consider(await rawSearch(wantedTitle));
+  }
+
+  const strippedTitle = wantedTitle.replace(/\s*[\(\[].+?[\)\]]/g, '').trim();
+  if (strippedTitle && strippedTitle !== wantedTitle) {
+    consider(await rawSearch([wantedArtist, strippedTitle].filter(Boolean).join(' ')));
+  }
+
+  if (wantedArtist) {
+    consider(await rawSearch(wantedArtist, 100));
+  }
+
+  return Array.from(seen.values())
+    .filter(x => x.score >= MIN_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topN)
+    .map(x => ({ ...x.candidate, score: Math.round(x.score * 100) }));
+}
+
+/**
  * Voeg een album of track toe aan de Tidarr download-queue.
  * Tidarr verwacht POST /api/save met een volledig ProcessingItemType-object.
  */
@@ -316,6 +364,7 @@ async function getTidarrStatus() {
 module.exports = {
   searchTidal,
   findBestAlbum,
+  findTopAlbums,
   addToQueue,
   getQueue,
   getHistory,

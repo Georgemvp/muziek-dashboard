@@ -93,9 +93,10 @@ async function loadDownloadHistory() {
   } catch { downloadedSet = new Set(); }
 }
 
-// Kleine download-knop (Tidarr) — opent zoek-en-download flow vanuit Gaps/Discover.
-function downloadBtn(artist, album = '') {
-  if (!tidarrOk) return '';
+// Kleine download-knop (Tidarr) — opent zoek-en-download flow vanuit Gaps/Discover/panel.
+// inPlex=true → geen knop (al in je collectie).
+function downloadBtn(artist, album = '', inPlex = false) {
+  if (!tidarrOk || inPlex) return '';
   if (isDownloaded(artist, album)) {
     return `<button class="download-btn dl-done"
       data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
@@ -371,7 +372,7 @@ function openArtistPanel(name) {
           : `<div class="panel-album-ph">♪</div>`;
         const plexMark = plexOk && a.inPlex ? `<span class="badge plex" style="font-size:9px">▶</span>` : '';
         albumsHtml += `<div class="panel-album-row">${imgEl}
-          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}</div>`;
+          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(name, a.name, a.inPlex)}</div>`;
       }
       albumsHtml += `</div>`;
     }
@@ -629,6 +630,7 @@ async function loadRecs() {
               <div class="albrec-artist artist-link" data-artist="${esc(a.artist)}">${esc(a.artist)}</div>
               <div class="albrec-reason">via ${esc(a.reason)}</div>
               ${badge}
+              ${downloadBtn(a.artist, a.album, a.inPlex)}
             </div>
           </div>`;
       }
@@ -683,7 +685,7 @@ async function loadRecs() {
                 ? `<img class="rec-album-img" src="${a.image}" alt="" loading="lazy">`
                 : `<div class="rec-album-ph">♪</div>`;
               const plexMark = plexOk && a.inPlex ? `<span class="rec-album-plex">▶</span>` : '';
-              ah += `<div class="rec-album-row">${imgEl}<span class="rec-album-name">${esc(a.name)}</span>${plexMark}</div>`;
+              ah += `<div class="rec-album-row">${imgEl}<span class="rec-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(r.name, a.name, a.inPlex)}</div>`;
             }
             albEl.innerHTML = ah + '</div>';
           } else { albEl.innerHTML = ''; }
@@ -822,7 +824,7 @@ function renderReleases() {
           <div class="rel-album">${esc(r.album)}</div>
           <div class="rel-artist artist-link" data-artist="${esc(r.artist)}">${esc(r.artist)}</div>
           ${dateHtml}
-          <div class="rel-footer">${plexStatus}${deezerLink}</div>
+          <div class="rel-footer">${plexStatus}${deezerLink}${downloadBtn(r.artist, r.album, r.inPlex)}</div>
         </div>
       </div>`;
   }
@@ -1344,7 +1346,7 @@ function startTidarrSSE() {
       tidarrQueueItems = JSON.parse(e.data) || [];
     } catch { tidarrQueueItems = []; }
 
-    // Badge bijwerken
+    // Badge bijwerken (tab + inline + FAB)
     const active = tidarrQueueItems.filter(i => i.status !== 'finished' && i.status !== 'error');
     const badges = [document.getElementById('badge-tidarr-queue'), document.getElementById('badge-tidarr-queue-inline')];
     for (const b of badges) {
@@ -1352,8 +1354,11 @@ function startTidarrSSE() {
       if (active.length > 0) { b.textContent = active.length; b.style.display = ''; }
       else                    { b.style.display = 'none'; }
     }
+    updateQueueFab(tidarrQueueItems);
     // Queue-tab live bijwerken als die open is
     if (currentTab === 'tidal' && tidalView === 'queue') renderTidalQueue();
+    // Queue popover live bijwerken als die open is
+    if (document.getElementById('queue-popover')?.classList.contains('open')) renderQueuePopover();
   };
 
   es.onerror = () => {
@@ -1379,7 +1384,106 @@ async function loadTidal() {
   startTidarrQueuePolling();
 }
 
-// Download-knop klik: vindt best passend album via meerdere zoekstrategieën.
+// ── Artiest-normalisatie voor vergelijking ─────────────────────────────────
+function normalizeArtist(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+function artistMatches(found, wanted) {
+  const f = normalizeArtist(found);
+  const w = normalizeArtist(wanted);
+  if (!f || !w) return true; // onbekend → geen mismatch
+  return f === w || f.includes(w) || w.includes(f);
+}
+
+// ── Bevestigingsdialog voor download ─────────────────────────────────────
+let _dlResolve = null; // callback van openDownloadConfirm
+
+function openDownloadConfirm(candidates, wantedArtist, wantedAlbum, btn) {
+  return new Promise(resolve => {
+    _dlResolve = resolve;
+
+    const modal   = document.getElementById('dl-confirm-modal');
+    const content = document.getElementById('dl-confirm-cards');
+
+    document.getElementById('dl-confirm-wanted').textContent =
+      `"${wantedAlbum}"${wantedArtist ? ' – ' + wantedArtist : ''}`;
+
+    content.innerHTML = candidates.map((c, i) => {
+      const mismatch = !artistMatches(c.artist, wantedArtist);
+      const imgEl = c.image
+        ? `<img class="dlc-img" src="${esc(c.image)}" alt="" loading="lazy"
+             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+           <div class="dlc-ph" style="display:none">${initials(c.title)}</div>`
+        : `<div class="dlc-ph">${initials(c.title)}</div>`;
+      const artistHtml = mismatch
+        ? `<div class="dlc-artist dlc-artist-warn">⚠ ${esc(c.artist)}</div>`
+        : `<div class="dlc-artist">${esc(c.artist)}</div>`;
+      const scorePct = c.score ?? 0;
+      return `
+        <button class="dlc-card${i === 0 ? ' dlc-best' : ''}" data-dlc-idx="${i}">
+          <div class="dlc-cover">${imgEl}</div>
+          <div class="dlc-info">
+            <div class="dlc-title">${esc(c.title)}</div>
+            ${artistHtml}
+            <div class="dlc-meta">${c.year ? esc(c.year) : ''}${c.year && c.tracks ? ' · ' : ''}${c.tracks ? c.tracks + ' nrs' : ''}</div>
+            <div class="dlc-score-bar"><div class="dlc-score-fill" style="width:${scorePct}%"></div></div>
+            <div class="dlc-score-label">${scorePct}% overeenkomst</div>
+          </div>
+          ${i === 0 ? '<span class="dlc-badge-best">Beste match</span>' : ''}
+        </button>`;
+    }).join('');
+
+    // Klik op kandidaat → bevestig met die optie
+    content.querySelectorAll('.dlc-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const idx = parseInt(card.dataset.dlcIdx);
+        closeDownloadConfirm();
+        resolve({ chosen: candidates[idx], btn });
+      });
+    });
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  });
+}
+
+function closeDownloadConfirm() {
+  document.getElementById('dl-confirm-modal')?.classList.remove('open');
+  document.body.style.overflow = '';
+  if (_dlResolve) { _dlResolve({ chosen: null }); _dlResolve = null; }
+}
+
+document.getElementById('dl-confirm-cancel')?.addEventListener('click', () => {
+  closeDownloadConfirm();
+});
+document.getElementById('dl-confirm-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('dl-confirm-modal')) closeDownloadConfirm();
+});
+
+// ── Download uitvoeren met een gekozen kandidaat ───────────────────────────
+async function executeDownload(chosen, wantedArtist, wantedAlbum, btn) {
+  const res = await fetch('/api/tidarr/download', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      url:     chosen.url,
+      type:    chosen.type   || 'album',
+      title:   chosen.title  || wantedAlbum  || '',
+      artist:  chosen.artist || wantedArtist || '',
+      id:      String(chosen.id || ''),
+      quality: getDownloadQuality()
+    })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
+  markDownloaded(chosen.artist || wantedArtist || '', chosen.title || wantedAlbum || '');
+  if (btn) { btn.textContent = '✓'; btn.classList.add('dl-done'); btn.disabled = false; }
+  await refreshTidarrQueueBadge();
+}
+
+// Download-knop klik: haalt top-3 kandidaten op, toont confirm-dialog als artiest afwijkt.
 async function triggerTidarrDownload(artist, album, btn) {
   if (!tidarrOk) {
     alert('Tidarr is niet verbonden. Controleer TIDARR_URL en TIDARR_API_KEY.');
@@ -1387,51 +1491,132 @@ async function triggerTidarrDownload(artist, album, btn) {
   }
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
-    // Gebruik het slimme /find-endpoint: probeert meerdere queries + fuzzy matching
     const params = new URLSearchParams();
     if (artist) params.set('artist', artist);
     if (album)  params.set('album',  album);
-    const findRes = await fetch(`/api/tidarr/find?${params}`);
 
-    if (!findRes.ok) {
-      if (findRes.status === 401) {
+    // Haal top-3 kandidaten op voor mogelijke confirm-dialog
+    const candRes = await fetch(`/api/tidarr/candidates?${params}`);
+
+    if (!candRes.ok) {
+      if (candRes.status === 401) {
         alert('Niet ingelogd bij TIDAL.\nGa naar de 🎛️ Tidarr-tab en koppel je TIDAL-account eerst.');
       } else {
-        alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer het handmatig te zoeken via de 🌊 Tidal-tab.`);
+        alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer het handmatig via de 🌊 Tidal-tab.`);
       }
       if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
       return;
     }
 
-    const best = await findRes.json();
-    const res = await fetch('/api/tidarr/download', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        url:     best.url,
-        type:    best.type   || 'album',
-        title:   best.title  || album  || '',
-        artist:  best.artist || artist || '',
-        id:      String(best.id || ''),
-        quality: getDownloadQuality()
-      })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
-    // Markeer als gedownload in de lokale set (voor groene vinkjes)
-    markDownloaded(best.artist || artist || '', best.title || album || '');
-    // Zet de knop permanent op groen vinkje
-    if (btn) {
-      btn.textContent = '✓';
-      btn.classList.add('dl-done');
-      btn.disabled = false;
+    const { candidates } = await candRes.json();
+    if (!candidates?.length) {
+      alert(`Niet gevonden op TIDAL: "${album}"${artist ? ' van ' + artist : ''}`);
+      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
+      return;
     }
-    await refreshTidarrQueueBadge();
+
+    const best = candidates[0];
+
+    // Toon confirm-dialog als de beste match een andere artiest heeft
+    if (artist && !artistMatches(best.artist, artist)) {
+      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
+      const { chosen } = await openDownloadConfirm(candidates, artist, album, btn);
+      if (!chosen) return; // gebruiker heeft geannuleerd
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+      await executeDownload(chosen, artist, album, btn);
+    } else {
+      // Artiest klopt → direct downloaden
+      await executeDownload(best, artist, album, btn);
+    }
   } catch (e) {
     alert('Downloaden mislukt: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
   }
 }
+
+// ── Queue FAB (floating queue knop) ───────────────────────────────────────
+function updateQueueFab(items) {
+  const fab   = document.getElementById('queue-fab');
+  const badge = document.getElementById('fab-queue-badge');
+  if (!fab) return;
+  const active = (items || []).filter(i => i.status !== 'finished' && i.status !== 'error');
+  if (items && items.length > 0) {
+    fab.style.display = '';
+    if (active.length > 0) { badge.textContent = active.length; badge.style.display = ''; }
+    else                    { badge.style.display = 'none'; }
+  } else {
+    fab.style.display = 'none';
+    document.getElementById('queue-popover')?.classList.remove('open');
+  }
+}
+
+function renderQueuePopover() {
+  const list = document.getElementById('queue-popover-list');
+  if (!list) return;
+  const items = tidarrQueueItems;
+  if (!items.length) {
+    list.innerHTML = `<div class="qpop-empty">Queue is leeg</div>`;
+    return;
+  }
+  const statusLabel = {
+    queue_download:   'In wachtrij',
+    queue_processing: 'Verwerken',
+    download:         'Downloaden…',
+    processing:       'Verwerken…',
+    finished:         'Klaar ✓',
+    error:            'Fout'
+  };
+  const statusClass = {
+    queue_download:   'q-pending',
+    queue_processing: 'q-pending',
+    download:         'q-active',
+    processing:       'q-active',
+    finished:         'q-done',
+    error:            'q-error'
+  };
+  list.innerHTML = items.map(it => {
+    const sc  = statusClass[it.status]  || 'q-pending';
+    const lbl = statusLabel[it.status]  || it.status || 'In wachtrij';
+    const pct = it.progress?.current && it.progress?.total
+      ? Math.round(it.progress.current / it.progress.total * 100) : null;
+    const progHtml = pct !== null
+      ? `<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${pct}%"></div></div>`
+      : '';
+    return `<div class="qpop-row">
+      <div class="qpop-title">${esc(it.title || '(onbekend)')}</div>
+      ${it.artist ? `<div class="qpop-artist">${esc(it.artist)}</div>` : ''}
+      <span class="q-status ${sc}">${esc(lbl)}</span>
+      ${progHtml}
+    </div>`;
+  }).join('');
+}
+
+function toggleQueuePopover() {
+  const pop = document.getElementById('queue-popover');
+  if (!pop) return;
+  const isOpen = pop.classList.toggle('open');
+  if (isOpen) renderQueuePopover();
+}
+
+function closeQueuePopover() {
+  document.getElementById('queue-popover')?.classList.remove('open');
+}
+
+document.getElementById('queue-fab')?.addEventListener('click', toggleQueuePopover);
+document.getElementById('qpop-close')?.addEventListener('click', e => { e.stopPropagation(); closeQueuePopover(); });
+document.getElementById('qpop-goto-tidal')?.addEventListener('click', () => {
+  closeQueuePopover();
+  document.querySelector('.tab[data-tab="tidal"]')?.click();
+  setTimeout(() => setTidalView('queue'), 150);
+});
+// Klik buiten popover → sluiten
+document.addEventListener('click', e => {
+  const pop = document.getElementById('queue-popover');
+  const fab = document.getElementById('queue-fab');
+  if (pop?.classList.contains('open') && !pop.contains(e.target) && !fab?.contains(e.target)) {
+    closeQueuePopover();
+  }
+}, true);
 
 // ── Navigatie ──────────────────────────────────────────────────────────────
 const tabLoaders = {

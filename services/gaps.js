@@ -8,15 +8,28 @@ const { getCache, setCache, getCacheAge }         = require('../db');
 const CACHE_TTL = 86_400_000; // 24 uur
 let buildPromise = null;
 
+// Roteer periodes zodat je afwisselend andere artiesten ziet
+const PERIODS = ['overall', '12month', '6month', '3month'];
+
 async function buildGapsCache() {
-  console.log('Gaps cache bouwen...');
-  // STAP 12: Bewaar oude cache voor error recovery
-  const oldCache = getCache('gaps');
+  // Kies willekeurig een periode voor afwisseling
+  const period = PERIODS[Math.floor(Math.random() * PERIODS.length)];
+  console.log(`Gaps cache bouwen (periode: ${period})...`);
   try {
     await syncPlexLibrary();
-    const topData    = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 40 });
-    const topArtists = (topData.topartists?.artist || []).map(a => a.name);
-    const plexTop    = topArtists.filter(name => artistInPlex(name)).slice(0, 20);
+
+    // Haal top-artiesten op uit twee periodes tegelijk voor meer dekking
+    const [topData, recentData] = await Promise.all([
+      lfm({ method: 'user.gettopartists', period: 'overall', limit: 40 }),
+      lfm({ method: 'user.gettopartists', period: period, limit: 30 }).catch(() => ({ topartists: { artist: [] } }))
+    ]);
+
+    const overallNames = (topData.topartists?.artist || []).map(a => a.name);
+    const recentNames  = (recentData.topartists?.artist || []).map(a => a.name);
+
+    // Combineer: recent eerst (voor afwisseling), daarna overall, dedupliceer
+    const combined = [...new Set([...recentNames, ...overallNames])];
+    const plexTop  = combined.filter(name => artistInPlex(name)).slice(0, 25);
 
     const gapArtists = [];
     for (const name of plexTop) {
@@ -46,15 +59,13 @@ async function buildGapsCache() {
       } catch { /* sla artiest over bij fout */ }
     }
 
-    setCache('gaps', { artists: gapArtists, builtAt: Date.now() });
-    console.log(`Gaps cache klaar: ${gapArtists.length} artiesten met gaten`);
+    setCache('gaps', { artists: gapArtists, builtAt: Date.now(), period });
+    console.log(`Gaps cache klaar: ${gapArtists.length} artiesten met gaten (periode: ${period})`);
   } catch (e) {
     console.error('Gaps cache mislukt:', e.message);
-    // STAP 12: Error recovery — bewaar oude cache bij fout
-    if (oldCache) {
-      setCache('gaps', oldCache);
-      console.log('Gaps: oude cache hersteld na fout.');
-    }
+    // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,
+    // zodat het systeem de volgende keer opnieuw probeert ipv 24u wacht.
+    console.log('Gaps: oude cache blijft actief (timestamp behouden voor volgende poging).');
   }
 }
 
