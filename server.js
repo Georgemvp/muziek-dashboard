@@ -156,28 +156,109 @@ app.get('/api/artist/:name/info', async (req, res) => {
 
 app.get('/api/recs', async (req, res) => {
   try {
-    const cached = getCache('api:recs', 900_000); // STAP 11: 15 min TTL
+    // Cache key rotates every 2 hours to ensure fresh seed rotation
+    const cacheKeyRotation = Math.floor(Date.now() / 7_200_000);
+    const cacheKey = `api:recs:${cacheKeyRotation}`;
+    const cached = getCache(cacheKey, 900_000); // 15 min TTL per key
     if (cached) return res.json(cached);
+
     await syncPlexLibrary();
-    const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 15 });
+    const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 30 });
     const topArtists = (top.topartists?.artist || []).map(a => a.name);
 
-    // ── Artiest-aanbevelingen ─────────────────────────────────────────────
+    // ── 1. SEED-DIVERSITEIT: Top-5 + 5 random uit posities 10-30 ──────────
+    const seedArtists = [];
+    // Top-5 seeds
+    seedArtists.push(...topArtists.slice(0, 5));
+    // 5 random uit posities 10-30
+    const candidateRange = topArtists.slice(10, 30);
+    if (candidateRange.length > 0) {
+      const randomIndices = new Set();
+      while (randomIndices.size < Math.min(5, candidateRange.length)) {
+        randomIndices.add(Math.floor(Math.random() * candidateRange.length));
+      }
+      randomIndices.forEach(idx => seedArtists.push(candidateRange[idx]));
+    }
+
+    // ── Genre tracking voor genre-spreiding ──────────────────────────────
+    const genreCount = {}; // { 'rock': 2, 'pop': 1, ... }
+    const stopwords = new Set(['seen live', 'listened', 'favourite', 'favorites', 'love', 'loved', 'awesome', 'cool', 'good', 'great']);
+
+    // Verzamel genres van seed artiesten
+    const seedGenreResults = await Promise.allSettled(
+      seedArtists.map(artist =>
+        lfm({ method: 'artist.gettoptags', artist }, { includeUser: false })
+      )
+    );
+    for (const result of seedGenreResults) {
+      if (result.status === 'fulfilled') {
+        const tags = (result.value.toptags?.tag || []).slice(0, 3);
+        for (const tag of tags) {
+          const name = tag.name.toLowerCase().trim();
+          if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
+            genreCount[name] = (genreCount[name] || 0) + 1;
+          }
+        }
+      }
+    }
+
+    // ── Artiest-aanbevelingen ──────────────────────────────────────────
     let recs = [];
     const simResults = await Promise.all(
-      topArtists.slice(0, 10).map(async artist => {
-        try { return { artist, similar: await getSimilarArtists(artist, 15) }; }
+      seedArtists.map(async artist => {
+        try {
+          // 2. MAX PER SEED: Beperk tot 3 similar artists (in plaats van 15)
+          return { artist, similar: await getSimilarArtists(artist, 3) };
+        }
         catch { return { artist, similar: [] }; }
       })
     );
+
     for (const { artist, similar } of simResults) {
       for (const s of similar) {
         if (!topArtists.includes(s.name) && !recs.find(x => x.name === s.name)) {
           const inPlex = artistInPlex(s.name);
-          recs.push({ name: s.name, reason: artist, match: parseFloat(s.match), adjustedMatch: parseFloat(s.match) * (inPlex ? 0.9 : 1.15), inPlex });
+          let adjustedMatch = parseFloat(s.match) * (inPlex ? 0.9 : 1.4); // 4. NIEUW-VOORKEUR: 1.15 → 1.4
+
+          // ── 3. GENRE-SPREIDING: Penaliseer artiesten met oververtegenwoordigde genres ──
+          try {
+            const tagsResult = await lfm({ method: 'artist.gettoptags', artist: s.name }, { includeUser: false });
+            const tags = (tagsResult.toptags?.tag || []).slice(0, 3);
+            let hasOnlyCommonGenres = true;
+            let commonGenreCount = 0;
+
+            for (const tag of tags) {
+              const name = tag.name.toLowerCase().trim();
+              if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
+                const count = genreCount[name] || 0;
+                if (count < 3) {
+                  hasOnlyCommonGenres = false;
+                  break;
+                } else {
+                  commonGenreCount++;
+                }
+              }
+            }
+
+            // Als alle genres al 3+ keer voorkomen, penaliseer met 50%
+            if (hasOnlyCommonGenres && commonGenreCount > 0) {
+              adjustedMatch *= 0.5;
+            }
+          } catch {
+            // Genre-check fout: gebruik ongewijzigde adjustedMatch
+          }
+
+          recs.push({
+            name: s.name,
+            reason: artist,
+            match: parseFloat(s.match),
+            adjustedMatch,
+            inPlex
+          });
         }
       }
     }
+
     recs.sort((a, b) => b.adjustedMatch - a.adjustedMatch);
     const topRecs = recs.slice(0, 30);
 
@@ -235,10 +316,11 @@ app.get('/api/recs', async (req, res) => {
       albumRecs,
       trackRecs,
       basedOn:          topArtists,
+      seedArtists:      seedArtists, // Transparantie: laat zien welke seeds gebruikt zijn
       plexConnected:    ok,
       plexArtistCount:  artistCount
     };
-    setCache('api:recs', result); // STAP 11: sla op in cache
+    setCache(cacheKey, result); // Cache per 2-uur rotatie
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
