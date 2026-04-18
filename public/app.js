@@ -1973,6 +1973,24 @@ function setupLazyLoad(el, callback) {
   obs.observe(el);
 }
 
+// ── Mutex voor sectionContainerEl ──────────────────────────────────────────
+// Voorkomt race conditions wanneer meerdere async functies tegelijk
+// sectionContainerEl willen gebruiken (bijv. lazy-load callbacks in Ontdek).
+let _sectionMutex = Promise.resolve();
+function runWithSection(el, fn) {
+  const result = _sectionMutex.then(async () => {
+    sectionContainerEl = el;
+    try {
+      await fn();
+    } finally {
+      sectionContainerEl = null;
+    }
+  });
+  // Zorg dat een fout de keten niet breekt voor volgende aanroepen
+  _sectionMutex = result.catch(() => {});
+  return result;
+}
+
 // ── Composiet loader: Nu ────────────────────────────────────────────────────
 function loadNu() {
   currentTab = 'recent';
@@ -2126,16 +2144,12 @@ async function loadOntdek() {
   document.getElementById('btn-ref-releases-ontdek')?.addEventListener('click', async () => {
     lastReleases = null;
     await fetch('/api/releases/refresh', { method: 'POST' });
-    sectionContainerEl = document.getElementById('sec-releases-content');
-    await loadReleases();
-    sectionContainerEl = null;
+    await runWithSection(document.getElementById('sec-releases-content'), loadReleases);
   });
   document.getElementById('btn-ref-discover-ontdek')?.addEventListener('click', async () => {
     lastDiscover = null;
     await fetch('/api/discover/refresh', { method: 'POST' });
-    sectionContainerEl = document.getElementById('sec-discover-content');
-    await loadDiscover();
-    sectionContainerEl = null;
+    await runWithSection(document.getElementById('sec-discover-content'), loadDiscover);
   });
   document.getElementById('btn-clear-mood-inline')?.addEventListener('click', () => {
     activeMood = null;
@@ -2149,17 +2163,12 @@ async function loadOntdek() {
   await loadRecs();
   sectionContainerEl = null;
 
-  // 2. Lazy-load releases en discover
-  setupLazyLoad(document.getElementById('sec-releases-content'), async () => {
-    sectionContainerEl = document.getElementById('sec-releases-content');
-    await loadReleases();
-    sectionContainerEl = null;
-  });
-  setupLazyLoad(document.getElementById('sec-discover-content'), async () => {
-    sectionContainerEl = document.getElementById('sec-discover-content');
-    await loadDiscover();
-    sectionContainerEl = null;
-  });
+  // 2. Lazy-load releases en discover — via mutex om race condition op
+  //    sectionContainerEl te voorkomen wanneer beide callbacks tegelijk vuren.
+  setupLazyLoad(document.getElementById('sec-releases-content'), () =>
+    runWithSection(document.getElementById('sec-releases-content'), loadReleases));
+  setupLazyLoad(document.getElementById('sec-discover-content'), () =>
+    runWithSection(document.getElementById('sec-discover-content'), loadDiscover));
 
   // 3. Setup collapsible sections
   setupSectionToggle('recs', 'recs');
@@ -2309,12 +2318,9 @@ async function loadBibliotheek() {
   // Initieel sub-tab laden
   await switchBibSubTab(bibSubTab);
 
-  // Stats lazy-loaden
-  setupLazyLoad(document.getElementById('bib-stats-content'), async () => {
-    sectionContainerEl = document.getElementById('bib-stats-content');
-    await loadStats();
-    sectionContainerEl = null;
-  });
+  // Stats lazy-loaden — via mutex om conflict met strip-loads te voorkomen
+  setupLazyLoad(document.getElementById('bib-stats-content'), () =>
+    runWithSection(document.getElementById('bib-stats-content'), loadStats));
 }
 
 // ── Composiet loader: Downloads ─────────────────────────────────────────────
