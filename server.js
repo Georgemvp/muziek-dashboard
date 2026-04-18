@@ -152,6 +152,39 @@ app.get('/api/artist/:name/info', async (req, res) => {
   }
 });
 
+// ── API: Deezer preview ────────────────────────────────────────────────────
+
+app.get('/api/preview', async (req, res) => {
+  const artist = (req.query.artist || '').trim();
+  const track  = (req.query.track  || '').trim();
+  if (!artist || !track) return res.json({ preview: null });
+
+  const cacheKey = `preview:${artist.toLowerCase()}:${track.toLowerCase()}`;
+  const cached = getCache(cacheKey, 7 * 24 * 60 * 60 * 1000); // 7 dagen TTL
+  if (cached) return res.json(cached);
+
+  try {
+    const q   = `artist:"${artist}" track:"${track}"`;
+    const url = `https://api.deezer.com/search/track?q=${encodeURIComponent(q)}&limit=3`;
+    const data = await fetch(url, { signal: AbortSignal.timeout(5_000) }).then(r => r.json());
+    const results = data?.data || [];
+    const hit = results.find(t => t.preview) || null;
+
+    const result = hit ? {
+      preview: hit.preview,
+      title:   hit.title,
+      artist:  hit.artist?.name || artist,
+      album:   hit.album?.title || '',
+      cover:   hit.album?.cover_medium || null
+    } : { preview: null };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (e) {
+    res.json({ preview: null });
+  }
+});
+
 // ── API: Aanbevelingen ─────────────────────────────────────────────────────
 
 app.get('/api/recs', async (req, res) => {

@@ -21,6 +21,10 @@ let tidarrSseSource    = null;      // SSE-verbinding voor real-time queue
 let tidarrQueueItems   = [];        // live queue-items van Tidarr SSE
 let downloadedSet      = new Set(); // genormaliseerde "artist|title" sleutels
 
+// ── Audio preview state ───────────────────────────────────────────────────
+const _previewAudio = new Audio();
+let   _previewBtn   = null; // de actieve play-knop
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 const getImg = (imgs, size = 'medium') => {
   if (!imgs) return null;
@@ -107,6 +111,85 @@ function downloadBtn(artist, album = '', inPlex = false) {
     data-dlartist="${esc(artist)}" data-dlalbum="${esc(album)}"
     title="Download via Tidarr">⬇</button>`;
 }
+
+// ── Audio preview logica ───────────────────────────────────────────────────
+async function playPreview(btn, artist, track) {
+  // Zelfde knop → toggle play/pauze
+  if (_previewBtn === btn) {
+    if (_previewAudio.paused) {
+      await _previewAudio.play();
+      btn.textContent = '⏸';
+      btn.classList.add('playing');
+    } else {
+      _previewAudio.pause();
+      btn.textContent = '▶';
+      btn.classList.remove('playing');
+    }
+    return;
+  }
+
+  // Stop vorige track
+  if (_previewBtn) {
+    _previewAudio.pause();
+    _previewBtn.textContent = '▶';
+    _previewBtn.classList.remove('playing');
+    const oldFill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+    if (oldFill) oldFill.style.width = '0%';
+  }
+
+  _previewBtn = btn;
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const params = new URLSearchParams({ artist, track });
+    const data = await apiFetch(`/api/preview?${params}`);
+    if (!data.preview) {
+      btn.textContent = '—';
+      btn.disabled = false;
+      setTimeout(() => { if (btn.textContent === '—') btn.textContent = '▶'; }, 1800);
+      _previewBtn = null;
+      return;
+    }
+    _previewAudio.src = data.preview;
+    _previewAudio.currentTime = 0;
+    await _previewAudio.play();
+    btn.textContent = '⏸';
+    btn.disabled = false;
+    btn.classList.add('playing');
+  } catch {
+    btn.textContent = '▶';
+    btn.disabled = false;
+    _previewBtn = null;
+  }
+}
+
+_previewAudio.addEventListener('timeupdate', () => {
+  if (!_previewBtn || !_previewAudio.duration) return;
+  const fill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+  if (fill) fill.style.width = `${(_previewAudio.currentTime / _previewAudio.duration * 100).toFixed(1)}%`;
+});
+
+_previewAudio.addEventListener('ended', () => {
+  if (_previewBtn) {
+    _previewBtn.textContent = '▶';
+    _previewBtn.classList.remove('playing');
+    const fill = _previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+    if (fill) fill.style.width = '0%';
+    _previewBtn = null;
+  }
+});
+
+// Stop audio als de tab onzichtbaar wordt
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !_previewAudio.paused) {
+    _previewAudio.pause();
+    if (_previewBtn) {
+      _previewBtn.textContent = '▶';
+      _previewBtn.classList.remove('playing');
+    }
+  }
+});
 
 async function apiFetch(url) {
   const res = await fetch(url);
@@ -498,7 +581,9 @@ async function loadRecent() {
         html += `<div class="card">${artwork}<div class="card-info">
           <div class="card-title">${esc(t.name)}</div>
           <div class="card-sub artist-link" data-artist="${esc(art)}">${esc(art)}</div>
-          </div><div class="card-meta">${when}</div></div>`;
+          </div><div class="card-meta">${when}</div>
+          <button class="play-btn" data-artist="${esc(art)}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
+          <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
       }
     }
     setContent(html + '</div>');
@@ -555,7 +640,9 @@ async function loadTopTracks(period) {
         <div class="card-title">${esc(t.name)}</div>
         <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name || '')}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${pct}%"></div></div>
-        </div><div class="card-meta">${fmt(t.playcount)}×</div></div>`;
+        </div><div class="card-meta">${fmt(t.playcount)}×</div>
+        <button class="play-btn" data-artist="${esc(t.artist?.name||'')}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
+        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
     }
     setContent(html + '</div>');
   } catch (e) { showError(e.message); }
@@ -1007,7 +1094,9 @@ async function loadLoved() {
       html += `<div class="card">${trackImg(t.image)}<div class="card-info">
         <div class="card-title">${esc(t.name)}</div>
         <div class="card-sub artist-link" data-artist="${esc(t.artist?.name||'')}">${esc(t.artist?.name||'')}</div>
-        </div><div class="card-meta" style="color:var(--red)">♥ ${when}</div></div>`;
+        </div><div class="card-meta" style="color:var(--red)">♥ ${when}</div>
+        <button class="play-btn" data-artist="${esc(t.artist?.name||'')}" data-track="${esc(t.name)}" title="Preview afspelen">▶</button>
+        <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
     }
     setContent(html + '</div>');
   } catch (e) { showError(e.message); }
@@ -1795,6 +1884,14 @@ document.getElementById('plex-refresh-btn').addEventListener('click', async () =
 
 // ── Globale event delegation ───────────────────────────────────────────────
 document.addEventListener('click', async e => {
+  // Play-knop → audio preview
+  const playBtn = e.target.closest('.play-btn');
+  if (playBtn) {
+    e.stopPropagation();
+    playPreview(playBtn, playBtn.dataset.artist, playBtn.dataset.track);
+    return;
+  }
+
   // Artiest-link → open panel
   const link = e.target.closest('[data-artist]');
   if (link?.dataset.artist && !link.classList.contains('bookmark-btn')) {
