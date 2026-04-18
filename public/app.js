@@ -1148,7 +1148,8 @@ function renderDiscover() {
   let html = `<div class="section-title">Gebaseerd op: ${(basedOn||[]).slice(0,3).join(', ')}
     &nbsp;·&nbsp; <span style="color:var(--new)">${totalMissing} albums te ontdekken</span></div>`;
 
-  for (const a of filtered) {
+  for (let i = 0; i < filtered.length; i++) {
+    const a = filtered[i];
     const matchPct = Math.round(a.match * 100);
     const meta = [
       countryFlag(a.country),
@@ -1163,9 +1164,12 @@ function renderDiscover() {
          <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
       : `<div class="discover-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
 
+    const albumCount = a.albums?.length || 0;
+    const albumCountLabel = albumCount > 0 ? `${albumCount} ${albumCount === 1 ? 'album' : 'albums'}` : '';
+
     html += `
-      <div class="discover-section">
-        <div class="discover-artist-card">
+      <div class="discover-section" id="disc-${i}">
+        <div class="discover-artist-card discover-card-toggle" data-disc-id="disc-${i}">
           ${photo}
           <div class="discover-info">
             <div class="discover-name">
@@ -1179,11 +1183,14 @@ function renderDiscover() {
               ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
               : `<div style="font-size:12px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
+            <button class="disc-toggle-btn expanded" data-disc-id="disc-${i}" title="Vouw albums in/uit"
+              aria-label="Albums in/uitklappen">${albumCountLabel}</button>
             <span class="discover-match">${matchPct}%</span>
             ${bookmarkBtn('artist', a.name, '', a.image || '')}
           </div>
-        </div>`;
+        </div>
+        <div class="discover-albums-wrap">`;
 
     if (a.albums?.length) {
       html += `<div class="album-grid">`;
@@ -1192,7 +1199,7 @@ function renderDiscover() {
     } else {
       html += `<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar. Vernieuw straks.</div>`;
     }
-    html += `</div>`;
+    html += `</div></div>`;
   }
   setContent(html);
 }
@@ -2459,6 +2466,41 @@ document.addEventListener('click', async e => {
   if (playBtn) {
     e.stopPropagation();
     playPreview(playBtn, playBtn.dataset.artist, playBtn.dataset.track);
+    return;
+  }
+
+  // Discover album-sectie toggle (knop of kaart-klik, maar NIET op artiest-link/bookmark)
+  const discToggleBtn = e.target.closest('.disc-toggle-btn');
+  if (discToggleBtn) {
+    e.stopPropagation();
+    const sectionId = discToggleBtn.dataset.discId;
+    const section = document.getElementById(sectionId);
+    if (section) {
+      const isCollapsed = section.classList.toggle('collapsed');
+      discToggleBtn.classList.toggle('expanded', !isCollapsed);
+      discToggleBtn.classList.toggle('collapsed', isCollapsed);
+      // Sync ook de knop in de kaart als die apart is
+      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
+        b.classList.toggle('expanded', !isCollapsed);
+        b.classList.toggle('collapsed', isCollapsed);
+      });
+    }
+    return;
+  }
+
+  // Klik op discover-kaart zelf (niet op artiest-link, bookmark of toggle)
+  const discCard = e.target.closest('.discover-card-toggle');
+  if (discCard && !e.target.closest('.artist-link') && !e.target.closest('.bookmark-btn') && !e.target.closest('.disc-toggle-btn')) {
+    const sectionId = discCard.dataset.discId;
+    const section = document.getElementById(sectionId);
+    if (section) {
+      const toggleBtn = section.querySelector('.disc-toggle-btn');
+      const isCollapsed = section.classList.toggle('collapsed');
+      if (toggleBtn) {
+        toggleBtn.classList.toggle('expanded', !isCollapsed);
+        toggleBtn.classList.toggle('collapsed', isCollapsed);
+      }
+    }
     return;
   }
 

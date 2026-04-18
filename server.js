@@ -55,53 +55,88 @@ app.use(express.json());
 
 // ── API: Last.fm ───────────────────────────────────────────────────────────
 
+// ── Last.fm bereikbaarheidsstatus ──────────────────────────────────────────
+let lastFmDown = false;
+let lastFmDownSince = null;
+
+function markLastFmDown() {
+  if (!lastFmDown) { lastFmDown = true; lastFmDownSince = Date.now(); }
+}
+function markLastFmUp() {
+  lastFmDown = false; lastFmDownSince = null;
+}
+
+/**
+ * Geeft stale gecachede data terug als Last.fm onbereikbaar is,
+ * met een _stale: true vlag zodat de frontend dit kan tonen.
+ */
+function staleOrError(cacheKey, err, res) {
+  const stale = getCache(cacheKey, Infinity);
+  if (stale) {
+    markLastFmDown();
+    return res.json({ ...stale, _stale: true, _staleReason: err.message });
+  }
+  markLastFmDown();
+  res.status(503).json({ error: 'Last.fm is tijdelijk niet bereikbaar en er is geen gecachede data beschikbaar.', _lfmDown: true });
+}
+
 app.get('/api/user', async (req, res) => {
-  try { res.json(await lfm({ method: 'user.getinfo' })); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const cached = getCache('api:user', 300_000);
+    if (cached) return res.json(cached);
+    const data = await lfm({ method: 'user.getinfo' });
+    markLastFmUp();
+    setCache('api:user', data);
+    res.json(data);
+  } catch (e) { staleOrError('api:user', e, res); }
 });
 
 app.get('/api/recent', async (req, res) => {
   try {
-    const cached = getCache('api:recent', 120_000); // STAP 11: 2 min TTL
+    const cached = getCache('api:recent', 120_000);
     if (cached) return res.json(cached);
     const data = await lfm({ method: 'user.getrecenttracks', limit: 20 });
+    markLastFmUp();
     setCache('api:recent', data);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { staleOrError('api:recent', e, res); }
 });
 
 app.get('/api/topartists', async (req, res) => {
   try {
     const period = req.query.period || '7day';
     const cacheKey = `api:topartists:${period}`;
-    const cached = getCache(cacheKey, 300_000); // STAP 11: 5 min TTL
+    const cached = getCache(cacheKey, 300_000);
     if (cached) return res.json(cached);
     const data = await lfm({ method: 'user.gettopartists', period, limit: 20 });
+    markLastFmUp();
     setCache(cacheKey, data);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { staleOrError(`api:topartists:${req.query.period || '7day'}`, e, res); }
 });
 
 app.get('/api/toptracks', async (req, res) => {
   try {
     const period = req.query.period || '7day';
     const cacheKey = `api:toptracks:${period}`;
-    const cached = getCache(cacheKey, 300_000); // STAP 11: 5 min TTL
+    const cached = getCache(cacheKey, 300_000);
     if (cached) return res.json(cached);
     const data = await lfm({ method: 'user.gettoptracks', period, limit: 20 });
+    markLastFmUp();
     setCache(cacheKey, data);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res); }
 });
 
 app.get('/api/loved', async (req, res) => {
   try {
-    const cached = getCache('api:loved', 600_000); // STAP 11: 10 min TTL
+    const cached = getCache('api:loved', 600_000);
     if (cached) return res.json(cached);
     const data = await lfm({ method: 'user.getlovedtracks', limit: 20 });
+    markLastFmUp();
     setCache('api:loved', data);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { staleOrError('api:loved', e, res); }
 });
 
 // ── API: Artiest info ──────────────────────────────────────────────────────
@@ -354,10 +389,17 @@ app.get('/api/recs', async (req, res) => {
       plexConnected:    ok,
       plexArtistCount:  artistCount
     };
+    markLastFmUp();
     setCache(cacheKey, result); // Cache per 2-uur rotatie
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    markLastFmDown();
+    // Probeer huidige rotatie-sleutel (stale), daarna vorige rotatie
+    const currentKey  = `api:recs:${Math.floor(Date.now() / 7_200_000)}`;
+    const previousKey = `api:recs:${Math.floor(Date.now() / 7_200_000) - 1}`;
+    const stale = getCache(currentKey, Infinity) || getCache(previousKey, Infinity);
+    if (stale) return res.json({ ...stale, _stale: true, _staleReason: e.message });
+    res.status(503).json({ error: 'Last.fm is tijdelijk niet bereikbaar en er is geen gecachede data beschikbaar.', _lfmDown: true });
   }
 });
 
@@ -433,7 +475,10 @@ app.get('/api/search', async (req, res) => {
       image: deezerMap[a.name.toLowerCase()] || null
     }));
     res.json({ results });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    // Zoeken werkt gedeeltelijk zonder Last.fm (alleen Deezer-afbeeldingen)
+    res.json({ results: [], _lfmDown: true, error: e.message });
+  }
 });
 
 // ── API: Vergelijkbare artiesten ───────────────────────────────────────────
@@ -443,7 +488,7 @@ app.get('/api/artist/:name/similar', async (req, res) => {
   try {
     const similar = await getSimilarArtists(name, 6);
     res.json({ similar });
-  } catch (e) { res.status(500).json({ error: e.message, similar: [] }); }
+  } catch (e) { res.json({ similar: [], _lfmDown: true, error: e.message }); }
 });
 
 // ── API: Statistieken ──────────────────────────────────────────────────────
@@ -502,9 +547,10 @@ app.get('/api/stats', async (req, res) => {
       .map(([name, count]) => ({ name, count }));
 
     const result = { dailyScrobbles, topArtists, genres };
+    markLastFmUp();
     setCache('stats', result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { staleOrError('stats', e, res); }
 });
 
 // ── API: Verlanglijst ──────────────────────────────────────────────────────
@@ -711,9 +757,11 @@ app.get('/health', (req, res) => {
   const discoverAge = getCacheAge('discover');
   const gapsAge     = getCacheAge('gaps');
   res.json({
-    status: 'ok',
-    uptime: Math.round(process.uptime()),
+    status:       'ok',
+    uptime:       Math.round(process.uptime()),
     plexConnected,
+    lastFmDown,
+    lastFmDownSince: lastFmDownSince ? new Date(lastFmDownSince).toISOString() : null,
     cache: {
       discover: discoverAge < Infinity ? Math.round(discoverAge / 1000) + 's' : 'leeg',
       gaps:     gapsAge     < Infinity ? Math.round(gapsAge     / 1000) + 's' : 'leeg'
