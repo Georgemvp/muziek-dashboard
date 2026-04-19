@@ -10,8 +10,10 @@ export function getDownloadQuality() {
 
 // ── Tidarr status ─────────────────────────────────────────────────────────
 export async function loadTidarrStatus() {
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/tidarr/status');
+    const d = await apiFetch('/api/tidarr/status', { signal });
+    if (signal?.aborted) return;
     const pill = document.getElementById('tidarr-status-pill');
     const text = document.getElementById('tidarr-status-text');
     state.tidarrOk = !!d.connected;
@@ -21,7 +23,8 @@ export async function loadTidarrStatus() {
         ? `Tidarr · verbonden${d.quality ? ' · ' + d.quality : ''}`
         : 'Tidarr offline';
     }
-  } catch {
+  } catch (e) {
+    if (e.name === 'AbortError') return;
     state.tidarrOk = false;
     const text = document.getElementById('tidarr-status-text');
     if (text) text.textContent = 'Tidarr offline';
@@ -29,8 +32,10 @@ export async function loadTidarrStatus() {
 }
 
 export async function refreshTidarrQueueBadge() {
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/tidarr/queue');
+    const d = await apiFetch('/api/tidarr/queue', { signal });
+    if (signal?.aborted) return;
     const count = (d.items || []).length;
     const badges = [
       document.getElementById('badge-tidarr-queue'),
@@ -41,7 +46,7 @@ export async function refreshTidarrQueueBadge() {
       if (count > 0) { b.textContent = count; b.style.display = ''; }
       else           { b.style.display = 'none'; }
     }
-  } catch {}
+  } catch (e) { if (e.name === 'AbortError') return; }
 }
 
 // ── Tidal zoekresultaat card ──────────────────────────────────────────────
@@ -241,10 +246,10 @@ export function startTidarrSSE() {
       else                    { b.style.display = 'none'; }
     }
     updateQueueFab(state.tidarrQueueItems);
-    if (state.currentTab === 'tidal' && state.tidalView === 'queue') renderTidalQueue();
+    if (state.activeSubTab === 'tidal' && state.tidalView === 'queue') renderTidalQueue();
     if (document.getElementById('queue-popover')?.classList.contains('open')) renderQueuePopover();
     // Dashboard download-widget auto-refresh
-    if (state.currentTab === 'nu') {
+    if (state.activeTab === 'nu') {
       const dwEl = document.getElementById('wbody-download-voortgang');
       if (dwEl) renderDashboardQueue(dwEl, active);
     }
@@ -504,7 +509,7 @@ export async function loadTidal() {
 }
 
 export function loadDownloads() {
-  state.currentTab = 'tidal';
+  state.activeSubTab = 'tidal';
   hideTidarrUI();
   document.getElementById('tb-tidal')?.classList.add('visible');
   loadTidal();

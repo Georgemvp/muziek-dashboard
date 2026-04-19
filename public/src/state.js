@@ -3,8 +3,8 @@
 
 export const state = {
   // ── Navigatie ───────────────────────────────────────────────────────────
-  currentTab:       'nu',
-  currentMainTab:   'nu',
+  activeTab:        'nu',
+  activeSubTab:     null,
   bibSubTab:        'collectie',
   sectionContainerEl: null,
 
@@ -28,6 +28,9 @@ export const state = {
   // ── Timeouts ─────────────────────────────────────────────────────────────
   searchTimeout:      null,
   tidalSearchTimeout: null,
+
+  // ── Tab navigation abort controller ─────────────────────────────────────────
+  tabAbort:           null,
 
   // ── Tidarr / Tidal ───────────────────────────────────────────────────────
   tidarrOk:           false,

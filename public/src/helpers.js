@@ -197,6 +197,10 @@ export function showSkeleton(type) {
 
 // ── Content weergave ──────────────────────────────────────────────────────
 export function setContent(html, callback) {
+  // Reset sectionContainerEl if it's no longer in the DOM
+  if (state.sectionContainerEl && !document.contains(state.sectionContainerEl)) {
+    state.sectionContainerEl = null;
+  }
   const target = state.sectionContainerEl || contentEl;
 
   if (!state.sectionContainerEl && document.startViewTransition) {
@@ -235,11 +239,13 @@ export function showLoading(msg) {
   const skeletonMap = {
     recent: 'cards', loved: 'cards', toptracks: 'cards',
     topartists: 'grid', releases: 'grid', recs: 'grid',
-    discover: 'grid', gaps: 'grid', stats: 'stats',
-    wishlist: 'grid', plexlib: 'cards',
+    discover: 'grid', gaten: 'grid', stats: 'stats',
+    lijst: 'grid', collectie: 'cards', tidal: 'cards',
     nu: 'cards', ontdek: 'grid', bibliotheek: 'cards', downloads: 'cards'
   };
-  const skType = skeletonMap[state.currentTab];
+  // Lookup by activeSubTab first, then activeTab
+  const lookupTab = state.activeSubTab || state.activeTab;
+  const skType = skeletonMap[lookupTab];
   if (skType && !msg) showSkeleton(skType);
   else setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);
 }

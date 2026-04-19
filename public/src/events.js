@@ -56,7 +56,12 @@ document.querySelectorAll('.tab').forEach(btn => {
 
     allTabs.forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    state.currentMainTab = tab;
+    state.activeTab = tab;
+    state.sectionContainerEl = null;
+
+    // Abort vorige tab requests
+    if (state.tabAbort) state.tabAbort.abort();
+    state.tabAbort = new AbortController();
 
     ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
      'tb-gaps','tb-plexlib','tb-tidarr-ui'].forEach(id =>
@@ -68,9 +73,23 @@ document.querySelectorAll('.tab').forEach(btn => {
     if (tab !== 'nu') clearDashboardPolling();
 
     if (document.startViewTransition) {
-      document.startViewTransition(() => { tabLoaders[tab]?.(); }).finished.catch(() => {});
+      document.startViewTransition(async () => {
+        try {
+          await tabLoaders[tab]?.();
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+          console.error('Tab load error:', err);
+          contentEl.innerHTML = `<div class="error-box">⚠️ Laden mislukt: ${err.message}. Druk op R om opnieuw te proberen.</div>`;
+        }
+      }).finished.catch(() => {});
     } else {
-      tabLoaders[tab]?.();
+      try {
+        tabLoaders[tab]?.();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('Tab load error:', err);
+        contentEl.innerHTML = `<div class="error-box">⚠️ Laden mislukt: ${err.message}. Druk op R om opnieuw te proberen.</div>`;
+      }
     }
   });
 });
@@ -81,7 +100,7 @@ document.querySelectorAll('[data-period]').forEach(btn => {
     document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('sel-def'));
     btn.classList.add('sel-def');
     state.currentPeriod = btn.dataset.period;
-    tabLoaders[state.currentTab]?.();
+    tabLoaders[state.activeTab]?.();
   });
 });
 
@@ -152,7 +171,7 @@ document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () 
 
 // ── Plex lib zoeken (externe toolbar) ────────────────────────────────────
 document.getElementById('plib-search')?.addEventListener('input', e => {
-  if (!state.plexLibData || state.currentTab !== 'plexlib') return;
+  if (!state.plexLibData || state.activeSubTab !== 'collectie') return;
   contentEl.innerHTML = buildPlexLibraryHtml(state.plexLibData, e.target.value);
 });
 
@@ -164,7 +183,7 @@ document.getElementById('btn-sync-plex')?.addEventListener('click', async () => 
     await fetch('/api/plex/refresh', { method: 'POST' });
     await loadPlexStatus();
     state.plexLibData = null;
-    if (state.currentTab === 'plexlib') await loadPlexLibrary();
+    if (state.activeSubTab === 'collectie') await loadPlexLibrary();
   } catch {}
   finally { btn.disabled = false; btn.textContent = orig; }
 });
@@ -185,7 +204,7 @@ document.getElementById('tidal-search')?.addEventListener('input', e => {
   clearTimeout(state.tidalSearchTimeout);
   const q = e.target.value.trim();
   state.tidalSearchTimeout = setTimeout(() => {
-    if (state.currentTab === 'tidal' && state.tidalView === 'search')
+    if (state.activeSubTab === 'tidal' && state.tidalView === 'search')
       renderTidalSearch(q);
   }, 400);
 });
@@ -347,7 +366,7 @@ document.addEventListener('click', async e => {
     state.releasesFilter = inlineRtype.dataset.rtype;
     inlineRtype.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.currentMainTab === 'ontdek') {
+    if (secRel && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secRel;
       renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
@@ -362,7 +381,7 @@ document.addEventListener('click', async e => {
     state.releasesSort = inlineRsort.dataset.rsort;
     inlineRsort.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.currentMainTab === 'ontdek') {
+    if (secRel && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secRel;
       renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
@@ -377,7 +396,7 @@ document.addEventListener('click', async e => {
     state.discFilter = inlineDfilter.dataset.dfilter;
     inlineDfilter.classList.add(state.discFilter==='all'?'sel-def':state.discFilter==='new'?'sel-new':'sel-miss');
     const secDisc = document.getElementById('sec-discover-content');
-    if (secDisc && state.currentMainTab === 'ontdek') {
+    if (secDisc && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secDisc;
       renderDiscover();
       if (state.sectionContainerEl === secDisc) state.sectionContainerEl = null;
@@ -392,7 +411,7 @@ document.addEventListener('click', async e => {
     state.gapsSort = inlineGsort.dataset.gsort;
     inlineGsort.classList.add('sel-def');
     const secGaps = document.getElementById('bib-sub-content');
-    if (secGaps && state.currentMainTab === 'bibliotheek') {
+    if (secGaps && state.activeTab === 'bibliotheek') {
       state.sectionContainerEl = secGaps;
       renderGaps();
       if (state.sectionContainerEl === secGaps) state.sectionContainerEl = null;
@@ -468,9 +487,9 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'r' && !inInput) {
-    if (state.currentMainTab === 'ontdek')           loadOntdek();
-    else if (state.currentMainTab === 'bibliotheek') loadBibliotheek();
-    else tabLoaders[state.currentTab]?.();
+    if (state.activeTab === 'ontdek')           loadOntdek();
+    else if (state.activeTab === 'bibliotheek') loadBibliotheek();
+    else tabLoaders[state.activeTab]?.();
     return;
   }
   if (!inInput && /^[1-4]$/.test(e.key)) {
@@ -486,13 +505,7 @@ document.querySelectorAll('.bnav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
     const desktopTab = document.querySelector(`.tab[data-tab="${tab}"]`);
-    if (desktopTab) {
-      if (document.startViewTransition) {
-        document.startViewTransition(() => { desktopTab.click(); }).finished.catch(() => {});
-      } else {
-        desktopTab.click();
-      }
-    }
+    if (desktopTab) desktopTab.click();
     document.querySelectorAll('.bnav-btn').forEach(b => b.classList.toggle('active', b === btn));
   });
 });

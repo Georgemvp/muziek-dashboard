@@ -134,11 +134,15 @@ function dwErr(id, msg) {
 export async function dw_nuLuisteren() {
   const el = document.getElementById('wbody-nu-luisteren');
   if (!el) return;
+  // Guard: don't update widget if we've switched tabs
+  if (state.activeTab !== 'nu') return;
+  const signal = state.tabAbort?.signal;
   try {
     const [plexRes, lfmRes] = await Promise.allSettled([
-      fetch('/api/plex/nowplaying').then(r => r.json()),
-      apiFetch('/api/recent'),
+      fetch('/api/plex/nowplaying', { signal }).then(r => r.json()),
+      apiFetch('/api/recent', { signal }),
     ]);
+    if (signal?.aborted) return;
 
     let html = '';
 
@@ -173,15 +177,17 @@ export async function dw_nuLuisteren() {
     }
 
     el.innerHTML = html || '<div class="empty" style="font-size:12px;padding:8px 0">Niets aan het afspelen</div>';
-  } catch (e) { dwErr('nu-luisteren', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('nu-luisteren', e.message); }
 }
 
 // ── Widget 2: Recente nummers ─────────────────────────────────────────────
 async function dw_recenteNummers() {
   const el = document.getElementById('wbody-recente-nummers');
   if (!el) return;
+  const signal = state.tabAbort?.signal;
   try {
-    const data   = await apiFetch('/api/recent');
+    const data   = await apiFetch('/api/recent', { signal });
+    if (signal?.aborted) return;
     const tracks = (data.recenttracks?.track || [])
       .filter(t => !t['@attr']?.nowplaying)
       .slice(0, 8);
@@ -199,17 +205,19 @@ async function dw_recenteNummers() {
         <span class="w-track-ago">${ago}</span>
       </div>`;
     }).join('')}</div>`;
-  } catch (e) { dwErr('recente-nummers', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('recente-nummers', e.message); }
 }
 
 // ── Widget 3: Nieuwe releases deze week ──────────────────────────────────
 async function dw_nieuweReleases() {
   const el = document.getElementById('wbody-nieuwe-releases');
   if (!el) return;
+  const signal = state.tabAbort?.signal;
   try {
     let releases = state.lastReleases;
     if (!releases) {
-      const data = await apiFetch('/api/releases');
+      const data = await apiFetch('/api/releases', { signal });
+      if (signal?.aborted) return;
       if (data.status === 'building') {
         el.innerHTML = '<div class="empty" style="font-size:12px">Releases worden geladen…</div>';
         return;
@@ -238,7 +246,7 @@ async function dw_nieuweReleases() {
         ${downloadBtn(r.artist, r.album, r.inPlex)}
       </div>`;
     }).join('')}</div>`;
-  } catch (e) { dwErr('nieuwe-releases', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('nieuwe-releases', e.message); }
 }
 
 // ── Widget 4: Download-voortgang ──────────────────────────────────────────
@@ -246,20 +254,24 @@ export async function dw_downloadVoortgang() {
   const el = document.getElementById('wbody-download-voortgang');
   if (!el) return;
   if (!state.tidarrOk) { el.innerHTML = '<div class="widget-error">⚠ Tidarr offline</div>'; return; }
+  const signal = state.tabAbort?.signal;
   try {
-    const data  = await apiFetch('/api/tidarr/queue');
+    const data  = await apiFetch('/api/tidarr/queue', { signal });
+    if (signal?.aborted) return;
     const items = (data.items || state.tidarrQueueItems || [])
       .filter(i => i.status !== 'finished' && i.status !== 'error');
     renderDashboardQueue(el, items);
-  } catch { dwErr('download-voortgang', 'Tidarr niet bereikbaar'); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('download-voortgang', 'Tidarr niet bereikbaar'); }
 }
 
 // ── Widget 5: Vandaag in cijfers ──────────────────────────────────────────
 async function dw_vandaagCijfers() {
   const el = document.getElementById('wbody-vandaag-cijfers');
   if (!el) return;
+  const signal = state.tabAbort?.signal;
   try {
-    const data        = await apiFetch('/api/recent');
+    const data        = await apiFetch('/api/recent', { signal });
+    if (signal?.aborted) return;
     const tracks      = data.recenttracks?.track || [];
     const today       = new Date().toDateString();
     const todayTracks = tracks.filter(t =>
@@ -288,17 +300,19 @@ async function dw_vandaagCijfers() {
         <div class="w-stat-lbl">meest gespeeld (${topEntry[1]}×)</div>
       </div>` : ''}
     </div>`;
-  } catch (e) { dwErr('vandaag-cijfers', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('vandaag-cijfers', e.message); }
 }
 
 // ── Widget 6: Aanbeveling van de dag ─────────────────────────────────────
 async function dw_aanbeveling() {
   const el = document.getElementById('wbody-aanbeveling');
   if (!el) return;
+  const signal = state.tabAbort?.signal;
   try {
     const today = Math.floor(Date.now() / 86_400_000);
     if (!_recsCache || _recsCacheDay !== today) {
-      const data  = await apiFetch('/api/recs');
+      const data  = await apiFetch('/api/recs', { signal });
+      if (signal?.aborted) return;
       _recsCache    = data.recommendations || [];
       _recsCacheDay = today;
     }
@@ -306,7 +320,7 @@ async function dw_aanbeveling() {
 
     const pick = _recsCache[today % _recsCache.length];
     let info = null;
-    try { info = await apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`); } catch {}
+    try { info = await apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`, { signal }); } catch {}
 
     const img  = info?.image ? proxyImg(info.image, 80) || info.image : null;
     const albs = (info?.albums || []).slice(0, 3);
@@ -327,15 +341,17 @@ async function dw_aanbeveling() {
         ? `<div class="w-rec-albums">${albs.map(a => `<span class="w-rec-album">${esc(a.name)}</span>`).join('')}</div>`
         : ''}
     </div>`;
-  } catch (e) { dwErr('aanbeveling', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('aanbeveling', e.message); }
 }
 
 // ── Widget 7: Collectie-stats ─────────────────────────────────────────────
 async function dw_collectieStats() {
   const el = document.getElementById('wbody-collectie-stats');
   if (!el) return;
+  const signal = state.tabAbort?.signal;
   try {
-    const data = await apiFetch('/api/plex/status');
+    const data = await apiFetch('/api/plex/status', { signal });
+    if (signal?.aborted) return;
     if (!data.connected) { el.innerHTML = '<div class="empty" style="font-size:12px">Plex offline</div>'; return; }
 
     let totalMissing = 0;
@@ -357,13 +373,15 @@ async function dw_collectieStats() {
         <div class="w-stat-lbl">ontbreekt</div>
       </div>` : ''}
     </div>`;
-  } catch (e) { dwErr('collectie-stats', e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; dwErr('collectie-stats', e.message); }
 }
 
 // ── Standalone recente nummers (gebruikt door events.js sub-tab routing) ──
 export async function loadRecent() {
+  const signal = state.tabAbort?.signal;
   try {
-    const data   = await apiFetch('/api/recent');
+    const data   = await apiFetch('/api/recent', { signal });
+    if (signal?.aborted) return;
     const tracks = data.recenttracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen recente nummers.</div>'); return; }
     let html = '<div class="card-list">';
@@ -390,12 +408,12 @@ export async function loadRecent() {
       }
     }
     setContent(html + '</div>');
-  } catch (e) { setContent(`<div class="error-box">⚠️ ${esc(e.message)}</div>`); }
+  } catch (e) { if (e.name === 'AbortError') return; setContent(`<div class="error-box">⚠️ ${esc(e.message)}</div>`); }
 }
 
 // ── Composiet loader (wordt aangeroepen vanuit events.js tab-routing) ─────
 export function loadNu() {
-  state.currentTab = 'nu';
+  state.activeSubTab = null;
   hideTidarrUI();
   stopTidarrQueuePolling();
 
@@ -404,12 +422,19 @@ export function loadNu() {
 
   loadDashboard();
 
-  // Poll de "Nu luisteren" widget elke 30s zolang Nu-tab actief is
-  _dashPoller = setInterval(() => {
-    if (state.currentTab !== 'nu') {
-      clearDashboardPolling();
-      return;
-    }
-    dw_nuLuisteren();
-  }, 30_000);
+  // Start polling AFTER initial render completes
+  // Wait a moment to let widgets load before starting the polling interval
+  setTimeout(() => {
+    // Only start polling if still on Nu tab
+    if (state.activeTab !== 'nu') return;
+
+    // Poll de "Nu luisteren" widget elke 30s zolang Nu-tab actief is
+    _dashPoller = setInterval(() => {
+      if (state.activeTab !== 'nu') {
+        clearDashboardPolling();
+        return;
+      }
+      dw_nuLuisteren();
+    }, 30_000);
+  }, 500);
 }

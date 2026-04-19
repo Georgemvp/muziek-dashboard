@@ -30,8 +30,8 @@ function _showRateLimitNotice(msg) {
   setTimeout(() => el.remove(), 8000);
 }
 
-export async function apiFetch(url) {
-  const res = await fetch(url);
+export async function apiFetch(url, { signal } = {}) {
+  const res = await fetch(url, { signal });
   if (res.status === 429) {
     const data = await res.json().catch(() => ({}));
     const msg  = data.error || 'Te veel verzoeken, probeer het over een minuut opnieuw';

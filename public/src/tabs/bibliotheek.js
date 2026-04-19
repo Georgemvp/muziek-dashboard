@@ -49,8 +49,10 @@ export function buildPlexLibraryHtml(library, query) {
 
 export async function loadPlexLibrary() {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/plex/library');
+    const d = await apiFetch('/api/plex/library', { signal });
+    if (signal?.aborted) return;
     state.plexLibData = d.library || [];
     const searchEl = document.getElementById('plib-search');
     if (searchEl) searchEl.value = '';
@@ -59,14 +61,16 @@ export async function loadPlexLibrary() {
       return;
     }
     setContent(buildPlexLibraryHtml(state.plexLibData, ''));
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 // ── Top artiesten ─────────────────────────────────────────────────────────
 export async function loadTopArtists(period) {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch(`/api/topartists?period=${period}`);
+    const d = await apiFetch(`/api/topartists?period=${period}`, { signal });
+    if (signal?.aborted) return;
     const artists = d.topartists?.artist || [];
     if (!artists.length) { setContent('<div class="empty">Geen data.</div>'); return; }
     const max = parseInt(artists[0]?.playcount || 1);
@@ -98,14 +102,16 @@ export async function loadTopArtists(period) {
         }
       } catch {}
     });
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 // ── Top nummers ───────────────────────────────────────────────────────────
 export async function loadTopTracks(period) {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch(`/api/toptracks?period=${period}`);
+    const d = await apiFetch(`/api/toptracks?period=${period}`, { signal });
+    if (signal?.aborted) return;
     const tracks = d.toptracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen data.</div>'); return; }
     const max = parseInt(tracks[0]?.playcount || 1);
@@ -121,14 +127,16 @@ export async function loadTopTracks(period) {
         <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
     }
     setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 // ── Geliefd ───────────────────────────────────────────────────────────────
 export async function loadLoved() {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/loved');
+    const d = await apiFetch('/api/loved', { signal });
+    if (signal?.aborted) return;
     const tracks = d.lovedtracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen geliefde nummers.</div>'); return; }
     let html = '<div class="section-title">Geliefde nummers</div><div class="card-list">';
@@ -142,14 +150,16 @@ export async function loadLoved() {
         <div class="play-bar"><div class="play-bar-fill"></div></div></div>`;
     }
     setContent(html + '</div>');
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 // ── Statistieken ──────────────────────────────────────────────────────────
 export async function loadStats() {
   showLoading('Statistieken ophalen...');
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/stats');
+    const d = await apiFetch('/api/stats', { signal });
+    if (signal?.aborted) return;
     const chartHtml = `
       <div class="stats-grid">
         <div class="stats-card full">
@@ -166,7 +176,7 @@ export async function loadStats() {
         </div>
       </div>`;
     setContent(chartHtml, () => renderStatsCharts(d));
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 export function renderStatsCharts(d) {
@@ -240,18 +250,20 @@ export function renderStatsCharts(d) {
 // ── Collection Gaps ───────────────────────────────────────────────────────
 export async function loadGaps() {
   showLoading('Collectiegaten zoeken...');
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/gaps');
+    const d = await apiFetch('/api/gaps', { signal });
+    if (signal?.aborted) return;
     if (d.status === 'building') {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-      setTimeout(() => { if (state.currentTab === 'gaps') loadGaps(); }, 20_000);
+      setTimeout(() => { if (state.activeSubTab === 'gaten') loadGaps(); }, 20_000);
       return;
     }
     state.lastGaps = d;
     renderGaps();
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 export function renderGaps() {
@@ -374,9 +386,9 @@ export async function switchBibSubTab(subTab) {
   const myTarget = bibContent;
   state.sectionContainerEl = myTarget;
   try {
-    if (subTab === 'collectie')     { state.currentTab = 'plexlib';   await loadPlexLibrary(); }
-    else if (subTab === 'gaten')    { state.currentTab = 'gaps';      await loadGaps(); }
-    else if (subTab === 'lijst')    { state.currentTab = 'wishlist';  await loadWishlist(); }
+    if (subTab === 'collectie')     { state.activeSubTab = 'collectie';   await loadPlexLibrary(); }
+    else if (subTab === 'gaten')    { state.activeSubTab = 'gaten';      await loadGaps(); }
+    else if (subTab === 'lijst')    { state.activeSubTab = 'lijst';  await loadWishlist(); }
   } finally {
     if (state.sectionContainerEl === myTarget) state.sectionContainerEl = null;
   }
@@ -384,7 +396,7 @@ export async function switchBibSubTab(subTab) {
 
 // ── Composiet loader: Bibliotheek ─────────────────────────────────────────
 export async function loadBibliotheek() {
-  state.currentTab = 'plexlib';
+  state.activeSubTab = 'collectie';
   hideTidarrUI();
   stopTidarrQueuePolling();
 

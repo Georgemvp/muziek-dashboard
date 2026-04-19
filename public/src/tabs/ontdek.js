@@ -14,7 +14,7 @@ export async function checkSpotifyStatus() {
     const data = await apiFetch('/api/spotify/status');
     state.spotifyEnabled = !!data.enabled;
     const tb = document.getElementById('tb-mood');
-    if (state.spotifyEnabled && state.currentTab === 'recs') {
+    if (state.spotifyEnabled && state.activeSubTab === 'recs') {
       tb.style.display = ''; tb.classList.add('visible');
     } else if (state.spotifyEnabled) {
       tb.style.display = '';
@@ -143,8 +143,10 @@ document.addEventListener('click', e => {
 // ── Aanbevelingen ─────────────────────────────────────────────────────────
 export async function loadRecs() {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/recs');
+    const d = await apiFetch('/api/recs', { signal });
+    if (signal?.aborted) return;
     const recs      = d.recommendations || [];
     const albumRecs = d.albumRecs        || [];
     const trackRecs = d.trackRecs        || [];
@@ -284,7 +286,7 @@ export async function loadRecs() {
         }
       } catch { const albEl = document.getElementById(`ralb-${i}`); if (albEl) albEl.innerHTML = ''; }
     });
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 export function applyRecsFilter() {
@@ -318,14 +320,16 @@ export function relativeDate(dateStr) {
 
 export async function loadReleases() {
   showLoading();
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/releases');
+    const d = await apiFetch('/api/releases', { signal });
+    if (signal?.aborted) return;
     if (d.status === 'building') {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
       setTimeout(() => {
-        if (state.currentTab === 'releases' || state.currentTab === 'ontdek') loadReleases();
+        if (state.activeSubTab === 'releases' || state.activeSubTab === null) loadReleases();
       }, 5_000);
       return;
     }
@@ -333,7 +337,7 @@ export async function loadReleases() {
     state.newReleaseIds = new Set(d.newReleaseIds || []);
     updateReleasesBadge(d.newCount || 0);
     renderReleases();
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 export function renderReleases() {
@@ -414,21 +418,23 @@ export function renderReleases() {
 // ── Discover ──────────────────────────────────────────────────────────────
 export async function loadDiscover() {
   showLoading('Ontdekkingen ophalen...');
+  const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/discover');
+    const d = await apiFetch('/api/discover', { signal });
+    if (signal?.aborted) return;
     if (d.status === 'building') {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
       setTimeout(() => {
-        if (state.currentTab === 'discover' || state.currentTab === 'ontdek') loadDiscover();
+        if (state.activeSubTab === 'discover' || state.activeSubTab === null) loadDiscover();
       }, 20_000);
       return;
     }
     state.lastDiscover = d;
     if (d.plexConnected) state.plexOk = true;
     renderDiscover();
-  } catch (e) { showError(e.message); }
+  } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
 export function renderDiscover() {
@@ -558,7 +564,7 @@ export function setupSectionToggle(sectionId, sectionKey) {
 // ── Composiet loader: Ontdek ──────────────────────────────────────────────
 export async function loadOntdek() {
   loadCollapsibleState();
-  state.currentTab = 'ontdek';
+  state.activeSubTab = null;
   hideTidarrUI();
   stopTidarrQueuePolling();
 
