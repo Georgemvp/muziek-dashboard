@@ -18,6 +18,35 @@ export function p(url, opts = {}) {
   return fetch(url, opts);
 }
 
+// ── Concurrency limiter ────────────────────────────────────────────────────
+/**
+ * Voert `tasks` (een array van async functies) uit met maximaal `limit` gelijktijdige uitvoeringen.
+ * @param {Array<() => Promise>} tasks  Array van async task-functies
+ * @param {number} limit                Maximaal aantal gelijktijdige taken
+ * @returns {Promise<Array>}            Array van resultaten
+ */
+export async function limitConcurrency(tasks, limit = 4) {
+  const results = [];
+  const executing = [];
+  for (const [index, task] of tasks.entries()) {
+    const p = Promise.resolve().then(task).then(
+      result => {
+        results[index] = result;
+      },
+      error => {
+        results[index] = undefined; // null of undefined bij fout
+      }
+    );
+    executing.push(p);
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+      executing.splice(executing.findIndex(ep => ep === p), 1);
+    }
+  }
+  await Promise.all(executing);
+  return results;
+}
+
 // ── Animatie-voorkeur ─────────────────────────────────────────────────────
 export const prefersReducedMotion =
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;

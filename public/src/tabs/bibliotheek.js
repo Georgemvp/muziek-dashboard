@@ -6,7 +6,7 @@ import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, downloadBtn,
   countryFlag, albumCard, showLoading, setContent, showError,
   setupLazyLoad, runWithSection, contentEl, sanitizeArtistName, periodLabel,
-  getImg, trackImg, timeAgo, proxyImg, p
+  getImg, trackImg, timeAgo, proxyImg, p, limitConcurrency
 } from '../helpers.js';
 import { loadWishlist } from '../components/wishlist.js';
 import { loadPlexStatus } from '../api.js';
@@ -100,7 +100,8 @@ export async function loadTopArtists(period) {
         </div></div>`;
     }
     setContent(html + '</div>');
-    artists.forEach(async (a, i) => {
+    // Haal artist-foto's op met concurrency-limit van 4 om rate limiter niet te overlasten
+    await limitConcurrency(artists.map((a, i) => async () => {
       try {
         const info = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`);
         if (info.image) {
@@ -108,7 +109,7 @@ export async function loadTopArtists(period) {
           if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
         }
       } catch {}
-    });
+    }), 4);
   } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
@@ -277,7 +278,8 @@ export async function loadGaps() {
   try {
     const d = await apiFetch('/api/gaps', { signal });
     if (signal?.aborted) return;
-    if (d.status === 'building') {
+    // Stale-while-revalidate: toon data als beschikbaar, ook al is het oud
+    if (d.status === 'building' && (!d.artists || !d.artists.length)) {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
@@ -286,6 +288,15 @@ export async function loadGaps() {
     }
     state.lastGaps = d;
     renderGaps();
+    // Refresh banner als data ouder is dan 24 uur
+    if (d.builtAt && (Date.now() - d.builtAt > 86_400_000)) {
+      const banner = document.createElement('div');
+      banner.className = 'refresh-banner';
+      banner.textContent = '↻ Gaps worden op de achtergrond ververst...';
+      const content = state.sectionContainerEl || document.getElementById('content');
+      if (content) content.prepend(banner);
+      fetch('/api/gaps/refresh', { method: 'POST' }).catch(() => {});
+    }
   } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
@@ -385,22 +396,6 @@ export async function switchBibSubTab(subTab) {
         } catch {}
         finally { btn.disabled = false; btn.textContent = orig; }
       });
-    } else if (subTab === 'gaten') {
-      bibToolbar.innerHTML = `
-        <div class="inline-toolbar" style="margin-bottom:12px">
-          <button class="tool-btn${state.gapsSort==='missing'?' sel-def':''}" data-gsort="missing">Meest ontbrekend</button>
-          <button class="tool-btn${state.gapsSort==='name'?' sel-def':''}" data-gsort="name">A–Z</button>
-          <span class="toolbar-sep"></span>
-          <button class="tool-btn refresh-btn" id="btn-ref-gaps-bib">↻ Vernieuwen</button>
-        </div>`;
-      document.getElementById('btn-ref-gaps-bib')?.addEventListener('click', async () => {
-        state.lastGaps = null;
-        try { await p('/api/gaps/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
-        const myTarget = document.getElementById('bib-sub-content');
-        state.sectionContainerEl = myTarget;
-        await loadGaps();
-        if (state.sectionContainerEl === myTarget) state.sectionContainerEl = null;
-      });
     } else {
       bibToolbar.innerHTML = '';
     }
@@ -410,8 +405,7 @@ export async function switchBibSubTab(subTab) {
   state.sectionContainerEl = myTarget;
   try {
     if (subTab === 'collectie')     { state.activeSubTab = 'collectie';   await loadPlexLibrary(); }
-    else if (subTab === 'gaten')    { state.activeSubTab = 'gaten';      await loadGaps(); }
-    else if (subTab === 'lijst')    { state.activeSubTab = 'lijst';  await loadWishlist(); }
+    else if (subTab === 'lijst')    { state.activeSubTab = 'lijst';      await loadWishlist(); }
   } finally {
     if (state.sectionContainerEl === myTarget) state.sectionContainerEl = null;
   }
@@ -442,7 +436,6 @@ export async function loadBibliotheek() {
 
       <div class="bib-subtabs" id="bib-subtabs">
         <button class="bib-tab${state.bibSubTab==='collectie'?' active':''}" data-bibtab="collectie">Collectie</button>
-        <button class="bib-tab${state.bibSubTab==='gaten'?' active':''}" data-bibtab="gaten">Gaten <span class="bib-tab-badge" id="badge-gaps-bib"></span></button>
         <button class="bib-tab${state.bibSubTab==='lijst'?' active':''}" data-bibtab="lijst">Lijst</button>
       </div>
 
@@ -464,26 +457,13 @@ export async function loadBibliotheek() {
   contentEl.style.opacity  = '1';
   contentEl.style.transform = '';
 
-  const gapsBibBadge  = document.getElementById('badge-gaps-bib');
-  const mainGapsBadge = document.getElementById('badge-gaps');
-  if (gapsBibBadge && mainGapsBadge) gapsBibBadge.textContent = mainGapsBadge.textContent;
-
   document.querySelectorAll('.bib-tab').forEach(btn =>
     btn.addEventListener('click', () => switchBibSubTab(btn.dataset.bibtab)));
 
-  {
-    const myTarget = document.getElementById('strip-artists-body');
-    state.sectionContainerEl = myTarget;
-    await loadTopArtists(state.currentPeriod);
-    if (state.sectionContainerEl === myTarget) state.sectionContainerEl = null;
-  }
-
-  {
-    const myTarget = document.getElementById('strip-tracks-body');
-    state.sectionContainerEl = myTarget;
-    await loadTopTracks(state.currentPeriod);
-    if (state.sectionContainerEl === myTarget) state.sectionContainerEl = null;
-  }
+  await Promise.all([
+    runWithSection(document.getElementById('strip-artists-body'), () => loadTopArtists(state.currentPeriod)),
+    runWithSection(document.getElementById('strip-tracks-body'), () => loadTopTracks(state.currentPeriod))
+  ]);
 
   await switchBibSubTab(state.bibSubTab);
 

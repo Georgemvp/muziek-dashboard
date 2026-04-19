@@ -598,12 +598,20 @@ app.post('/api/plex/refresh', async (req, res) => {
 app.get('/api/plex/library', (req, res) => {
   if (!PLEX_TOKEN) {
     res.set('Cache-Control', 'private, max-age=300');
-    return res.json({ connected: false, artistCount: 0, albumCount: 0, library: [] });
+    return res.json({ connected: false, artistCount: 0, albumCount: 0, total: 0, page: 1, limit: 100, library: [] });
   }
-  const { ok, artistCount, albumCount } = getPlexStatus();
-  const library = getPlexLibrary();
+  const page  = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+  const q     = (req.query.q || '').toLowerCase().trim();
+  let lib = getPlexLibrary();
+  if (q) lib = lib.filter(x =>
+    x.artist.toLowerCase().includes(q) || x.album.toLowerCase().includes(q)
+  );
+  const { ok, artistCount } = getPlexStatus();
+  const total = lib.length;
+  const slice = lib.slice((page - 1) * limit, page * limit);
   res.set('Cache-Control', 'private, max-age=300');
-  res.json({ connected: ok, artistCount, albumCount: library.length, library });
+  res.json({ connected: ok, artistCount, total, page, limit, library: slice });
 });
 
 // ── API: Zoeken ────────────────────────────────────────────────────────────

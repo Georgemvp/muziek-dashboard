@@ -42,13 +42,17 @@ async function mbzGet(urlPath) {
 
 /** Zoek een artiest op bij MusicBrainz en geef metagegevens terug. */
 async function getMBZArtist(name) {
+  const cacheKey = `mbz:artist:${name.toLowerCase()}`;
+  const cached   = getCache(cacheKey, 7 * 86_400_000);
+  if (cached) return cached;
+
   const q    = encodeURIComponent(`artist:"${name.replace(/"/g, '')}"`);
   const data = await mbzGet(`/artist?query=${q}&limit=4&fmt=json`);
   const list  = data.artists || [];
   const exact = list.find(a => a.name.toLowerCase() === name.toLowerCase());
   const best  = exact || list[0];
   if (!best) return null;
-  return {
+  const result = {
     mbid:           best.id,
     name:           best.name,
     country:        best.country || null,
@@ -56,13 +60,19 @@ async function getMBZArtist(name) {
     tags:           (best.tags || []).sort((a, b) => b.count - a.count).slice(0, 6).map(t => t.name),
     disambiguation: best.disambiguation || null
   };
+  setCache(cacheKey, result);
+  return result;
 }
 
 /** Haal studio-albums op voor een artiest-MBID. */
 async function getMBZAlbums(mbid) {
   if (!mbid) return [];
+  const cacheKey = `mbz:albums:${mbid}`;
+  const cached   = getCache(cacheKey, 7 * 86_400_000);
+  if (cached) return cached;
+
   const data = await mbzGet(`/release-group?artist=${mbid}&type=album&limit=25&fmt=json`);
-  return (data['release-groups'] || [])
+  const result = (data['release-groups'] || [])
     .filter(rg => rg['primary-type'] === 'Album')
     .map(rg => ({
       mbid:     rg.id,
@@ -71,6 +81,8 @@ async function getMBZAlbums(mbid) {
       coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`
     }))
     .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+  setCache(cacheKey, result);
+  return result;
 }
 
 module.exports = { mbzGet, getMBZArtist, getMBZAlbums };

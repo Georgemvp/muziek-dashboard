@@ -43,7 +43,8 @@
   <div class="tabs" id="tabs">
     <button class="tab active" data-tab="nu">🎵 Nu</button>
     <button class="tab" data-tab="ontdek">✦ Ontdek <span class="tab-badge" id="badge-releases" style="display:none">0</span></button>
-    <button class="tab" data-tab="bibliotheek">📀 Bibliotheek <span class="tab-badge" id="badge-gaps">?</span></button>
+    <button class="tab" data-tab="gaps">🔍 Gaps <span class="tab-badge" id="badge-gaps">?</span></button>
+    <button class="tab" data-tab="bibliotheek">📀 Bibliotheek</button>
     <button class="tab" data-tab="downloads">⬇ Downloads <span class="tab-badge" id="badge-tidarr-queue" style="display:none">0</span></button>
   </div>
   <!-- Verborgen badge-houders voor backward-compat met bestaande JS -->
@@ -156,7 +157,7 @@
     <div class="loading"><div class="spinner"></div>Laden...</div>
   </div>
 
-  <!-- Mobiele bottom navigation bar (4 hoofdtabs) -->
+  <!-- Mobiele bottom navigation bar (5 hoofdtabs) -->
   <nav class="bottom-nav" id="bottom-nav">
     <button class="bnav-btn active" data-tab="nu">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -165,6 +166,10 @@
     <button class="bnav-btn" data-tab="ontdek">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
       <span>Ontdek</span>
+    </button>
+    <button class="bnav-btn" data-tab="gaps">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <span>Gaps</span>
     </button>
     <button class="bnav-btn" data-tab="bibliotheek">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>

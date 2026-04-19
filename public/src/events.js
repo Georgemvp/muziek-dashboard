@@ -68,6 +68,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
      'tb-gaps','tb-plexlib','tb-tidarr-ui'].forEach(id =>
       document.getElementById(id)?.classList.remove('visible'));
+    document.getElementById('tb-gaps')?.classList.toggle('visible', tab === 'gaps');
     document.getElementById('tb-tidal')?.classList.toggle('visible', tab === 'downloads');
 
     if (tab !== 'downloads') hideTidarrUI();
@@ -414,12 +415,11 @@ document.addEventListener('click', async e => {
     document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
     state.gapsSort = inlineGsort.dataset.gsort;
     inlineGsort.classList.add('sel-def');
-    const secGaps = document.getElementById('bib-sub-content');
-    if (secGaps && state.activeTab === 'bibliotheek') {
-      state.sectionContainerEl = secGaps;
+    if (state.activeTab === 'gaps') {
       renderGaps();
-      if (state.sectionContainerEl === secGaps) state.sectionContainerEl = null;
-    } else { renderGaps(); }
+    } else {
+      renderGaps();
+    }
     return;
   }
 
@@ -493,10 +493,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'r' && !inInput) {
     if (state.activeTab === 'ontdek')           loadOntdek();
     else if (state.activeTab === 'bibliotheek') loadBibliotheek();
+    else if (state.activeTab === 'gaps')        loadGaps();
     else tabLoaders[state.activeTab]?.();
     return;
   }
-  if (!inInput && /^[1-4]$/.test(e.key)) {
+  if (!inInput && /^[1-5]$/.test(e.key)) {
     const tabs = document.querySelectorAll('.tab');
     const idx  = parseInt(e.key) - 1;
     if (tabs[idx]) tabs[idx].click();
