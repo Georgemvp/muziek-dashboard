@@ -64,21 +64,33 @@ async function getMBZArtist(name) {
   return result;
 }
 
-/** Haal studio-albums op voor een artiest-MBID. */
+/** Haal studio-albums op voor een artiest-MBID. Haalt 2 parallelle pagina's op (50+50 albums). */
 async function getMBZAlbums(mbid) {
   if (!mbid) return [];
   const cacheKey = `mbz:albums:${mbid}`;
   const cached   = getCache(cacheKey, 7 * 86_400_000);
   if (cached) return cached;
 
-  const data = await mbzGet(`/release-group?artist=${mbid}&type=album&limit=25&fmt=json`);
-  const result = (data['release-groups'] || [])
+  // Haal 2 parallelle pagina's op via Promise.all()
+  const [data1, data2] = await Promise.all([
+    mbzGet(`/release-group?artist=${mbid}&type=album&offset=0&limit=50&fmt=json`),
+    mbzGet(`/release-group?artist=${mbid}&type=album&offset=50&limit=50&fmt=json`)
+  ]);
+
+  // Combineer release-groups van beide pagina's
+  const allReleaseGroups = [
+    ...(data1['release-groups'] || []),
+    ...(data2['release-groups'] || [])
+  ];
+
+  const result = allReleaseGroups
     .filter(rg => rg['primary-type'] === 'Album')
     .map(rg => ({
-      mbid:     rg.id,
-      title:    rg.title,
-      year:     rg['first-release-date']?.slice(0, 4) || null,
-      coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`
+      mbid:           rg.id,
+      title:          rg.title,
+      year:           rg['first-release-date']?.slice(0, 4) || null,
+      coverUrl:       `https://coverartarchive.org/release-group/${rg.id}/front-250`,
+      secondaryTypes: rg['secondary-types'] || []
     }))
     .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
   setCache(cacheKey, result);

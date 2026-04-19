@@ -29,18 +29,26 @@ async function buildDiscoverCache() {
   try {
     await syncPlexLibrary();
 
-    // Haal top-artiesten op uit twee willekeurige periodes
-    const [data1, data2] = await Promise.all([
+    // Haal bestaande geschiedenis op (7 dagen TTL — na 7 dagen kunnen artiesten opnieuw verschijnen)
+    const historyArray = getCache('discover:history', 7 * 86_400_000) || [];
+    const historySet = new Set(historyArray.map(name => name.toLowerCase()));
+
+    // Haal top-artiesten op uit twee willekeurige periodes + loved + recente tracks
+    const [data1, data2, lovedData, recentData] = await Promise.all([
       lfm({ method: 'user.gettopartists', period: period1, limit: 30 }),
-      lfm({ method: 'user.gettopartists', period: period2, limit: 30 }).catch(() => ({ topartists: { artist: [] } }))
+      lfm({ method: 'user.gettopartists', period: period2, limit: 30 }).catch(() => ({ topartists: { artist: [] } })),
+      lfm({ method: 'user.getlovedtracks', limit: 30 }).catch(() => ({ lovedtracks: { track: [] } })),
+      lfm({ method: 'user.getrecenttracks', limit: 50 }).catch(() => ({ recenttracks: { track: [] } }))
     ]);
 
     const names1 = (data1.topartists?.artist || []).map(a => a.name);
     const names2 = (data2.topartists?.artist || []).map(a => a.name);
+    const lovedNames = (lovedData.lovedtracks?.track || []).map(a => a.artist.name);
+    const recentNames = (recentData.recenttracks?.track || []).map(a => a.artist['#text']);
 
     // Combineer en shuffle voor variatie — niet altijd dezelfde volgorde
-    const combined  = [...new Set([...names1, ...names2])];
-    const topArtists = shuffle(combined).slice(0, 30); // 30 seed-artiesten ipv 20
+    const combined = [...new Set([...names1, ...names2, ...lovedNames, ...recentNames])];
+    const topArtists = shuffle(combined).slice(0, 35); // 35 seed-artiesten voor bredere pool
 
     // Gelijkaardige artiesten parallel ophalen — meer per artiest voor grotere pool
     const candidateMap = new Map();
@@ -52,7 +60,7 @@ async function buildDiscoverCache() {
     );
     for (const { artist, list } of similar.map(r => ({ artist: r.artist, list: r.similar }))) {
       for (const s of list) {
-        if (!topArtists.includes(s.name) && !candidateMap.has(s.name)) {
+        if (!topArtists.includes(s.name) && !candidateMap.has(s.name) && !historySet.has(s.name.toLowerCase())) {
           candidateMap.set(s.name, {
             name:   s.name,
             match:  parseFloat(s.match),
@@ -102,8 +110,26 @@ async function buildDiscoverCache() {
       }
     }));
 
-    setCache('discover', { artists: enriched, basedOn: topArtists, builtAt: Date.now(), periods: [period1, period2] });
-    console.log(`Discover cache klaar: ${enriched.length} artiesten (periodes: ${period1} + ${period2})`);
+    // Zorg voor genre-diversiteit: maximum 8 artiesten per primaire genre
+    const MAX_PER_GENRE = 8;
+    const genreCount = new Map();
+    const diversePool = [];
+    for (const artist of enriched) {
+      const primaryGenre = (artist.tags[0] || 'unknown').toLowerCase();
+      const count = genreCount.get(primaryGenre) || 0;
+      if (count < MAX_PER_GENRE) {
+        genreCount.set(primaryGenre, count + 1);
+        diversePool.push(artist);
+      }
+    }
+
+    setCache('discover', { artists: diversePool, basedOn: topArtists, builtAt: Date.now(), periods: [period1, period2] });
+
+    // Sla geschiedenis op: alle diversePool-artiesten + bestaande geschiedenis, max 200 items
+    const newHistory = [...historyArray, ...diversePool.map(a => a.name)].slice(-200);
+    setCache('discover:history', newHistory, 7 * 86_400_000);
+
+    console.log(`Discover cache klaar: ${diversePool.length} artiesten (genre-gefilterd, periodes: ${period1} + ${period2})`);
   } catch (e) {
     console.error('Discover cache mislukt:', e.message);
     // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,

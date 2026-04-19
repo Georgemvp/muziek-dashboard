@@ -51,18 +51,20 @@ async function buildGapsCache() {
   try {
     await syncPlexLibrary();
 
-    // Haal top-artiesten op uit twee periodes tegelijk voor meer dekking
-    const [topData, recentData] = await Promise.all([
+    // Haal top-artiesten op uit twee periodes en loved tracks tegelijk voor meer dekking
+    const [topData, recentData, lovedData] = await Promise.all([
       lfm({ method: 'user.gettopartists', period: 'overall', limit: 40 }),
-      lfm({ method: 'user.gettopartists', period: period, limit: 30 }).catch(() => ({ topartists: { artist: [] } }))
+      lfm({ method: 'user.gettopartists', period: period, limit: 30 }).catch(() => ({ topartists: { artist: [] } })),
+      lfm({ method: 'user.getlovedtracks', limit: 50 }).catch(() => ({ lovedtracks: { track: [] } }))
     ]);
 
     const overallNames = (topData.topartists?.artist || []).map(a => a.name);
     const recentNames  = (recentData.topartists?.artist || []).map(a => a.name);
+    const lovedNames   = (lovedData.lovedtracks?.track || []).map(a => a.artist.name);
 
-    // Combineer: recent eerst (voor afwisseling), daarna overall, dedupliceer
-    const combined = [...new Set([...recentNames, ...overallNames])];
-    const plexTop  = combined.filter(name => artistInPlex(name)).slice(0, 25);
+    // Combineer: loved eerst (voor prioriteit), recent, daarna overall, dedupliceer
+    const combined = [...new Set([...lovedNames, ...recentNames, ...overallNames])];
+    const plexTop  = combined.filter(name => artistInPlex(name)).slice(0, 40);
 
     // Converteer naar array van async tasks voor parallel processing met limit van 4
     const tasks = plexTop.map(name => async () => {

@@ -33,6 +33,25 @@ function normStr(s) {
     .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/** Normaliseer albumnamen voor fuzzy title matching.
+ *  - Lowercase
+ *  - Verwijder tekst tussen haakjes/brackets: (Deluxe Edition), [Bonus Tracks]
+ *  - Verwijder leading "the "
+ *  - Verwijder alle niet-alfanumerieke tekens (behalve spaties)
+ *  - Collapse meervoudige spaties naar 1 spatie
+ *  - Trim
+ */
+function normalizeTitle(title) {
+  return (title || '')
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')     // Verwijder (...)
+    .replace(/\[.*?\]/g, '')     // Verwijder [...]
+    .replace(/^\s*the\s+/, '')   // Verwijder leading "the "
+    .replace(/[^a-z0-9 ]/g, '')  // Verwijder niet-alfanumerieke (behalve spaties)
+    .replace(/\s+/g, ' ')        // Collapse meervoudige spaties
+    .trim();
+}
+
 /** Doe een Plex-API-aanroep met timeout. */
 async function plexGet(urlPath) {
   const res = await fetch(`${PLEX_URL}${urlPath}`, {
@@ -92,9 +111,34 @@ function artistInPlex(name) {
 }
 
 function albumInPlex(artist, album) {
-  const orig = `${(artist || '').toLowerCase()}||${(album || '').toLowerCase()}`;
-  const norm = `${normStr(artist)}||${normStr(album)}`;
-  return plexAlbums.has(orig) || plexAlbumsNorm.has(norm);
+  const origArtist = (artist || '').toLowerCase();
+  const origAlbum = (album || '').toLowerCase();
+  const orig = `${origArtist}||${origAlbum}`;
+
+  // Exact match met origineel
+  if (plexAlbums.has(orig)) return true;
+
+  // Fuzzy matching met genormaliseerde titels (exact of substring)
+  const normArtist = normalizeTitle(artist);
+  const normAlbum = normalizeTitle(album);
+
+  for (let entry of plexAlbumsNorm) {
+    const [plexArtNorm, plexAlbNorm] = entry.split('||');
+
+    // Artist moet matchen (exact of substring)
+    const artistMatches = normArtist === plexArtNorm ||
+                         plexArtNorm.includes(normArtist) ||
+                         normArtist.includes(plexArtNorm);
+
+    // Album moet matchen (exact of substring)
+    const albumMatches = normAlbum === plexAlbNorm ||
+                        plexAlbNorm.includes(normAlbum) ||
+                        normAlbum.includes(plexAlbNorm);
+
+    if (artistMatches && albumMatches) return true;
+  }
+
+  return false;
 }
 
 function getPlexStatus() {
