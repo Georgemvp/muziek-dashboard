@@ -124,6 +124,138 @@
 .bib-tab.active .bib-tab-badge { background: rgba(255,255,255,0.3); }
 .bib-sub-content { margin-top: 16px; min-height: 200px; }
 
+/* ── Dashboard Widget Grid ── */
+.dashboard-topbar {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.dashboard-heading {
+  font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -0.02em;
+}
+.dash-customize-btn {
+  font-size: 12px; font-weight: 600; padding: 5px 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--muted2); cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+.dash-customize-btn:hover { color: var(--text); border-color: var(--border-hover); background: var(--surface2); }
+
+.dash-customize-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px;
+}
+.dash-customize-title {
+  font-size: 11px; font-weight: 700; color: var(--muted2);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+}
+.dash-widget-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; }
+.dash-widget-label {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);
+  cursor: pointer; padding: 5px 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface2); transition: all 0.15s; user-select: none;
+}
+.dash-widget-label:hover { border-color: var(--border-hover); }
+.dash-widget-label input { accent-color: var(--red); }
+
+/* Widget Grid */
+.widget-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+/* Widget Card — compactere versie van .section-block */
+.widget-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0 14px 14px;
+  transition: box-shadow 0.22s var(--ease); min-width: 0;
+}
+.widget-card:hover { box-shadow: var(--shadow-sm); }
+
+.widget-hdr {
+  position: sticky; top: 52px; z-index: 100;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 0; margin-bottom: 10px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.widget-title { font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+.widget-body { }
+.widget-error { font-size: 11px; color: var(--muted2); padding: 6px 0; }
+
+/* Widget: Nu luisteren */
+.w-np-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.w-np-row:last-child { border-bottom: none; }
+.w-np-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.w-np-dot.plex { background: var(--plex); }
+.w-np-dot.lfm { background: var(--red); animation: lfm-pulse 1.6s ease-in-out infinite; }
+@keyframes lfm-pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+.w-np-img { width: 36px; height: 36px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.w-np-info { flex: 1; min-width: 0; }
+.w-np-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-np-sub { font-size: 11px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 3px; }
+
+/* Widget: Recente nummers */
+.w-track-list { display: flex; flex-direction: column; }
+.w-track-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 0; border-bottom: 1px solid var(--border); gap: 8px;
+}
+.w-track-row:last-child { border-bottom: none; }
+.w-track-info { flex: 1; min-width: 0; }
+.w-track-title { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-track-artist { font-size: 11px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-track-ago { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+
+/* Widget: Nieuwe releases */
+.w-releases-list { display: flex; flex-direction: column; gap: 10px; }
+.w-rel-row { display: flex; align-items: center; gap: 10px; }
+.w-rel-cover { width: 40px; height: 40px; flex-shrink: 0; border-radius: 5px; overflow: hidden; }
+.w-rel-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.w-rel-ph {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85);
+}
+.w-rel-info { flex: 1; min-width: 0; }
+.w-rel-title { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-rel-artist { font-size: 11px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Widget: Download-voortgang */
+.w-queue-list { display: flex; flex-direction: column; gap: 8px; }
+.w-q-row { }
+.w-q-info { }
+.w-q-title { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-q-artist { font-size: 11px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Widget: Vandaag in cijfers */
+.w-stats-grid { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.w-stat-block { text-align: center; min-width: 44px; }
+.w-stat-wide { text-align: left; flex: 1; min-width: 100px; }
+.w-stat-val { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+.w-stat-lbl { font-size: 10px; color: var(--muted2); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Widget: Aanbeveling van de dag */
+.w-rec-wrap { }
+.w-rec-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.w-rec-img { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.w-rec-ph {
+  width: 56px; height: 56px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.85);
+}
+.w-rec-info { flex: 1; min-width: 0; }
+.w-rec-name { font-size: 14px; font-weight: 700; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.w-rec-reason { font-size: 11px; color: var(--muted2); margin-top: 2px; margin-bottom: 4px; }
+.w-rec-albums { display: flex; flex-wrap: wrap; gap: 4px; }
+.w-rec-album {
+  font-size: 10px; color: var(--muted2); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px;
+}
+
+/* Responsive: 1 kolom op mobiel */
+@media (max-width: 640px) {
+  .widget-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Plex bibliotheek view ── */
 .plib-search {
   flex: 1; min-width: 180px; max-width: 320px;
