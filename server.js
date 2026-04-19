@@ -4,10 +4,11 @@ if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
   process.exit(1);
 }
 
-const express = require('express');
-const path    = require('path');
+const express    = require('express');
+const path       = require('path');
+const rateLimit  = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const app     = express();
+const app        = express();
 const PORT    = process.env.PORT || 80;
 
 // ── Tidarr UI proxy ────────────────────────────────────────────────────────
@@ -53,6 +54,32 @@ const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./ser
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// ── Rate limiting ──────────────────────────────────────────────────────────
+
+const rateLimitHandler = (req, res) =>
+  res.status(429).json({
+    error:      'Te veel verzoeken, probeer het over een minuut opnieuw',
+    retryAfter: 60
+  });
+
+// Globale limiter: beschermt alle routes (excl. statische bestanden hierboven)
+app.use(rateLimit({
+  windowMs:      60_000,
+  max:           100,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  handler:         rateLimitHandler
+}));
+
+// Striktere limiter specifiek voor /api/*
+app.use('/api', rateLimit({
+  windowMs:      60_000,
+  max:           30,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  handler:         rateLimitHandler
+}));
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

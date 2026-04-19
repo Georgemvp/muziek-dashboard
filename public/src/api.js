@@ -2,8 +2,42 @@
 import { state } from './state.js';
 import { getImg, esc, fmt } from './helpers.js';
 
+/**
+ * Toont een tijdelijke melding bovenaan de pagina bij een 429-fout.
+ * Verdwijnt automatisch na 8 seconden; herhaalde meldingen worden genegeerd.
+ */
+function _showRateLimitNotice(msg) {
+  if (document.getElementById('rate-limit-notice')) return;
+  const el = document.createElement('div');
+  el.id = 'rate-limit-notice';
+  Object.assign(el.style, {
+    position:    'fixed',
+    top:         '16px',
+    left:        '50%',
+    transform:   'translateX(-50%)',
+    background:  '#e05a2b',
+    color:       '#fff',
+    padding:     '12px 24px',
+    borderRadius:'8px',
+    zIndex:      '9999',
+    fontSize:    '14px',
+    fontFamily:  'sans-serif',
+    boxShadow:   '0 4px 16px rgba(0,0,0,0.35)',
+    whiteSpace:  'nowrap'
+  });
+  el.textContent = '⏱ ' + msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
 export async function apiFetch(url) {
   const res = await fetch(url);
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({}));
+    const msg  = data.error || 'Te veel verzoeken, probeer het over een minuut opnieuw';
+    _showRateLimitNotice(msg);
+    throw new Error(msg);
+  }
   if (!res.ok) throw new Error(`Serverfout ${res.status}`);
   return res.json();
 }
