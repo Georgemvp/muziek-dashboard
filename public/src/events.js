@@ -8,7 +8,7 @@ import {
   renderGaps, loadBibliotheek, buildPlexLibraryHtml, loadPlexLibrary,
   loadGaps, loadTopArtists, loadTopTracks, loadLoved, loadStats
 } from './tabs/bibliotheek.js';
-import { loadNu, loadRecent } from './tabs/nu.js';
+import { loadNu, loadRecent, clearDashboardPolling } from './tabs/nu.js';
 import {
   setTidalView, loadTidarrUI, hideTidarrUI,
   triggerTidarrDownload, refreshTidarrQueueBadge,
@@ -65,6 +65,7 @@ document.querySelectorAll('.tab').forEach(btn => {
 
     if (tab !== 'downloads') hideTidarrUI();
     if (tab !== 'downloads') stopTidarrQueuePolling();
+    if (tab !== 'nu') clearDashboardPolling();
 
     if (document.startViewTransition) {
       document.startViewTransition(() => { tabLoaders[tab]?.(); }).finished.catch(() => {});

@@ -3,9 +3,15 @@ import { state }    from '../state.js';
 import { apiFetch } from '../api.js';
 import {
   esc, timeAgo, getImg, proxyImg, gradientFor, initials,
-  plexBadge, bookmarkBtn, downloadBtn, setContent, fmt
+  plexBadge, bookmarkBtn, downloadBtn, contentEl, fmt
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling, renderDashboardQueue } from './downloads.js';
+
+// ── Dashboard polling interval ────────────────────────────────────────────
+let _dashPoller = null;
+export function clearDashboardPolling() {
+  if (_dashPoller) { clearInterval(_dashPoller); _dashPoller = null; }
+}
 
 // ── Plex Nu Bezig (globale header, ook buiten dashboard) ──────────────────
 export async function loadPlexNP() {
@@ -79,7 +85,14 @@ export function loadDashboard() {
     </div>
     <div class="widget-grid" id="widget-grid">${cards}</div>`;
 
-  setContent(html, () => {
+  // Schrijf direct naar contentEl — géén geneste startViewTransition.
+  // Dit is veilig wanneer we al binnen een tab-klik view transition zitten,
+  // én bij initieel laden. setContent zou een geneste transition starten die
+  // de outer transition kapot maakt.
+  state.sectionContainerEl = null;
+  contentEl.innerHTML = html;
+
+  requestAnimationFrame(() => {
     // Alle widgets parallel laden
     Promise.allSettled([
       dw_nuLuisteren(),
@@ -118,7 +131,7 @@ function dwErr(id, msg) {
 }
 
 // ── Widget 1: Nu luisteren ────────────────────────────────────────────────
-async function dw_nuLuisteren() {
+export async function dw_nuLuisteren() {
   const el = document.getElementById('wbody-nu-luisteren');
   if (!el) return;
   try {
@@ -385,5 +398,18 @@ export function loadNu() {
   state.currentTab = 'nu';
   hideTidarrUI();
   stopTidarrQueuePolling();
+
+  // Stop eventuele vorige polling
+  clearDashboardPolling();
+
   loadDashboard();
+
+  // Poll de "Nu luisteren" widget elke 30s zolang Nu-tab actief is
+  _dashPoller = setInterval(() => {
+    if (state.currentTab !== 'nu') {
+      clearDashboardPolling();
+      return;
+    }
+    dw_nuLuisteren();
+  }, 30_000);
 }
