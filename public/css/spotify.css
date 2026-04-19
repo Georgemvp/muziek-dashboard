@@ -1,0 +1,84 @@
+/* ── Spotify mood toolbar ── */
+.spotify-label { color: #1db954; font-weight: 600; font-style: normal; }
+.mood-btn.sel-mood {
+  color: #1db954; border-color: #1db954;
+  background: rgba(29,185,84,0.12); font-weight: 600;
+}
+.mood-btn.loading { opacity: 0.6; pointer-events: none; }
+
+/* ── Spotify recs grid ── */
+.spotify-section { margin-bottom: 2rem; }
+.spotify-section-title {
+  font-size: 11px; font-weight: 600; color: #1db954;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.spotify-section-title::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(29,185,84,0.3), transparent);
+}
+
+.spotify-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.spotify-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+  cursor: default;
+}
+.spotify-card:hover {
+  border-color: rgba(29,185,84,0.4); transform: translateY(-2px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.spotify-cover { position: relative; aspect-ratio: 1; background: var(--surface2); overflow: hidden; }
+.spotify-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.spotify-cover-ph {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; color: var(--muted);
+}
+
+.spotify-play-btn {
+  position: absolute; bottom: 7px; right: 7px;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: #1db954; border: none; cursor: pointer;
+  color: #000; font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: transform 0.15s var(--ease), background 0.15s;
+  opacity: 0; transform: translateY(4px);
+}
+.spotify-card:hover .spotify-play-btn { opacity: 1; transform: translateY(0); }
+.spotify-play-btn.playing { opacity: 1; transform: translateY(0); background: #fff; }
+.spotify-play-btn:hover { background: #1ed760; transform: scale(1.08) translateY(0) !important; }
+
+.spotify-info { padding: 10px 10px 12px; }
+.spotify-track {
+  font-size: 12px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px;
+}
+.spotify-artist {
+  font-size: 11px; color: var(--muted2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.spotify-artist:hover { color: var(--text); text-decoration: underline; }
+.spotify-album {
+  font-size: 10px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+}
+
+.spotify-link-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-top: 6px; font-size: 10px; color: #1db954;
+  text-decoration: none; opacity: 0.7; transition: opacity 0.15s;
+}
+.spotify-link-btn:hover { opacity: 1; }
+
+/* play-bar inside spotify card */
+.spotify-card .play-bar { margin: 0; border-radius: 0; }

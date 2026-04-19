@@ -1,0 +1,173 @@
+/* ── Inline toolbars ── */
+.inline-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ── Sectie-blokken ── */
+.section-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 0 20px 24px;
+  transition: opacity 0.2s var(--ease), box-shadow 0.22s var(--ease);
+  margin-bottom: 8px;
+}
+.section-block:hover { box-shadow: var(--shadow-sm); }
+
+/* Sticky section-header */
+.section-hdr {
+  position: sticky; top: 52px; z-index: 200;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 11px 0; margin-bottom: 18px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--border);
+}
+.section-hdr-title {
+  font-size: 18px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.02em; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Collapsible section content */
+.section-content {
+  transition: max-height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+  max-height: 10000px; opacity: 1; overflow: hidden;
+}
+.section-block.collapsed .section-content {
+  max-height: 0; opacity: 0; pointer-events: none;
+}
+.section-block.collapsed ~ .ontdek-divider { display: none; }
+
+/* Section toggle button */
+.section-toggle-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 4px 2px; color: var(--muted2); font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color 0.2s var(--ease); user-select: none; flex-shrink: 0;
+  width: 20px; height: 20px; margin-right: 4px;
+}
+.section-toggle-btn:hover { color: var(--text); }
+.section-toggle-btn.collapsed::before { content: '▸'; display: block; }
+.section-toggle-btn.expanded::before  { content: '▾'; display: block; }
+
+/* ── Sectie-scheider ── */
+.ontdek-divider {
+  display: flex; align-items: center; gap: 14px;
+  margin: 10px 0 28px; color: var(--new);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em; padding: 6px 0;
+}
+.ontdek-divider::before, .ontdek-divider::after {
+  content: ''; flex: 1; height: 2px;
+  background: linear-gradient(90deg, var(--new-bg), transparent);
+}
+.ontdek-divider::after { background: linear-gradient(270deg, var(--new-bg), transparent); }
+
+/* ── Ontdek layout ── */
+.ontdek-layout { }
+.sec-mood-block {
+  margin-bottom: 20px; padding: 12px 14px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+
+/* ── Bibliotheek layout ── */
+.bib-layout { }
+.bib-strips-wrap { margin-bottom: 28px; }
+
+/* ── Horizontale scroll-strips ── */
+.scroll-strip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; overflow: hidden;
+}
+.strip-label {
+  font-size: 12px; font-weight: 700; color: var(--muted2);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+}
+.strip-period { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
+.strip-body {
+  overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  padding-bottom: 4px;
+}
+.strip-body::-webkit-scrollbar { height: 4px; }
+.strip-body::-webkit-scrollbar-track { background: transparent; }
+.strip-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.strip-body .section-title { display: none; }
+.strip-body .artist-grid {
+  display: flex; flex-direction: row; flex-wrap: nowrap; gap: 10px; min-width: max-content;
+}
+.strip-body .artist-grid .ag-card { min-width: 120px; max-width: 120px; }
+.strip-body .card-list {
+  display: flex; flex-direction: row; flex-wrap: nowrap; gap: 8px; min-width: max-content;
+}
+.strip-body .card-list .card { min-width: 220px; max-width: 220px; flex-shrink: 0; }
+
+/* ── Bibliotheek sub-tabs ── */
+.bib-subtabs {
+  display: flex; gap: 6px; margin: 20px 0 0;
+  border-bottom: 1px solid var(--border); padding-bottom: 0;
+}
+.bib-tab {
+  padding: 8px 16px; font-size: 13px; font-weight: 500;
+  border: none; border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0; cursor: pointer;
+  background: transparent; color: var(--muted2);
+  transition: all 0.18s var(--ease); user-select: none; white-space: nowrap;
+  margin-bottom: -1px;
+}
+.bib-tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.bib-tab.active {
+  color: var(--text); border-bottom-color: var(--red);
+  background: rgba(213,16,7,0.06);
+}
+.bib-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 15px; padding: 0 4px;
+  background: var(--new); color: #fff; border-radius: 8px;
+  font-size: 9px; font-weight: 700; margin-left: 4px;
+}
+.bib-tab.active .bib-tab-badge { background: rgba(255,255,255,0.3); }
+.bib-sub-content { margin-top: 16px; min-height: 200px; }
+
+/* ── Plex bibliotheek view ── */
+.plib-search {
+  flex: 1; min-width: 180px; max-width: 320px;
+  padding: 5px 14px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 13px; outline: none;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s;
+}
+.plib-search:focus { border-color: var(--muted2); box-shadow: 0 0 0 3px rgba(108,92,231,0.1); }
+.plib-search::placeholder { color: var(--muted); }
+.plib-list { display: flex; flex-direction: column; gap: 8px; }
+.plib-artist-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); overflow: hidden;
+  transition: box-shadow 0.22s var(--ease), border-color 0.18s;
+}
+.plib-artist-block:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--border-hover); }
+.plib-artist-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; cursor: pointer; user-select: none; transition: background 0.15s;
+}
+.plib-artist-header:hover { background: var(--surface2); }
+.plib-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.8);
+}
+.plib-artist-name {
+  flex: 1; font-size: 13px; font-weight: 600;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.plib-album-count {
+  font-size: 11px; color: var(--muted2); flex-shrink: 0;
+  background: var(--surface3); padding: 2px 9px; border-radius: 10px;
+  border: 1px solid var(--border); font-weight: 600;
+}
+.plib-albums {
+  padding: 0 14px 12px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px;
+}
+.plib-album-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px; transition: background 0.12s;
+}
+.plib-album-row:hover { background: var(--surface2); }
+.plib-album-badge { font-size: 9px; color: var(--plex); flex-shrink: 0; opacity: 0.8; }
+.plib-album-title { font-size: 12px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4; }
