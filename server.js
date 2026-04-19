@@ -64,18 +64,20 @@ const rateLimitHandler = (req, res) =>
   });
 
 // Globale limiter: beschermt alle routes (excl. statische bestanden hierboven)
+// Ruim genoeg voor normale single-user browsing; echte Last.fm-bescherming
+// zit in de outbound throttle in services/lastfm.js.
 app.use(rateLimit({
   windowMs:      60_000,
-  max:           100,
+  max:           300,
   standardHeaders: true,
   legacyHeaders:   false,
   handler:         rateLimitHandler
 }));
 
-// Striktere limiter specifiek voor /api/*
+// API limiter voor /api/*: beschermt tegen extreme burst (bijv. scripts/bots)
 app.use('/api', rateLimit({
   windowMs:      60_000,
-  max:           30,
+  max:           120,
   standardHeaders: true,
   legacyHeaders:   false,
   handler:         rateLimitHandler
