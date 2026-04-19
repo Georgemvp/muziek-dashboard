@@ -1,6 +1,7 @@
 // ── Tab: Nu — Widget Dashboard ────────────────────────────────────────────
 import { state }    from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, fetchOnce } from '../api.js';
+import { getCached, setCache, invalidate } from '../cache.js';
 import {
   esc, timeAgo, getImg, proxyImg, gradientFor, initials,
   plexBadge, bookmarkBtn, downloadBtn, contentEl, fmt
@@ -44,9 +45,7 @@ const DEFAULT_WIDGETS = [
   'download-voortgang', 'vandaag-cijfers', 'aanbeveling', 'collectie-stats',
 ];
 
-// Dag-cache voor de zware /api/recs aanroep
-let _recsCacheDay = -1;
-let _recsCache    = null;
+// Opmerkink: /api/recs cache wordt nu beheerd door cache.js module
 
 // ── Dashboard hoofd-renderer ──────────────────────────────────────────────
 export function loadDashboard() {
@@ -138,11 +137,20 @@ export async function dw_nuLuisteren() {
   if (state.activeTab !== 'nu') return;
   const signal = state.tabAbort?.signal;
   try {
+    // Haal /api/recent uit cache (TTL: 60 seconden)
+    let lfmData = getCached('recent', 60 * 1000);
+    const lfmIsCached = lfmData !== null;
+
     const [plexRes, lfmRes] = await Promise.allSettled([
       fetch('/api/plex/nowplaying', { signal }).then(r => r.json()),
-      apiFetch('/api/recent', { signal }),
+      lfmIsCached ? Promise.resolve(lfmData) : fetchOnce('/api/recent'),
     ]);
     if (signal?.aborted) return;
+
+    // Sla /api/recent op in cache als het een echte fetch was
+    if (!lfmIsCached && lfmRes.status === 'fulfilled') {
+      setCache('recent', lfmRes.value);
+    }
 
     let html = '';
 
@@ -186,8 +194,15 @@ async function dw_recenteNummers() {
   if (!el) return;
   const signal = state.tabAbort?.signal;
   try {
-    const data   = await apiFetch('/api/recent', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/recent uit cache (TTL: 60 seconden)
+    let data = getCached('recent', 60 * 1000);
+    if (!data) {
+      // Gebruik fetchOnce voor deduplicatie (andere widgets kunnen dit ook ophalen)
+      data = await fetchOnce('/api/recent');
+      if (signal?.aborted) return;
+      setCache('recent', data);
+    }
+
     const tracks = (data.recenttracks?.track || [])
       .filter(t => !t['@attr']?.nowplaying)
       .slice(0, 8);
@@ -270,8 +285,15 @@ async function dw_vandaagCijfers() {
   if (!el) return;
   const signal = state.tabAbort?.signal;
   try {
-    const data        = await apiFetch('/api/recent', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/recent uit cache (TTL: 60 seconden)
+    let data = getCached('recent', 60 * 1000);
+    if (!data) {
+      // Gebruik fetchOnce voor deduplicatie (andere widgets kunnen dit ook ophalen)
+      data = await fetchOnce('/api/recent');
+      if (signal?.aborted) return;
+      setCache('recent', data);
+    }
+
     const tracks      = data.recenttracks?.track || [];
     const today       = new Date().toDateString();
     const todayTracks = tracks.filter(t =>
@@ -309,16 +331,22 @@ async function dw_aanbeveling() {
   if (!el) return;
   const signal = state.tabAbort?.signal;
   try {
-    const today = Math.floor(Date.now() / 86_400_000);
-    if (!_recsCache || _recsCacheDay !== today) {
-      const data  = await apiFetch('/api/recs', { signal });
+    // Haal /api/recs uit cache (TTL: 5 minuten)
+    let data = getCached('recs', 5 * 60 * 1000);
+    if (!data) {
+      // Gebruik fetchOnce voor deduplicatie (Ontdek-tab kan dit ook ophalen)
+      data = await fetchOnce('/api/recs');
       if (signal?.aborted) return;
-      _recsCache    = data.recommendations || [];
-      _recsCacheDay = today;
+      setCache('recs', data);
     }
-    if (!_recsCache.length) { el.innerHTML = '<div class="empty" style="font-size:12px">Geen aanbevelingen</div>'; return; }
 
-    const pick = _recsCache[today % _recsCache.length];
+    const recsCache = data.recommendations || [];
+    state.lastRecs = data;  // Bewaar in state voor persistentie
+
+    if (!recsCache.length) { el.innerHTML = '<div class="empty" style="font-size:12px">Geen aanbevelingen</div>'; return; }
+
+    const today = Math.floor(Date.now() / 86_400_000);
+    const pick = recsCache[today % recsCache.length];
     let info = null;
     try { info = await apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`, { signal }); } catch {}
 
@@ -380,8 +408,13 @@ async function dw_collectieStats() {
 export async function loadRecent() {
   const signal = state.tabAbort?.signal;
   try {
-    const data   = await apiFetch('/api/recent', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/recent uit cache (TTL: 60 seconden)
+    let data = getCached('recent', 60 * 1000);
+    if (!data) {
+      data = await apiFetch('/api/recent', { signal });
+      if (signal?.aborted) return;
+      setCache('recent', data);
+    }
     const tracks = data.recenttracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen recente nummers.</div>'); return; }
     let html = '<div class="card-list">';

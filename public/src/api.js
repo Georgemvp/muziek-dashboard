@@ -1,6 +1,37 @@
 // ── API-laag ──────────────────────────────────────────────────────────────
 import { state } from './state.js';
 import { getImg, esc, fmt } from './helpers.js';
+import { getCached, setCache } from './cache.js';
+
+// ── Request Deduplication (Request Coalescing) ─────────────────────────────
+// Voorkomt duplicate simultane requests naar dezelfde URL
+const _inflight = new Map();
+
+/**
+ * Haal een URL op met deduplicatie: als dezelfde URL al aan het laden is,
+ * return de bestaande Promise i.p.v. een nieuwe fetch te starten.
+ * @param {string} url - Request URL
+ * @returns {Promise} Resolves met JSON response
+ */
+export async function fetchOnce(url) {
+  // Check if request is already in flight
+  if (_inflight.has(url)) {
+    return _inflight.get(url);
+  }
+
+  // Start new request
+  const promise = apiFetch(url);
+
+  // Store in flight
+  _inflight.set(url, promise);
+
+  // Remove from inflight when done (success or error)
+  promise.finally(() => {
+    _inflight.delete(url);
+  });
+
+  return promise;
+}
 
 /**
  * Toont een tijdelijke melding bovenaan de pagina bij een 429-fout.
@@ -73,7 +104,13 @@ export async function loadPlexStatus() {
 // ── Gebruikersprofiel ─────────────────────────────────────────────────────
 export async function loadUser() {
   try {
-    const d = await apiFetch('/api/user');
+    // TTL: 10 minuten
+    let d = getCached('user', 10 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch('/api/user');
+      setCache('user', d);
+    }
+
     const u = d.user;
     const src = getImg(u.image, 'large');
     const av = src

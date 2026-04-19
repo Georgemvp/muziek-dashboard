@@ -1,7 +1,7 @@
 // ── Verlanglijst ──────────────────────────────────────────────────────────
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
-import { esc, gradientFor, initials, showLoading, setContent, showError } from '../helpers.js';
+import { esc, gradientFor, initials, showLoading, setContent, showError, p } from '../helpers.js';
 
 export async function loadWishlistState() {
   try {
@@ -21,12 +21,12 @@ export function updateWishlistBadge() {
 export async function toggleWishlist(type, name, artist, image) {
   const key = `${type}:${name}`;
   if (state.wishlistMap.has(key)) {
-    await fetch(`/api/wishlist/${state.wishlistMap.get(key)}`, { method: 'DELETE' });
+    try { await p(`/api/wishlist/${state.wishlistMap.get(key)}`, { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     state.wishlistMap.delete(key);
     updateWishlistBadge();
     return false;
   } else {
-    const res = await fetch('/api/wishlist', {
+    const res = await p('/api/wishlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, name, artist, image })

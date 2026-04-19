@@ -1,10 +1,11 @@
 // ── Tab: Ontdek ───────────────────────────────────────────────────────────
 import { state } from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, fetchOnce } from '../api.js';
+import { getCached, setCache, invalidate } from '../cache.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, plexBadge, bookmarkBtn,
   downloadBtn, countryFlag, albumCard, showLoading, setContent, showError,
-  setupLazyLoad, runWithSection, contentEl, proxyImg
+  setupLazyLoad, runWithSection, contentEl, proxyImg, p
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 
@@ -60,7 +61,14 @@ export async function loadSpotifyRecs(mood) {
   };
   section.innerHTML = `<div class="loading"><div class="spinner"></div>Spotify laden…</div>`;
   try {
-    const tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
+    // Haal Spotify recs uit cache (TTL: 5 minuten)
+    const spotifyCacheKey = `spotify:${mood}`;
+    let tracks = getCached(spotifyCacheKey, 5 * 60 * 1000);
+    if (!tracks) {
+      tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
+      setCache(spotifyCacheKey, tracks);
+    }
+
     if (!tracks.length) {
       section.innerHTML = `<div class="empty">Geen Spotify-aanbevelingen gevonden voor deze mood.</div>`;
       return;
@@ -145,12 +153,21 @@ export async function loadRecs() {
   showLoading();
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/recs', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/recs uit cache (TTL: 5 minuten)
+    let d = getCached('recs', 5 * 60 * 1000);
+    const isCached = d !== null;
+    if (!isCached) {
+      // Gebruik fetchOnce voor deduplicatie (dashboard widget kan dit ook ophalen)
+      d = await fetchOnce('/api/recs');
+      if (signal?.aborted) return;
+      setCache('recs', d);
+    }
+
     const recs      = d.recommendations || [];
     const albumRecs = d.albumRecs        || [];
     const trackRecs = d.trackRecs        || [];
     state.plexOk = d.plexConnected || state.plexOk;
+    state.lastRecs = d;  // Bewaar in state voor persistentie
     if (d.plexConnected && d.plexArtistCount) {
       document.getElementById('plex-pill').className = 'plex-pill on';
       document.getElementById('plex-pill-text').textContent =
@@ -322,8 +339,13 @@ export async function loadReleases() {
   showLoading();
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/releases', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/releases uit cache (TTL: 5 minuten)
+    let d = getCached('releases', 5 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch('/api/releases', { signal });
+      if (signal?.aborted) return;
+      setCache('releases', d);
+    }
     if (d.status === 'building') {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
@@ -420,8 +442,13 @@ export async function loadDiscover() {
   showLoading('Ontdekkingen ophalen...');
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/discover', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/discover uit cache (TTL: 5 minuten)
+    let d = getCached('discover', 5 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch('/api/discover', { signal });
+      if (signal?.aborted) return;
+      setCache('discover', d);
+    }
     if (d.status === 'building') {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
@@ -651,16 +678,19 @@ export async function loadOntdek() {
   contentEl.style.transform = '';
 
   document.getElementById('btn-ref-recs-ontdek')?.addEventListener('click', async () => {
+    invalidate('recs');  // Wis cache VOOR de fetch
     await runWithSection(document.getElementById('sec-recs-content'), loadRecs);
   });
   document.getElementById('btn-ref-releases-ontdek')?.addEventListener('click', async () => {
     state.lastReleases = null;
-    await fetch('/api/releases/refresh', { method: 'POST' });
+    invalidate('releases');  // Wis cache VOOR de fetch
+    try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await runWithSection(document.getElementById('sec-releases-content'), loadReleases);
   });
   document.getElementById('btn-ref-discover-ontdek')?.addEventListener('click', async () => {
     state.lastDiscover = null;
-    await fetch('/api/discover/refresh', { method: 'POST' });
+    invalidate('discover');  // Wis cache VOOR de fetch
+    try { await p('/api/discover/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await runWithSection(document.getElementById('sec-discover-content'), loadDiscover);
   });
   document.getElementById('btn-clear-mood-inline')?.addEventListener('click', () => {

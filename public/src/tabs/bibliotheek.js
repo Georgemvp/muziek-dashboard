@@ -1,11 +1,12 @@
 // ── Tab: Bibliotheek ──────────────────────────────────────────────────────
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
+import { getCached, setCache, invalidate } from '../cache.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, downloadBtn,
   countryFlag, albumCard, showLoading, setContent, showError,
   setupLazyLoad, runWithSection, contentEl, sanitizeArtistName, periodLabel,
-  getImg, trackImg, timeAgo, proxyImg
+  getImg, trackImg, timeAgo, proxyImg, p
 } from '../helpers.js';
 import { loadWishlist } from '../components/wishlist.js';
 import { loadPlexStatus } from '../api.js';
@@ -69,8 +70,14 @@ export async function loadTopArtists(period) {
   showLoading();
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch(`/api/topartists?period=${period}`, { signal });
-    if (signal?.aborted) return;
+    // Haal /api/topartists uit cache (TTL: 5 minuten, key bevat period)
+    const cacheKey = `topartists:${period}`;
+    let d = getCached(cacheKey, 5 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch(`/api/topartists?period=${period}`, { signal });
+      if (signal?.aborted) return;
+      setCache(cacheKey, d);
+    }
     const artists = d.topartists?.artist || [];
     if (!artists.length) { setContent('<div class="empty">Geen data.</div>'); return; }
     const max = parseInt(artists[0]?.playcount || 1);
@@ -110,8 +117,14 @@ export async function loadTopTracks(period) {
   showLoading();
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch(`/api/toptracks?period=${period}`, { signal });
-    if (signal?.aborted) return;
+    // Haal /api/toptracks uit cache (TTL: 5 minuten, key bevat period)
+    const cacheKey = `toptracks:${period}`;
+    let d = getCached(cacheKey, 5 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch(`/api/toptracks?period=${period}`, { signal });
+      if (signal?.aborted) return;
+      setCache(cacheKey, d);
+    }
     const tracks = d.toptracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen data.</div>'); return; }
     const max = parseInt(tracks[0]?.playcount || 1);
@@ -135,8 +148,13 @@ export async function loadLoved() {
   showLoading();
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/loved', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/loved uit cache (TTL: 10 minuten)
+    let d = getCached('loved', 10 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch('/api/loved', { signal });
+      if (signal?.aborted) return;
+      setCache('loved', d);
+    }
     const tracks = d.lovedtracks?.track || [];
     if (!tracks.length) { setContent('<div class="empty">Geen geliefde nummers.</div>'); return; }
     let html = '<div class="section-title">Geliefde nummers</div><div class="card-list">';
@@ -158,8 +176,13 @@ export async function loadStats() {
   showLoading('Statistieken ophalen...');
   const signal = state.tabAbort?.signal;
   try {
-    const d = await apiFetch('/api/stats', { signal });
-    if (signal?.aborted) return;
+    // Haal /api/stats uit cache (TTL: 10 minuten)
+    let d = getCached('stats', 10 * 60 * 1000);
+    if (!d) {
+      d = await apiFetch('/api/stats', { signal });
+      if (signal?.aborted) return;
+      setCache('stats', d);
+    }
     const chartHtml = `
       <div class="stats-grid">
         <div class="stats-card full">
@@ -352,7 +375,7 @@ export async function switchBibSubTab(subTab) {
         const orig = btn.textContent;
         btn.disabled = true; btn.textContent = '↻ Bezig…';
         try {
-          await fetch('/api/plex/refresh', { method: 'POST' });
+          try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
           await loadPlexStatus();
           state.plexLibData = null;
           const myTarget = bibContent;
@@ -372,7 +395,7 @@ export async function switchBibSubTab(subTab) {
         </div>`;
       document.getElementById('btn-ref-gaps-bib')?.addEventListener('click', async () => {
         state.lastGaps = null;
-        await fetch('/api/gaps/refresh', { method: 'POST' });
+        try { await p('/api/gaps/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
         const myTarget = document.getElementById('bib-sub-content');
         state.sectionContainerEl = myTarget;
         await loadGaps();

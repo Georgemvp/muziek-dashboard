@@ -147,10 +147,14 @@ function staleOrError(cacheKey, err, res) {
 app.get('/api/user', async (req, res) => {
   try {
     const cached = getCache('api:user', 300_000);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=600');
+      return res.json(cached);
+    }
     const data = await lfm({ method: 'user.getinfo' });
     markLastFmUp();
     setCache('api:user', data);
+    res.set('Cache-Control', 'private, max-age=600');
     res.json(data);
   } catch (e) { staleOrError('api:user', e, res); }
 });
@@ -158,10 +162,14 @@ app.get('/api/user', async (req, res) => {
 app.get('/api/recent', async (req, res) => {
   try {
     const cached = getCache('api:recent', 120_000);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=30');
+      return res.json(cached);
+    }
     const data = await lfm({ method: 'user.getrecenttracks', limit: 20 });
     markLastFmUp();
     setCache('api:recent', data);
+    res.set('Cache-Control', 'private, max-age=30');
     res.json(data);
   } catch (e) { staleOrError('api:recent', e, res); }
 });
@@ -171,10 +179,14 @@ app.get('/api/topartists', async (req, res) => {
     const period = req.query.period || '7day';
     const cacheKey = `api:topartists:${period}`;
     const cached = getCache(cacheKey, 300_000);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json(cached);
+    }
     const data = await lfm({ method: 'user.gettopartists', period, limit: 20 });
     markLastFmUp();
     setCache(cacheKey, data);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json(data);
   } catch (e) { staleOrError(`api:topartists:${req.query.period || '7day'}`, e, res); }
 });
@@ -184,10 +196,14 @@ app.get('/api/toptracks', async (req, res) => {
     const period = req.query.period || '7day';
     const cacheKey = `api:toptracks:${period}`;
     const cached = getCache(cacheKey, 300_000);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json(cached);
+    }
     const data = await lfm({ method: 'user.gettoptracks', period, limit: 20 });
     markLastFmUp();
     setCache(cacheKey, data);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json(data);
   } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res); }
 });
@@ -195,10 +211,14 @@ app.get('/api/toptracks', async (req, res) => {
 app.get('/api/loved', async (req, res) => {
   try {
     const cached = getCache('api:loved', 600_000);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=600');
+      return res.json(cached);
+    }
     const data = await lfm({ method: 'user.getlovedtracks', limit: 20 });
     markLastFmUp();
     setCache('api:loved', data);
+    res.set('Cache-Control', 'private, max-age=600');
     res.json(data);
   } catch (e) { staleOrError('api:loved', e, res); }
 });
@@ -207,6 +227,15 @@ app.get('/api/loved', async (req, res) => {
 
 app.get('/api/artist/:name/info', async (req, res) => {
   const name = decodeURIComponent(req.params.name);
+  const cacheKey = `artist:info:${name.toLowerCase()}`;
+
+  // ── Check cache eerst (TTL: 1 uur) ─────────────────────────────────────
+  const cached = getCache(cacheKey, 1 * 3_600_000);
+  if (cached) {
+    res.set('Cache-Control', 'private, max-age=3600');
+    return res.json(cached);
+  }
+
   try {
     const [deezerR, albumsR, mbzR] = await Promise.allSettled([
       fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
@@ -239,15 +268,23 @@ app.get('/api/artist/:name/info', async (req, res) => {
     }
 
     const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
-    res.json({
+    const result = {
       image, albums,
       inPlex:    artistInPlex(name),
       country:   mbz?.country   || null,
       startYear: mbz?.startYear || null,
       tags:      mbz?.tags      || [],
       mbid:      mbz?.mbid      || null
-    });
+    };
+
+    // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
+    setCache(cacheKey, result);
+
+    // ── Voeg browser cache header toe ──────────────────────────────────
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.json(result);
   } catch (e) {
+    // ── Geen caching bij errors ────────────────────────────────────────
     res.status(500).json({ error: e.message, image: null, albums: [], inPlex: false, tags: [] });
   }
 });
@@ -257,11 +294,17 @@ app.get('/api/artist/:name/info', async (req, res) => {
 app.get('/api/preview', async (req, res) => {
   const artist = (req.query.artist || '').trim();
   const track  = (req.query.track  || '').trim();
-  if (!artist || !track) return res.json({ preview: null });
+  if (!artist || !track) {
+    res.set('Cache-Control', 'private, max-age=86400');
+    return res.json({ preview: null });
+  }
 
   const cacheKey = `preview:${artist.toLowerCase()}:${track.toLowerCase()}`;
   const cached = getCache(cacheKey, 7 * 24 * 60 * 60 * 1000); // 7 dagen TTL
-  if (cached) return res.json(cached);
+  if (cached) {
+    res.set('Cache-Control', 'private, max-age=86400');
+    return res.json(cached);
+  }
 
   try {
     const q   = `artist:"${artist}" track:"${track}"`;
@@ -279,8 +322,10 @@ app.get('/api/preview', async (req, res) => {
     } : { preview: null };
 
     setCache(cacheKey, result);
+    res.set('Cache-Control', 'private, max-age=86400');
     res.json(result);
   } catch (e) {
+    res.set('Cache-Control', 'private, max-age=86400');
     res.json({ preview: null });
   }
 });
@@ -294,7 +339,10 @@ app.get('/api/recs', async (req, res) => {
     const cacheKeyRotation = Math.floor(Date.now() / 7_200_000);
     const cacheKey = `api:recs:${cacheKeyRotation}`;
     const cached = getCache(cacheKey, 900_000); // 15 min TTL per key
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json(cached);
+    }
 
     await syncPlexLibrary();
     const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 30 });
@@ -464,6 +512,7 @@ app.get('/api/recs', async (req, res) => {
     markLastFmUp();
     setCache(cacheKey, result); // Cache per 2-uur rotatie
     console.log(`[/api/recs] voltooid in ${Date.now() - t0}ms`);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json(result);
   } catch (e) {
     markLastFmDown();
@@ -472,16 +521,29 @@ app.get('/api/recs', async (req, res) => {
     const currentKey  = `api:recs:${Math.floor(Date.now() / 7_200_000)}`;
     const previousKey = `api:recs:${Math.floor(Date.now() / 7_200_000) - 1}`;
     const stale = getCache(currentKey, Infinity) || getCache(previousKey, Infinity);
-    if (stale) return res.json({ ...stale, _stale: true, _staleReason: e.message });
+    if (stale) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json({ ...stale, _stale: true, _staleReason: e.message });
+    }
+    res.set('Cache-Control', 'private, max-age=300');
     res.status(503).json({ error: 'Last.fm is tijdelijk niet bereikbaar en er is geen gecachede data beschikbaar.', _lfmDown: true });
   }
 });
 
 // ── API: Discover & Gaps ───────────────────────────────────────────────────
 
-app.get('/api/discover',          (req, res) => res.json(getDiscover()));
-app.get('/api/gaps',              (req, res) => res.json(getGaps()));
-app.get('/api/releases',          (req, res) => res.json(getReleases()));
+app.get('/api/discover',          (req, res) => {
+  res.set('Cache-Control', 'private, max-age=600');
+  res.json(getDiscover());
+});
+app.get('/api/gaps',              (req, res) => {
+  res.set('Cache-Control', 'private, max-age=600');
+  res.json(getGaps());
+});
+app.get('/api/releases',          (req, res) => {
+  res.set('Cache-Control', 'private, max-age=300');
+  res.json(getReleases());
+});
 app.post('/api/discover/refresh', (req, res) => res.json(refreshDiscover()));
 app.post('/api/gaps/refresh',     (req, res) => res.json(refreshGaps()));
 app.post('/api/releases/refresh', (req, res) => res.json(refreshReleases()));
@@ -489,22 +551,39 @@ app.post('/api/releases/refresh', (req, res) => res.json(refreshReleases()));
 // ── API: Plex ──────────────────────────────────────────────────────────────
 
 app.get('/api/plex/status', async (req, res) => {
-  if (!PLEX_TOKEN) return res.json({ connected: false, reason: 'Geen PLEX_TOKEN' });
+  if (!PLEX_TOKEN) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json({ connected: false, reason: 'Geen PLEX_TOKEN' });
+  }
   try {
     await syncPlexLibrary(true);
     const { ok, artistCount, albumCount, lastSync } = getPlexStatus();
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ connected: ok, artists: artistCount, albums: albumCount, lastSync: new Date(lastSync).toISOString() });
-  } catch (e) { res.json({ connected: false, reason: e.message }); }
+  } catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json({ connected: false, reason: e.message });
+  }
 });
 
 app.get('/api/plex/nowplaying', async (req, res) => {
-  if (!PLEX_TOKEN) return res.json({ playing: false });
+  if (!PLEX_TOKEN) {
+    res.set('Cache-Control', 'private, max-age=30');
+    return res.json({ playing: false });
+  }
   try {
     const data  = await plexGet('/status/sessions');
     const music = (data?.MediaContainer?.Metadata || []).find(s => s.type === 'track');
-    if (!music) return res.json({ playing: false });
+    if (!music) {
+      res.set('Cache-Control', 'private, max-age=30');
+      return res.json({ playing: false });
+    }
+    res.set('Cache-Control', 'private, max-age=30');
     res.json({ playing: true, track: music.title, artist: music.grandparentTitle || music.originalTitle, album: music.parentTitle });
-  } catch { res.json({ playing: false }); }
+  } catch {
+    res.set('Cache-Control', 'private, max-age=30');
+    res.json({ playing: false });
+  }
 });
 
 app.post('/api/plex/refresh', async (req, res) => {
@@ -517,9 +596,13 @@ app.post('/api/plex/refresh', async (req, res) => {
 });
 
 app.get('/api/plex/library', (req, res) => {
-  if (!PLEX_TOKEN) return res.json({ connected: false, artistCount: 0, albumCount: 0, library: [] });
+  if (!PLEX_TOKEN) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json({ connected: false, artistCount: 0, albumCount: 0, library: [] });
+  }
   const { ok, artistCount, albumCount } = getPlexStatus();
   const library = getPlexLibrary();
+  res.set('Cache-Control', 'private, max-age=300');
   res.json({ connected: ok, artistCount, albumCount: library.length, library });
 });
 
@@ -527,7 +610,10 @@ app.get('/api/plex/library', (req, res) => {
 
 app.get('/api/search', async (req, res) => {
   const q = (req.query.q || '').trim();
-  if (q.length < 2) return res.json({ results: [] });
+  if (q.length < 2) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json({ results: [] });
+  }
   try {
     const [searchR, deezerR] = await Promise.allSettled([
       lfm({ method: 'artist.search', artist: q, limit: 6 }, { includeUser: false }),
@@ -548,9 +634,11 @@ app.get('/api/search', async (req, res) => {
       listeners: parseInt(a.listeners) || 0,
       image: deezerMap[a.name.toLowerCase()] || null
     }));
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ results });
   } catch (e) {
     // Zoeken werkt gedeeltelijk zonder Last.fm (alleen Deezer-afbeeldingen)
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ results: [], _lfmDown: true, error: e.message });
   }
 });
@@ -561,8 +649,12 @@ app.get('/api/artist/:name/similar', async (req, res) => {
   const name = decodeURIComponent(req.params.name);
   try {
     const similar = await getSimilarArtists(name, 6);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ similar });
-  } catch (e) { res.json({ similar: [], _lfmDown: true, error: e.message }); }
+  } catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json({ similar: [], _lfmDown: true, error: e.message });
+  }
 });
 
 // ── API: Statistieken ──────────────────────────────────────────────────────
@@ -623,13 +715,17 @@ app.get('/api/stats', async (req, res) => {
     const result = { dailyScrobbles, topArtists, genres };
     markLastFmUp();
     setCache('stats', result);
+    res.set('Cache-Control', 'private, max-age=900');
     res.json(result);
   } catch (e) { staleOrError('stats', e, res); }
 });
 
 // ── API: Verlanglijst ──────────────────────────────────────────────────────
 
-app.get('/api/wishlist', (req, res) => res.json(getWishlist()));
+app.get('/api/wishlist', (req, res) => {
+  res.set('Cache-Control', 'private, max-age=300');
+  res.json(getWishlist());
+});
 
 app.post('/api/wishlist', (req, res) => {
   const { type, name, artist, image } = req.body || {};
@@ -646,15 +742,32 @@ app.delete('/api/wishlist/:id', (req, res) => {
 // ── API: Tidarr ────────────────────────────────────────────────────────────
 
 app.get('/api/tidarr/status', async (req, res) => {
-  try { res.json(await getTidarrStatus()); }
-  catch (e) { res.status(500).json({ connected: false, reason: e.message }); }
+  try {
+    const result = await getTidarrStatus();
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=60');
+    res.status(500).json({ connected: false, reason: e.message });
+  }
 });
 
 app.get('/api/tidarr/search', async (req, res) => {
   const q = (req.query.q || '').trim();
-  if (q.length < 2) return res.json({ results: [] });
-  try { res.json(await searchTidal(q)); }
-  catch (e) { res.status(500).json({ error: e.message, results: [] }); }
+  if (q.length < 2) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json({ results: [] });
+  }
+  try {
+    const result = await searchTidal(q);
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message, results: [] });
+  }
 });
 
 // Slim album-zoeken met meerdere strategieën en fuzzy matching.
@@ -662,24 +775,44 @@ app.get('/api/tidarr/search', async (req, res) => {
 app.get('/api/tidarr/find', async (req, res) => {
   const artist = (req.query.artist || '').trim();
   const album  = (req.query.album  || '').trim();
-  if (!album) return res.status(400).json({ error: 'album is verplicht' });
+  if (!album) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.status(400).json({ error: 'album is verplicht' });
+  }
   try {
     const match = await findBestAlbum(artist, album);
-    if (!match) return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    if (!match) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    }
+    res.set('Cache-Control', 'private, max-age=300');
     res.json(match);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Geeft de top-3 kandidaten terug zodat de frontend een keuze-dialog kan tonen.
 app.get('/api/tidarr/candidates', async (req, res) => {
   const artist = (req.query.artist || '').trim();
   const album  = (req.query.album  || '').trim();
-  if (!album) return res.status(400).json({ error: 'album is verplicht' });
+  if (!album) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.status(400).json({ error: 'album is verplicht' });
+  }
   try {
     const candidates = await findTopAlbums(artist, album, 3);
-    if (!candidates.length) return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    if (!candidates.length) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.status(404).json({ error: 'Niet gevonden', artist, album });
+    }
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ candidates });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/tidarr/download', async (req, res) => {
@@ -696,8 +829,15 @@ app.post('/api/tidarr/download', async (req, res) => {
 });
 
 app.get('/api/tidarr/queue', async (req, res) => {
-  try { res.json(await getQueue()); }
-  catch (e) { res.status(500).json({ error: e.message, items: [] }); }
+  try {
+    const result = await getQueue();
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=60');
+    res.status(500).json({ error: e.message, items: [] });
+  }
 });
 
 app.delete('/api/tidarr/queue/:id', async (req, res) => {
@@ -708,20 +848,41 @@ app.delete('/api/tidarr/queue/:id', async (req, res) => {
 });
 
 app.get('/api/tidarr/history', async (req, res) => {
-  try { res.json(await getHistory()); }
-  catch (e) { res.status(500).json({ error: e.message, items: [] }); }
+  try {
+    const result = await getHistory();
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message, items: [] });
+  }
 });
 
 // ── Download-geschiedenis (persistente SQLite-opslag) ──────────────────────
 
 app.get('/api/downloads', (req, res) => {
-  try { res.json(getDownloads()); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const result = getDownloads();
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/downloads/keys', (req, res) => {
-  try { res.json([...getDownloadKeys()]); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const result = [...getDownloadKeys()];
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json(result);
+  }
+  catch (e) {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/downloads', (req, res) => {
@@ -774,15 +935,24 @@ app.get('/api/tidarr/stream', async (req, res) => {
 // Cache per mood, 30 minuten TTL. Graceful fallback: [] bij fout.
 
 app.get('/api/spotify/recs', async (req, res) => {
-  if (!SPOTIFY_OK) return res.json([]);
+  if (!SPOTIFY_OK) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json([]);
+  }
 
   const mood = (req.query.mood || '').toLowerCase().trim();
   const audioFeatures = MOODS[mood];
-  if (!audioFeatures) return res.status(400).json({ error: `Onbekende mood: ${mood}. Kies uit: ${Object.keys(MOODS).join(', ')}` });
+  if (!audioFeatures) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.status(400).json({ error: `Onbekende mood: ${mood}. Kies uit: ${Object.keys(MOODS).join(', ')}` });
+  }
 
   const cacheKey = `spotify:recs:${mood}`;
   const cached   = getCache(cacheKey, 30 * 60 * 1000); // 30 min TTL
-  if (cached) return res.json(cached);
+  if (cached) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json(cached);
+  }
 
   try {
     // Haal top-5 artiesten van Last.fm (3 maanden periode)
@@ -795,6 +965,7 @@ app.get('/api/spotify/recs', async (req, res) => {
 
     if (!seedIds.length) {
       setCache(cacheKey, []);
+      res.set('Cache-Control', 'private, max-age=300');
       return res.json([]);
     }
 
@@ -812,15 +983,18 @@ app.get('/api/spotify/recs', async (req, res) => {
     }));
 
     setCache(cacheKey, result);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json(result);
   } catch (e) {
     console.warn('Spotify recs fout (graceful fallback):', e.message);
+    res.set('Cache-Control', 'private, max-age=300');
     res.json([]);
   }
 });
 
 // Geeft de beschikbare moods + of Spotify geconfigureerd is.
 app.get('/api/spotify/status', (req, res) => {
+  res.set('Cache-Control', 'private, max-age=600');
   res.json({ enabled: SPOTIFY_OK, moods: SPOTIFY_OK ? Object.keys(MOODS) : [] });
 });
 

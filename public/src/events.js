@@ -1,5 +1,7 @@
 // ── Globale event delegation en keyboard shortcuts ────────────────────────
 import { state } from './state.js';
+import { invalidate } from './cache.js';
+import { p } from './helpers.js';
 import {
   applyRecsFilter, loadOntdek, renderDiscover, renderReleases,
   loadSpotifyRecs, clearSpotifyRecs, loadRecs, loadReleases, loadDiscover
@@ -153,19 +155,21 @@ document.querySelectorAll('[data-rsort]').forEach(btn => {
 // ── Refresh-knoppen (externe toolbars) ────────────────────────────────────
 document.getElementById('btn-refresh-releases')?.addEventListener('click', async () => {
   state.lastReleases = null;
-  await fetch('/api/releases/refresh', { method: 'POST' });
+  invalidate('releases');  // Wis cache VOOR de fetch
+  try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
   loadReleases();
 });
 
 document.getElementById('btn-refresh-discover')?.addEventListener('click', async () => {
   state.lastDiscover = null;
-  await fetch('/api/discover/refresh', { method: 'POST' });
+  invalidate('discover');  // Wis cache VOOR de fetch
+  try { await p('/api/discover/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
   loadDiscover();
 });
 
 document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () => {
   state.lastGaps = null;
-  await fetch('/api/gaps/refresh', { method: 'POST' });
+  try { await p('/api/gaps/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
   loadGaps();
 });
 
@@ -180,7 +184,7 @@ document.getElementById('btn-sync-plex')?.addEventListener('click', async () => 
   const orig = btn.textContent;
   btn.disabled = true; btn.textContent = '↻ Bezig…';
   try {
-    await fetch('/api/plex/refresh', { method: 'POST' });
+    try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await loadPlexStatus();
     state.plexLibData = null;
     if (state.activeSubTab === 'collectie') await loadPlexLibrary();
@@ -192,7 +196,7 @@ document.getElementById('plex-refresh-btn')?.addEventListener('click', async () 
   const btn = document.getElementById('plex-refresh-btn');
   btn.classList.add('spinning'); btn.disabled = true;
   try {
-    await fetch('/api/plex/refresh', { method: 'POST' });
+    try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await loadPlexStatus();
     state.plexLibData = null;
   } catch {}
@@ -287,7 +291,7 @@ document.addEventListener('click', async e => {
   // Verlanglijst item verwijderen
   const wRemove = e.target.closest('.wish-remove[data-wid]');
   if (wRemove) {
-    await fetch(`/api/wishlist/${wRemove.dataset.wid}`, { method: 'DELETE' });
+    try { await p(`/api/wishlist/${wRemove.dataset.wid}`, { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     state.wishlistMap.forEach((v, k) => { if (String(v) === wRemove.dataset.wid) state.wishlistMap.delete(k); });
     updateWishlistBadge();
     loadWishlist();
@@ -309,7 +313,7 @@ document.addEventListener('click', async e => {
       const orig = dlBtn.textContent;
       dlBtn.textContent = '…';
       try {
-        const res  = await fetch('/api/tidarr/download', {
+        const res  = await p('/api/tidarr/download', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url })
         });
@@ -333,7 +337,7 @@ document.addEventListener('click', async e => {
   const qRemove = e.target.closest('.q-remove[data-qid]');
   if (qRemove) {
     e.stopPropagation();
-    try { await fetch('/api/tidarr/queue/' + encodeURIComponent(qRemove.dataset.qid), { method: 'DELETE' }); }
+    try { try { await p('/api/tidarr/queue/' + encodeURIComponent(qRemove.dataset.qid), { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') throw e; } }
     catch (err) { alert('Verwijderen mislukt: ' + err.message); }
     return;
   }
@@ -343,7 +347,7 @@ document.addEventListener('click', async e => {
   if (dlRemove) {
     e.stopPropagation();
     try {
-      await fetch(`/api/downloads/${dlRemove.dataset.dlid}`, { method: 'DELETE' });
+      try { await p(`/api/downloads/${dlRemove.dataset.dlid}`, { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
       dlRemove.closest('.q-row')?.remove();
     } catch (err) { alert('Verwijderen mislukt: ' + err.message); }
     return;

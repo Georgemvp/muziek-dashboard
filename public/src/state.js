@@ -21,6 +21,7 @@ export const state = {
   lastDiscover: null,
   lastGaps:    null,
   lastReleases: null,
+  lastRecs:    null,
   plexLibData: null,
   wishlistMap: new Map(),    // "type:name" → id
   newReleaseIds: new Set(),

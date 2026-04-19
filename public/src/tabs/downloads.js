@@ -1,7 +1,7 @@
 // ── Tab: Downloads (Tidarr / Tidal) ──────────────────────────────────────
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
-import { esc, gradientFor, initials, fmt, markDownloaded, setContent } from '../helpers.js';
+import { esc, gradientFor, initials, fmt, markDownloaded, setContent, p } from '../helpers.js';
 
 // ── Download-kwaliteit ─────────────────────────────────────────────────────
 export function getDownloadQuality() {
@@ -203,9 +203,9 @@ export async function renderTidalHistory() {
 
     document.getElementById('dl-history-clear')?.addEventListener('click', async () => {
       if (!confirm('Wis de volledige download-geschiedenis?')) return;
-      await fetch('/api/downloads', { method: 'DELETE' }).catch(() => {});
+      try { await p('/api/downloads', { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') {} }
       for (const it of items)
-        await fetch(`/api/downloads/${it.id}`, { method: 'DELETE' }).catch(() => {});
+        try { await p(`/api/downloads/${it.id}`, { method: 'DELETE' }); } catch (e) { if (e.name !== 'AbortError') {} }
       state.downloadedSet.clear();
       renderTidalHistory();
     });
@@ -438,7 +438,7 @@ export function closeDownloadConfirm() {
 
 // ── Download uitvoeren ────────────────────────────────────────────────────
 export async function executeDownload(chosen, wantedArtist, wantedAlbum, btn) {
-  const res = await fetch('/api/tidarr/download', {
+  const res = await p('/api/tidarr/download', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -467,7 +467,7 @@ export async function triggerTidarrDownload(artist, album, btn) {
     const params = new URLSearchParams();
     if (artist) params.set('artist', artist);
     if (album)  params.set('album', album);
-    const candRes = await fetch(`/api/tidarr/candidates?${params}`);
+    const candRes = await p(`/api/tidarr/candidates?${params}`);
     if (!candRes.ok) {
       if (candRes.status === 401) {
         alert('Niet ingelogd bij TIDAL.\nGa naar de 🎛️ Tidarr-tab en koppel je TIDAL-account eerst.');

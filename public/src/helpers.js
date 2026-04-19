@@ -1,6 +1,23 @@
 // ── Helpers, UI-utilities en rendering ────────────────────────────────────
 import { state } from './state.js';
 
+// ── Fetch-wrapper met AbortController ──────────────────────────────────────
+/**
+ * Wrapper die automatisch tabAbort signal toevoegt aan fetch.
+ * Gebruik dit voor alle tab-data-verzoeken (geen SSE/streaming).
+ * @param {string} url    Request URL
+ * @param {object} opts   Fetch opties (method, body, etc.)
+ * @returns {Promise}     Fetch promise
+ */
+export function p(url, opts = {}) {
+  // Voeg signal toe van huidige tabAbort controller
+  // Sla over als er al een signal in opts is (voor SSE bijv.)
+  if (!opts.signal && state.tabAbort) {
+    opts = { ...opts, signal: state.tabAbort.signal };
+  }
+  return fetch(url, opts);
+}
+
 // ── Animatie-voorkeur ─────────────────────────────────────────────────────
 export const prefersReducedMotion =
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
