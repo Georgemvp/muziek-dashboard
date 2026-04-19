@@ -243,6 +243,11 @@ export function startTidarrSSE() {
     updateQueueFab(state.tidarrQueueItems);
     if (state.currentTab === 'tidal' && state.tidalView === 'queue') renderTidalQueue();
     if (document.getElementById('queue-popover')?.classList.contains('open')) renderQueuePopover();
+    // Dashboard download-widget auto-refresh
+    if (state.currentTab === 'nu') {
+      const dwEl = document.getElementById('wbody-download-voortgang');
+      if (dwEl) renderDashboardQueue(dwEl, active);
+    }
   };
 
   es.onerror = () => {
@@ -254,6 +259,31 @@ export function startTidarrSSE() {
 
 export function stopTidarrSSE() {
   if (state.tidarrSseSource) { state.tidarrSseSource.close(); state.tidarrSseSource = null; }
+}
+
+// ── Dashboard download-widget renderer (ook gebruikt door nu.js) ──────────
+export function renderDashboardQueue(el, items) {
+  if (!items) items = state.tidarrQueueItems.filter(i => i.status !== 'finished' && i.status !== 'error');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty" style="font-size:12px">Geen actieve downloads</div>';
+    return;
+  }
+  const statusLabel = {
+    queue_download: 'In wachtrij', queue_processing: 'Verwerken',
+    download: 'Downloaden…', processing: 'Verwerken…',
+  };
+  el.innerHTML = `<div class="w-queue-list">${items.slice(0, 5).map(i => {
+    const pct = i.progress?.current && i.progress?.total
+      ? Math.round(i.progress.current / i.progress.total * 100) : null;
+    return `<div class="w-q-row"><div class="w-q-info">
+      <div class="w-q-title">${esc(i.title || '(onbekend)')}</div>
+      ${i.artist ? `<div class="w-q-artist">${esc(i.artist)}</div>` : ''}
+      ${pct !== null
+        ? `<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${pct}%"></div></div>
+           <div style="font-size:10px;color:var(--muted2);margin-top:2px">${pct}%</div>`
+        : `<span class="q-status q-pending" style="margin-top:4px;display:inline-block">${esc(statusLabel[i.status] || i.status)}</span>`}
+    </div></div>`;
+  }).join('')}${items.length > 5 ? `<div style="font-size:11px;color:var(--muted2);margin-top:6px">+${items.length - 5} meer</div>` : ''}</div>`;
 }
 
 export function startTidarrQueuePolling() { startTidarrSSE(); }
