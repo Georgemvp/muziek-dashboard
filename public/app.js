@@ -1,4 +1,21 @@
-(()=>{var s={currentTab:"nu",currentMainTab:"nu",bibSubTab:"collectie",sectionContainerEl:null,currentPeriod:"7day",recsFilter:"all",discFilter:"all",gapsSort:"missing",releasesSort:"listening",releasesFilter:"all",plexOk:!1,lastDiscover:null,lastGaps:null,lastReleases:null,plexLibData:null,wishlistMap:new Map,newReleaseIds:new Set,searchTimeout:null,tidalSearchTimeout:null,tidarrOk:!1,tidalView:"search",tidalSearchResults:null,tidarrQueuePoll:null,tidarrSseSource:null,tidarrQueueItems:[],downloadedSet:new Set,spotifyEnabled:!1,activeMood:null,previewAudio:new Audio,previewBtn:null,collapsibleSections:{recs:!1,releases:!1,discover:!1},sectionMutex:Promise.resolve(),dlResolve:null,VALID_QUALITIES:["max","high","normal","low"]};var be=window.matchMedia("(prefers-reduced-motion: reduce)").matches,S=document.getElementById("content");function T(e,t=120){return e?`/api/img?url=${encodeURIComponent(e)}&w=${t}&h=${t}`:null}var z=(e,t="medium")=>{if(!e)return null;let a=e.find(i=>i.size===t);return a&&a["#text"]&&!a["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")?a["#text"]:null},m=e=>String(e||"?").split(/\s+/).map(t=>t[0]).join("").toUpperCase().slice(0,2),q=e=>parseInt(e).toLocaleString("nl-NL"),l=e=>String(e||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"),Y=e=>({"7day":"week","1month":"maand","3month":"3 maanden","12month":"jaar",overall:"alles"})[e]||e;function ie(e){let t=Math.floor(Date.now()/1e3)-e;return t<120?"zojuist":t<3600?`${Math.floor(t/60)}m`:t<86400?`${Math.floor(t/3600)}u`:`${Math.floor(t/86400)}d`}function g(e,t=!1){let a=0;for(let r=0;r<e.length;r++)a=a*31+e.charCodeAt(r)&16777215;let i=a%360,n=45+a%31,d=50+(a>>8)%26,c=20+(a>>16)%16,o=15+(a>>10)%11;return t?`radial-gradient(circle, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${o}%))`:`linear-gradient(135deg, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${o}%))`}function O(e){return!e||e.length!==2?"":[...e.toUpperCase()].map(t=>String.fromCodePoint(t.charCodeAt(0)+127397)).join("")}function H(e,t=4){return e?.length?`<div class="tags" style="margin-top:5px">${e.slice(0,t).map(a=>`<span class="tag">${l(a)}</span>`).join("")}</div>`:""}function ye(e){return s.plexOk?e?'<span class="badge plex">\u25B6 In Plex</span>':'<span class="badge new">\u2726 Nieuw</span>':""}function N(e,t,a="",i=""){let n=s.wishlistMap.has(`${e}:${t}`);return`<button class="bookmark-btn${n?" saved":""}"
+(()=>{var s={currentTab:"nu",currentMainTab:"nu",bibSubTab:"collectie",sectionContainerEl:null,currentPeriod:"7day",recsFilter:"all",discFilter:"all",gapsSort:"missing",releasesSort:"listening",releasesFilter:"all",plexOk:!1,lastDiscover:null,lastGaps:null,lastReleases:null,plexLibData:null,wishlistMap:new Map,newReleaseIds:new Set,searchTimeout:null,tidalSearchTimeout:null,tidarrOk:!1,tidalView:"search",tidalSearchResults:null,tidarrQueuePoll:null,tidarrSseSource:null,tidarrQueueItems:[],downloadedSet:new Set,spotifyEnabled:!1,activeMood:null,previewAudio:new Audio,previewBtn:null,collapsibleSections:{recs:!1,releases:!1,discover:!1},sectionMutex:Promise.resolve(),dlResolve:null,VALID_QUALITIES:["max","high","normal","low"]};var be=window.matchMedia("(prefers-reduced-motion: reduce)").matches,S=document.getElementById("content");
+
+/* === DOM Helpers === */
+function _el(tag, cls, txt) {
+  var el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (txt != null) el.textContent = txt;
+  return el;
+}
+function _htmlToFrag(html) {
+  if (!html) return null;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  var frag = document.createDocumentFragment();
+  while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+  return frag;
+}
+function T(e,t=120){return e?`/api/img?url=${encodeURIComponent(e)}&w=${t}&h=${t}`:null}var z=(e,t="medium")=>{if(!e)return null;let a=e.find(i=>i.size===t);return a&&a["#text"]&&!a["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")?a["#text"]:null},m=e=>String(e||"?").split(/\s+/).map(t=>t[0]).join("").toUpperCase().slice(0,2),q=e=>parseInt(e).toLocaleString("nl-NL"),l=e=>String(e||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"),Y=e=>({"7day":"week","1month":"maand","3month":"3 maanden","12month":"jaar",overall:"alles"})[e]||e;function ie(e){let t=Math.floor(Date.now()/1e3)-e;return t<120?"zojuist":t<3600?`${Math.floor(t/60)}m`:t<86400?`${Math.floor(t/3600)}u`:`${Math.floor(t/86400)}d`}function g(e,t=!1){let a=0;for(let r=0;r<e.length;r++)a=a*31+e.charCodeAt(r)&16777215;let i=a%360,n=45+a%31,d=50+(a>>8)%26,c=20+(a>>16)%16,o=15+(a>>10)%11;return t?`radial-gradient(circle, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${o}%))`:`linear-gradient(135deg, hsl(${i},${n}%,${c}%), hsl(${(i+40)%360},${d}%,${o}%))`}function O(e){return!e||e.length!==2?"":[...e.toUpperCase()].map(t=>String.fromCodePoint(t.charCodeAt(0)+127397)).join("")}function H(e,t=4){return e?.length?`<div class="tags" style="margin-top:5px">${e.slice(0,t).map(a=>`<span class="tag">${l(a)}</span>`).join("")}</div>`:""}function ye(e){return s.plexOk?e?'<span class="badge plex">\u25B6 In Plex</span>':'<span class="badge new">\u2726 Nieuw</span>':""}function N(e,t,a="",i=""){let n=s.wishlistMap.has(`${e}:${t}`);return`<button class="bookmark-btn${n?" saved":""}"
     data-btype="${l(e)}" data-bname="${l(t)}"
     data-bartist="${l(a)}" data-bimage="${l(i)}"
     title="${n?"Verwijder uit lijst":"Sla op in lijst"}">\u{1F516}</button>`}function ne(e){return e.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").substring(0,50)}function Me(e,t){let a=i=>(i||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");return`${a(e)}|${a(t)}`}var De=(e,t)=>s.downloadedSet.has(Me(e,t)),Re=(e,t)=>s.downloadedSet.add(Me(e,t));function V(e,t="",a=!1){return!s.tidarrOk||a?"":De(e,t)?`<button class="download-btn dl-done"
@@ -7,39 +24,109 @@
     data-dlartist="${l(e)}" data-dlalbum="${l(t)}"
     title="Download via Tidarr">\u2B07</button>`}var J=e=>{let t=z(e);return t?`<img class="card-img" src="${t}" alt="" loading="lazy"
       onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-      <div class="card-ph" style="display:none">\u266A</div>`:'<div class="card-ph">\u266A</div>'};function Z(e,t=!0,a=""){let i=e.inPlex,n=g(e.title||""),d=e.year||"\u2014",c=De(a,e.title||""),o=s.tidarrOk&&a&&!i?c?`<button class="album-dl-btn download-btn dl-done" data-dlartist="${l(a)}" data-dlalbum="${l(e.title||"")}" title="Al gedownload">\u2713</button>`:`<button class="album-dl-btn download-btn" data-dlartist="${l(a)}" data-dlalbum="${l(e.title||"")}" title="Download via Tidarr">\u2B07</button>`:"";return`
-    <div class="album-card ${i?"owned":"missing"}" title="${l(e.title)}${d!=="\u2014"?" ("+d+")":""}">
-      <div class="album-cover" style="background:${n}">
-        <div class="album-cover-ph">${m(e.title||"?")}</div>
-        <img src="${l(e.coverUrl||"")}" alt="" loading="lazy"
-          style="opacity:0;transition:opacity 0.35s;position:relative;z-index:1"
-          onload="this.style.opacity='1'" onerror="this.remove()">
-        ${o}
-      </div>
-      <div class="album-info">
-        <div class="album-title">${l(e.title)}</div>
-        <div class="album-year">${d}</div>
-        ${t?`<span class="album-status ${i?"own":"miss"}">${i?"\u25B6 In Plex":"\u2726 Ontbreekt"}</span>`:""}
-      </div>
-    </div>`}function Pe(){if(be)return;Object.entries({".rec-grid > *":60,".card-list > *":25,".artist-grid > *":40,".releases-grid > *":40,".wishlist-grid > *":40}).forEach(([t,a])=>{document.querySelectorAll(t).forEach((i,n)=>{i.style.animationDelay=`${n*a}ms`})})}function at(e){let t="";e==="cards"?t='<div class="skeleton-list">'+Array(6).fill('<div class="skeleton skeleton-card"></div>').join("")+"</div>":e==="grid"?t='<div class="skeleton-grid">'+Array(8).fill('<div class="skeleton skeleton-square"></div>').join("")+"</div>":e==="stats"?t='<div class="skeleton-stats"><div class="skeleton skeleton-stat-full"></div><div class="skeleton-two"><div class="skeleton skeleton-stat-half"></div><div class="skeleton skeleton-stat-half"></div></div></div>':t=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`,b(t)}function b(e,t){let a=s.sectionContainerEl||S;!s.sectionContainerEl&&document.startViewTransition?document.startViewTransition(()=>{a.innerHTML=e,Pe(),t&&requestAnimationFrame(t)}).finished.catch(()=>{}):(a.innerHTML=e,s.sectionContainerEl?t&&t():(S.style.opacity="0",S.style.transform="translateY(6px)",requestAnimationFrame(()=>{S.offsetHeight,S.style.opacity="1",S.style.transform="",Pe(),t&&requestAnimationFrame(t)})))}var B=e=>b(`<div class="error-box">\u26A0\uFE0F ${l(e)}</div>`);function C(e){if(s.sectionContainerEl){s.sectionContainerEl.innerHTML=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`;return}let a={recent:"cards",loved:"cards",toptracks:"cards",topartists:"grid",releases:"grid",recs:"grid",discover:"grid",gaps:"grid",stats:"stats",wishlist:"grid",plexlib:"cards",nu:"cards",ontdek:"grid",bibliotheek:"cards",downloads:"cards"}[s.currentTab];a&&!e?at(a):b(`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`)}function X(e,t){if(!e)return;if(!("IntersectionObserver"in window)){t();return}let a=new IntersectionObserver(i=>{i.forEach(n=>{n.isIntersecting&&(a.unobserve(n.target),t())})},{rootMargin:"300px"});a.observe(e)}function virtualRender(container,items,renderFn,opts){
-  var batchSize=(opts&&opts.batchSize)||8,rootMargin=(opts&&opts.rootMargin)||"400px",onBatch=opts&&opts.onBatch;
-  var rendered=0;
-  function renderBatch(){
-    var end=Math.min(rendered+batchSize,items.length),startIdx=rendered,html="";
-    for(var i=rendered;i<end;i++)html+=renderFn(items[i],i);
-    rendered=end;
-    var old=container.querySelector(".vr-sentinel");if(old)old.remove();
-    container.insertAdjacentHTML("beforeend",html);
-    if(onBatch)onBatch(startIdx,rendered);
-    if(rendered<items.length){
-      var s=document.createElement("div");
-      s.className="vr-sentinel";
-      s.style.cssText="height:1px;visibility:hidden;pointer-events:none;grid-column:1/-1";
-      container.appendChild(s);
-      var obs=new IntersectionObserver(function(entries){
-        if(entries[0].isIntersecting){obs.disconnect();renderBatch();}
-      },{rootMargin:rootMargin});
-      obs.observe(s);
+      <div class="card-ph" style="display:none">\u266A</div>`:'<div class="card-ph">\u266A</div>'};function Z(e, t, a) {
+  if (t === undefined) t = true;
+  if (a === undefined) a = "";
+  var i        = e.inPlex;
+  var grad     = g(e.title || "");
+  var d        = e.year || "\u2014";
+  var isDl     = De(a, e.title || "");
+
+  var card = _el('div', 'album-card ' + (i ? 'owned' : 'missing'));
+  card.title = (e.title || "") + (d !== "\u2014" ? " (" + d + ")" : "");
+
+  /* --- cover --- */
+  var cover = _el('div', 'album-cover');
+  cover.style.background = grad;
+  cover.append(_el('div', 'album-cover-ph', m(e.title || "?")));
+  if (e.coverUrl) {
+    var img = document.createElement('img');
+    img.src = e.coverUrl;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.style.cssText = "opacity:0;transition:opacity 0.35s;position:relative;z-index:1";
+    img.onload  = function() { this.style.opacity = '1'; };
+    img.onerror = function() { this.remove(); };
+    cover.append(img);
+  }
+  if (s.tidarrOk && a && !i) {
+    var dlBtn = document.createElement('button');
+    dlBtn.className      = 'album-dl-btn download-btn' + (isDl ? ' dl-done' : '');
+    dlBtn.dataset.dlartist = a;
+    dlBtn.dataset.dlalbum  = e.title || "";
+    dlBtn.title     = isDl ? "Al gedownload" : "Download via Tidarr";
+    dlBtn.textContent = isDl ? "\u2713" : "\u2B07";
+    cover.append(dlBtn);
+  }
+  card.append(cover);
+
+  /* --- info --- */
+  var info = _el('div', 'album-info');
+  info.append(_el('div', 'album-title', e.title || ""));
+  info.append(_el('div', 'album-year', d));
+  if (t) {
+    info.append(_el('span', 'album-status ' + (i ? 'own' : 'miss'),
+                    i ? "\u25B6 In Plex" : "\u2726 Ontbreekt"));
+  }
+  card.append(info);
+  return card;
+}
+function Pe(){if(be)return;Object.entries({".rec-grid > *":60,".card-list > *":25,".artist-grid > *":40,".releases-grid > *":40,".wishlist-grid > *":40}).forEach(([t,a])=>{document.querySelectorAll(t).forEach((i,n)=>{i.style.animationDelay=`${n*a}ms`})})}function at(e){let t="";e==="cards"?t='<div class="skeleton-list">'+Array(6).fill('<div class="skeleton skeleton-card"></div>').join("")+"</div>":e==="grid"?t='<div class="skeleton-grid">'+Array(8).fill('<div class="skeleton skeleton-square"></div>').join("")+"</div>":e==="stats"?t='<div class="skeleton-stats"><div class="skeleton skeleton-stat-full"></div><div class="skeleton-two"><div class="skeleton skeleton-stat-half"></div><div class="skeleton skeleton-stat-half"></div></div></div>':t=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`,b(t)}function b(e, t) {
+  var a      = s.sectionContainerEl || S;
+  var isNode = (e != null && typeof e === 'object' && e.nodeType != null);
+  function _set() { if (isNode) { a.replaceChildren(e); } else { a.innerHTML = e; } }
+  if (!s.sectionContainerEl && document.startViewTransition) {
+    document.startViewTransition(function() { _set(); Pe(); if (t) requestAnimationFrame(t); }).finished.catch(function() {});
+  } else {
+    _set();
+    if (s.sectionContainerEl) { if (t) t(); }
+    else {
+      S.style.opacity = "0";
+      S.style.transform = "translateY(6px)";
+      requestAnimationFrame(function() {
+        S.offsetHeight;
+        S.style.opacity = "1";
+        S.style.transform = "";
+        Pe();
+        if (t) requestAnimationFrame(t);
+      });
+    }
+  }
+}
+var B=e=>b(`<div class="error-box">\u26A0\uFE0F ${l(e)}</div>`);function C(e){if(s.sectionContainerEl){s.sectionContainerEl.innerHTML=`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`;return}let a={recent:"cards",loved:"cards",toptracks:"cards",topartists:"grid",releases:"grid",recs:"grid",discover:"grid",gaps:"grid",stats:"stats",wishlist:"grid",plexlib:"cards",nu:"cards",ontdek:"grid",bibliotheek:"cards",downloads:"cards"}[s.currentTab];a&&!e?at(a):b(`<div class="loading"><div class="spinner"></div>${e||"Laden..."}</div>`)}function X(e,t){if(!e)return;if(!("IntersectionObserver"in window)){t();return}let a=new IntersectionObserver(i=>{i.forEach(n=>{n.isIntersecting&&(a.unobserve(n.target),t())})},{rootMargin:"300px"});a.observe(e)}function virtualRender(container, items, renderFn, opts) {
+  var batchSize  = (opts && opts.batchSize)  || 8;
+  var rootMargin = (opts && opts.rootMargin) || "400px";
+  var onBatch    = opts && opts.onBatch;
+  var rendered   = 0;
+  function renderBatch() {
+    var end      = Math.min(rendered + batchSize, items.length);
+    var startIdx = rendered;
+    var frag     = document.createDocumentFragment();
+    for (var i = rendered; i < end; i++) {
+      var result = renderFn(items[i], i);
+      if (result == null) { /* skip */ }
+      else if (typeof result === 'string') {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = result;
+        while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+      } else if (result.nodeType) {
+        frag.appendChild(result);
+      }
+    }
+    rendered = end;
+    var old = container.querySelector(".vr-sentinel");
+    if (old) old.remove();
+    container.appendChild(frag);
+    if (onBatch) onBatch(startIdx, rendered);
+    if (rendered < items.length) {
+      var sent = document.createElement("div");
+      sent.className = "vr-sentinel";
+      sent.style.cssText = "height:1px;visibility:hidden;pointer-events:none;grid-column:1/-1";
+      container.appendChild(sent);
+      var obs = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting) { obs.disconnect(); renderBatch(); }
+      }, { rootMargin: rootMargin });
+      obs.observe(sent);
     }
   }
   renderBatch();
@@ -182,23 +269,117 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textCont
           <span class="collapsed-thumb-ph">${m(v.name)}</span>
         </div>`).join("")}${t.length>8?`<span class="collapsed-thumbs-more">+${t.length-8}</span>`:""}</div>`,u.forEach(async(v,y)=>{try{let $=await f(`/api/artist/${encodeURIComponent(v.name)}/info`),E=document.getElementById(`recs-thumb-${y}`);E&&$.image&&(E.innerHTML=`<img src="${l(T($.image,48)||$.image)}" alt="" loading="lazy" onerror="this.remove()">`)}catch{}})}}catch(e){B(e.message)}}function ue(){document.querySelectorAll(".rec-card[data-inplex]").forEach(e=>{let t=e.dataset.inplex==="true",a=!0;s.recsFilter==="new"&&(a=!t),s.recsFilter==="plex"&&(a=t),e.classList.toggle("hidden",!a)})}function Xe(e){let t=document.getElementById("badge-releases");t&&(e>0?(t.textContent=e,t.style.display=""):t.style.display="none")}function ct(e){if(!e)return"";let t=new Date(e),i=Math.floor((new Date-t)/864e5);return i===0?"vandaag":i===1?"gisteren":i<7?`${i} dagen geleden`:t.toLocaleDateString("nl-NL",{day:"numeric",month:"long"})}async function U(){C();try{let e=await f("/api/releases");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
         <div>${l(e.message)}</div>
-        <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`),setTimeout(()=>{(s.currentTab==="releases"||s.currentTab==="ontdek")&&U()},5e3);return}s.lastReleases=e.releases||[],s.newReleaseIds=new Set(e.newReleaseIds||[]),Xe(e.newCount||0),j()}catch(e){B(e.message)}}function j(){let e=s.lastReleases||[];if(!e.length){b('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>');return}let t=e;if(s.releasesFilter!=="all"&&(t=e.filter(o=>(o.type||"album").toLowerCase()===s.releasesFilter)),!t.length){b(`<div class="empty">Geen ${s.releasesFilter==="ep"?"EP's":s.releasesFilter+"s"} gevonden voor dit filter.</div>`);return}s.releasesSort==="listening"?t=[...t].sort((o,r)=>(r.artistPlaycount||0)-(o.artistPlaycount||0)||new Date(r.releaseDate)-new Date(o.releaseDate)):t=[...t].sort((o,r)=>new Date(r.releaseDate)-new Date(o.releaseDate));let a=document.getElementById("hdr-title-releases");a&&(a.textContent=`\u{1F4BF} Nieuwe Releases \xB7 ${t.length} release${t.length!==1?"s":""}`);let i=o=>({album:"Album",single:"Single",ep:"EP"})[o?.toLowerCase()]||o||"Album",n=o=>({album:"rel-type-album",single:"rel-type-single",ep:"rel-type-ep"})[o?.toLowerCase()]||"rel-type-album",d=`<div class="section-title">${t.length} release${t.length!==1?"s":""} in de afgelopen 30 dagen</div>
-    <div class="releases-grid" id="vr-releases-grid">`;d+="</div>";b(d);{let _vrg=document.getElementById("vr-releases-grid");if(_vrg)virtualRender(_vrg,t,(o)=>{let r=s.newReleaseIds.has(`${o.artist}::${o.album}`),u=o.image?`<img class="rel-img" src="${l(o.image)}" alt="" loading="lazy"
-           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="rel-ph" style="display:none;background:${g(o.album)}">${m(o.album)}</div>`:`<div class="rel-ph" style="background:${g(o.album)}">${m(o.album)}</div>`,v=o.releaseDate?new Date(o.releaseDate).toLocaleDateString("nl-NL",{day:"numeric",month:"long"}):"",y=ct(o.releaseDate),$=v?`<div class="rel-date">${v} <span class="rel-date-rel">(${y})</span></div>`:"",E=s.plexOk?o.inPlex?'<span class="badge plex" style="font-size:9px">\u25B6 In Plex</span>':o.artistInPlex?'<span class="badge new" style="font-size:9px">\u2726 Artiest in Plex</span>':"":"",w=o.deezerUrl?`<a class="rel-deezer-link" href="${l(o.deezerUrl)}" target="_blank" rel="noopener">Deezer \u2197</a>`:"";return`
-      <div class="rel-card${r?" rel-card-new":""}">
-        <div class="rel-cover">${u}</div>
-        <div class="rel-info">
-          <span class="rel-type-badge ${n(o.type)}">${i(o.type)}</span>
-          <div class="rel-album">${l(o.album)}</div>
-          <div class="rel-artist artist-link" data-artist="${l(o.artist)}">${l(o.artist)}</div>
-          ${$}
-          <div class="rel-footer">${E}${w}${V(o.artist,o.album,o.inPlex)}</div>
-        </div>
-      </div>`;},{batchSize:8,rootMargin:"400px"});}let c=document.getElementById("sec-releases-preview");if(c){let o=t.slice(0,8);c.innerHTML=`<div class="collapsed-thumbs">${o.map(r=>r.image?`<div class="collapsed-thumb">
-          <img src="${l(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-          <span class="collapsed-thumb-ph" style="display:none;background:${g(r.album)}">${m(r.album)}</span>
-        </div>`:`<div class="collapsed-thumb" style="background:${g(r.album)}"><span class="collapsed-thumb-ph">${m(r.album)}</span></div>`).join("")}${t.length>8?`<span class="collapsed-thumbs-more">+${t.length-8}</span>`:""}</div>`}}async function G(){C("Ontdekkingen ophalen...");try{let e=await f("/api/discover");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
+        <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`),setTimeout(()=>{(s.currentTab==="releases"||s.currentTab==="ontdek")&&U()},5e3);return}s.lastReleases=e.releases||[],s.newReleaseIds=new Set(e.newReleaseIds||[]),Xe(e.newCount||0),j()}catch(e){B(e.message)}}function j() {
+  var releases = s.lastReleases || [];
+  if (!releases.length) { b('<div class="empty">Geen recente releases gevonden (afgelopen 30 dagen).</div>'); return; }
+
+  var t = releases;
+  if (s.releasesFilter !== "all")
+    t = releases.filter(o => (o.type || "album").toLowerCase() === s.releasesFilter);
+  if (!t.length) {
+    b(`<div class="empty">Geen ${s.releasesFilter === "ep" ? "EP's" : s.releasesFilter + "s"} gevonden voor dit filter.</div>`);
+    return;
+  }
+
+  s.releasesSort === "listening"
+    ? t = [...t].sort((o, r) => (r.artistPlaycount || 0) - (o.artistPlaycount || 0) || new Date(r.releaseDate) - new Date(o.releaseDate))
+    : t = [...t].sort((o, r) => new Date(r.releaseDate) - new Date(o.releaseDate));
+
+  var titleEl = document.getElementById("hdr-title-releases");
+  if (titleEl) titleEl.textContent = `\u{1F4BF} Nieuwe Releases \u00B7 ${t.length} release${t.length !== 1 ? "s" : ""}`;
+
+  function typeLabel(o) { return ({ album: "Album", single: "Single", ep: "EP" })[o?.toLowerCase()] || o || "Album"; }
+  function typeCls(o)   { return ({ album: "rel-type-album", single: "rel-type-single", ep: "rel-type-ep" })[o?.toLowerCase()] || "rel-type-album"; }
+
+  /* wrapper frame */
+  var frag   = document.createDocumentFragment();
+  var header = _el('div', 'section-title', `${t.length} release${t.length !== 1 ? "s" : ""} in de afgelopen 30 dagen`);
+  var grid   = _el('div', 'releases-grid');
+  grid.id    = 'vr-releases-grid';
+  frag.append(header, grid);
+  b(frag);
+
+  var _vrg = document.getElementById("vr-releases-grid");
+  if (_vrg) virtualRender(_vrg, t, function(o) {
+    var isNew = s.newReleaseIds.has(`${o.artist}::${o.album}`);
+    var card  = _el('div', 'rel-card' + (isNew ? ' rel-card-new' : ''));
+
+    /* cover */
+    var coverDiv = _el('div', 'rel-cover');
+    if (o.image) {
+      var ri = document.createElement('img');
+      ri.className = 'rel-img'; ri.src = o.image; ri.alt = ''; ri.loading = 'lazy';
+      ri.onerror = function() { this.onerror = null; this.style.display = 'none'; if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex'; };
+      var rph = _el('div', 'rel-ph');
+      rph.style.cssText = `display:none;background:${g(o.album)}`; rph.textContent = m(o.album);
+      coverDiv.append(ri, rph);
+    } else {
+      var rph = _el('div', 'rel-ph');
+      rph.style.background = g(o.album); rph.textContent = m(o.album);
+      coverDiv.append(rph);
+    }
+    card.append(coverDiv);
+
+    /* info */
+    var infoDiv = _el('div', 'rel-info');
+    infoDiv.append(_el('span', `rel-type-badge ${typeCls(o.type)}`, typeLabel(o.type)));
+    infoDiv.append(_el('div', 'rel-album', o.album));
+    var artEl = _el('div', 'rel-artist artist-link', o.artist);
+    artEl.dataset.artist = o.artist;
+    infoDiv.append(artEl);
+
+    if (o.releaseDate) {
+      var dateStr = new Date(o.releaseDate).toLocaleDateString("nl-NL", { day: "numeric", month: "long" });
+      var dateRel = ct(o.releaseDate);
+      var dateDiv = _el('div', 'rel-date', dateStr + ' ');
+      dateDiv.append(_el('span', 'rel-date-rel', `(${dateRel})`));
+      infoDiv.append(dateDiv);
+    }
+
+    var footer = _el('div', 'rel-footer');
+    if (s.plexOk) {
+      if (o.inPlex)          { var b1 = _el('span', 'badge plex', '\u25B6 In Plex');       b1.style.fontSize = '9px'; footer.append(b1); }
+      else if (o.artistInPlex){ var b2 = _el('span', 'badge new', '\u2726 Artiest in Plex'); b2.style.fontSize = '9px'; footer.append(b2); }
+    }
+    if (o.deezerUrl) {
+      var dl = document.createElement('a');
+      dl.className = 'rel-deezer-link'; dl.href = o.deezerUrl; dl.target = '_blank'; dl.rel = 'noopener';
+      dl.textContent = 'Deezer \u2197';
+      footer.append(dl);
+    }
+    var vHtml = V(o.artist, o.album, o.inPlex);
+    if (vHtml) { var vf = _htmlToFrag(vHtml); if (vf) footer.append(vf); }
+    infoDiv.append(footer);
+    card.append(infoDiv);
+    return card;
+  }, { batchSize: 8, rootMargin: "400px" });
+
+  /* collapsed preview strip */
+  var previewEl = document.getElementById("sec-releases-preview");
+  if (previewEl) {
+    var preview  = t.slice(0, 8);
+    var thumbs   = _el('div', 'collapsed-thumbs');
+    for (var pr of preview) {
+      var thumb = document.createElement('div');
+      thumb.className = 'collapsed-thumb';
+      if (pr.image) {
+        var ti = document.createElement('img');
+        ti.src = pr.image; ti.alt = ''; ti.loading = 'lazy';
+        ti.onerror = function() { this.style.display = 'none'; if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex'; };
+        var tp = _el('span', 'collapsed-thumb-ph');
+        tp.style.cssText = `display:none;background:${g(pr.album)}`; tp.textContent = m(pr.album);
+        thumb.append(ti, tp);
+      } else {
+        thumb.style.background = g(pr.album);
+        thumb.append(_el('span', 'collapsed-thumb-ph', m(pr.album)));
+      }
+      thumbs.append(thumb);
+    }
+    if (t.length > 8) thumbs.append(_el('span', 'collapsed-thumbs-more', `+${t.length - 8}`));
+    previewEl.replaceChildren(thumbs);
+  }
+}
+async function G(){C("Ontdekkingen ophalen...");try{let e=await f("/api/discover");if(e.status==="building"){b(`<div class="loading"><div class="spinner"></div>
         <div>${l(e.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`),setTimeout(()=>{(s.currentTab==="discover"||s.currentTab==="ontdek")&&G()},2e4);return}s.lastDiscover=e,e.plexConnected&&(s.plexOk=!0),te()}catch(e){B(e.message)}}function te(){if(!s.lastDiscover)return;let{artists:e,basedOn:t}=s.lastDiscover;if(!e?.length){b('<div class="empty">Geen ontdekkingen gevonden.</div>');return}let a=e;if(s.discFilter==="new"&&(a=e.filter(o=>!o.inPlex)),s.discFilter==="partial"&&(a=e.filter(o=>o.inPlex&&o.missingCount>0)),!a.length){b('<div class="empty">Geen artiesten voor dit filter.</div>');return}let i=document.getElementById("hdr-title-discover");i&&(i.textContent=`\u{1F52D} Ontdek Artiesten \xB7 ${a.length} artiesten`);let n=a.reduce((o,r)=>o+r.missingCount,0),d=`<div class="section-title">Gebaseerd op: ${(t||[]).slice(0,3).join(", ")}
     &nbsp;\xB7&nbsp; <span style="color:var(--new)">${n} albums te ontdekken</span></div>
@@ -229,7 +410,7 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textCont
                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                  <div class="discover-preview-ph" style="display:none;background:${A}">${m(x.title||"?")}</div>`:`<div class="discover-preview-ph" style="background:${A}">${m(x.title||"?")}</div>`}).join("")}${r.albums.length>5?`<div class="discover-preview-more">+${r.albums.length-5}</div>`:""}</div>`:""}
         </div>
-        <div class="discover-albums-wrap">`;if(r.albums?.length){_h+='<div class="album-grid">'+r.albums.map(x=>Z(x,!0,r.name)).join("")+"</div>"}else{_h+='<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar. Vernieuw straks.</div>'}_h+="</div></div>";return _h;},{batchSize:8,rootMargin:"400px"});};let c=document.getElementById("sec-discover-preview");if(c){let o=a.slice(0,8);c.innerHTML=`<div class="collapsed-thumbs">${o.map(r=>r.image?`<div class="collapsed-thumb collapsed-thumb-round">
+        <div class="discover-albums-wrap">`;if(r.albums?.length){_h+='<div class="album-grid">'+r.albums.map(x=>Z(x,true,r.name).outerHTML).join("")+"</div>"}else{_h+='<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar. Vernieuw straks.</div>'}_h+="</div></div>";return _h;},{batchSize:8,rootMargin:"400px"});};let c=document.getElementById("sec-discover-preview");if(c){let o=a.slice(0,8);c.innerHTML=`<div class="collapsed-thumbs">${o.map(r=>r.image?`<div class="collapsed-thumb collapsed-thumb-round">
           <img src="${l(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
           <span class="collapsed-thumb-ph" style="display:none;background:${g(r.name)}">${m(r.name)}</span>
         </div>`:`<div class="collapsed-thumb collapsed-thumb-round" style="background:${g(r.name)}"><span class="collapsed-thumb-ph">${m(r.name)}</span></div>`).join("")}${a.length>8?`<span class="collapsed-thumbs-more">+${a.length-8}</span>`:""}</div>`}}function ut(){try{let e=localStorage.getItem("ontdek-sections");e&&Object.assign(s.collapsibleSections,JSON.parse(e))}catch{}}function pt(){try{localStorage.setItem("ontdek-sections",JSON.stringify(s.collapsibleSections))}catch{}}function Je(e,t){e.classList.remove("expanded","collapsed"),e.classList.add(t?"collapsed":"expanded")}function Le(e,t){let a=document.querySelector(`[data-section="${e}"]`);if(!a)return;let i=a.querySelector(".section-toggle-btn");i&&(Je(i,s.collapsibleSections[t]),i.addEventListener("click",n=>{n.preventDefault(),n.stopPropagation(),s.collapsibleSections[t]=!s.collapsibleSections[t],pt(),Je(i,s.collapsibleSections[t]),a.classList.toggle("collapsed")}),s.collapsibleSections[t]&&a.classList.add("collapsed"))}async function _(){ut(),s.currentTab="ontdek",D();let e=s.spotifyEnabled?`
@@ -315,15 +496,65 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textCont
               <span class="collapsed-thumb-ph" style="display:none;background:${g(c.name)}">${m(c.name)}</span>
             </div>`:`<div class="collapsed-thumb collapsed-thumb-round" style="background:${g(c.name)}"><span class="collapsed-thumb-ph">${m(c.name)}</span></div>`).join("")}${a.length>8?`<span class="collapsed-thumbs-more">+${a.length-8}</span>`:""}</div>`;let d=document.getElementById("hdr-title-discover");d&&(d.textContent=`\u{1F52D} Ontdek Artiesten \xB7 ${a.length} artiesten`)}}catch{}})(),X(document.getElementById("sec-discover-content"),()=>{let t=document.getElementById("sec-discover-content");return R(t,G)}),Le("recs","recs"),Le("releases","releases"),Le("discover","discover")}async function pe(){let e=document.getElementById("plex-np-wrap");try{let t=await fetch("/api/plex/nowplaying").then(a=>a.json());e.innerHTML=t.playing?`<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
            <div class="card-info"><div class="card-title">${l(t.track)}</div>
-           <div class="card-sub">${l(t.artist)}${t.album?" \xB7 "+l(t.album):""}</div></div></div>`:""}catch{e.innerHTML=""}}async function Se(){C(),pe();try{let t=(await f("/api/recent")).recenttracks?.track||[];if(!t.length){b('<div class="empty">Geen recente nummers.</div>');return}let a='<div class="card-list">';for(let i of t){let n=i["@attr"]?.nowplaying,d=i.date?.uts?ie(parseInt(i.date.uts)):"",c=i.artist?.["#text"]||"",o=J(i.image);n?a+=`<div class="now-playing">${o}<div class="np-dot"></div>
-          <span class="np-label">NU</span>
-          <div class="card-info"><div class="card-title">${l(i.name)}</div>
-          <div class="card-sub artist-link" data-artist="${l(c)}">${l(c)}</div></div></div>`:a+=`<div class="card">${o}<div class="card-info">
-          <div class="card-title">${l(i.name)}</div>
-          <div class="card-sub artist-link" data-artist="${l(c)}">${l(c)}</div>
-          </div><div class="card-meta">${d}</div>
-          <button class="play-btn" data-artist="${l(c)}" data-track="${l(i.name)}" title="Preview afspelen">\u25B6</button>
-          <div class="play-bar"><div class="play-bar-fill"></div></div></div>`}b(a+"</div>")}catch(e){B(e.message)}}function me(){s.currentTab="recent",D(),Se()}async function Ke(e,t,a){if(s.previewBtn===e){s.previewAudio.paused?(await s.previewAudio.play(),e.textContent="\u23F8",e.classList.add("playing")):(s.previewAudio.pause(),e.textContent="\u25B6",e.classList.remove("playing"));return}if(s.previewBtn){s.previewAudio.pause(),s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let i=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");i&&(i.style.width="0%")}s.previewBtn=e,e.textContent="\u2026",e.disabled=!0;try{let i=new URLSearchParams({artist:t,track:a}),n=await f(`/api/preview?${i}`);if(!n.preview){e.textContent="\u2014",e.disabled=!1,setTimeout(()=>{e.textContent==="\u2014"&&(e.textContent="\u25B6")},1800),s.previewBtn=null;return}s.previewAudio.src=n.preview,s.previewAudio.currentTime=0,await s.previewAudio.play(),e.textContent="\u23F8",e.disabled=!1,e.classList.add("playing")}catch{e.textContent="\u25B6",e.disabled=!1,s.previewBtn=null}}s.previewAudio.addEventListener("timeupdate",()=>{if(!s.previewBtn||!s.previewAudio.duration)return;let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width=`${(s.previewAudio.currentTime/s.previewAudio.duration*100).toFixed(1)}%`)});s.previewAudio.addEventListener("ended",()=>{if(s.previewBtn){s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width="0%"),s.previewBtn=null}});document.addEventListener("visibilitychange",()=>{document.hidden&&!s.previewAudio.paused&&(s.previewAudio.pause(),s.previewBtn&&(s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing")))});async function mt(e){let t=document.getElementById("search-results");if(e.length<2){t.classList.remove("open");return}try{let a=await f(`/api/search?q=${encodeURIComponent(e)}`);a.results?.length?t.innerHTML=a.results.map(i=>{let n=T(i.image,56)||i.image,d=n?`<img class="search-result-img" src="${l(n)}" alt="" loading="lazy"
+           <div class="card-sub">${l(t.artist)}${t.album?" \xB7 "+l(t.album):""}</div></div></div>`:""}catch{e.innerHTML=""}}async function Se() {
+  C(); pe();
+  try {
+    var t = (await f("/api/recent")).recenttracks?.track || [];
+    if (!t.length) { b('<div class="empty">Geen recente nummers.</div>'); return; }
+
+    var frag = document.createDocumentFragment();
+    var list = _el('div', 'card-list');
+
+    for (var track of t) {
+      var isNP    = track["@attr"]?.nowplaying;
+      var timeAgo = track.date?.uts ? ie(parseInt(track.date.uts)) : "";
+      var artist  = track.artist?.["#text"] || "";
+      var imgUrl  = z(track.image);
+
+      var card = _el('div', isNP ? 'now-playing' : 'card');
+
+      /* image */
+      if (imgUrl) {
+        var ci = document.createElement('img');
+        ci.className = 'card-img'; ci.src = imgUrl; ci.alt = ''; ci.loading = 'lazy';
+        ci.onerror = function() { this.onerror = null; this.style.display = 'none'; if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex'; };
+        var cp = _el('div', 'card-ph'); cp.style.display = 'none'; cp.textContent = '\u266A';
+        card.append(ci, cp);
+      } else {
+        card.append(_el('div', 'card-ph', '\u266A'));
+      }
+
+      if (isNP) {
+        card.append(_el('div', 'np-dot'));
+        card.append(_el('span', 'np-label', 'NU'));
+      }
+
+      var info = _el('div', 'card-info');
+      info.append(_el('div', 'card-title', track.name));
+      var sub = _el('div', 'card-sub artist-link');
+      sub.textContent = artist; sub.dataset.artist = artist;
+      info.append(sub);
+      card.append(info);
+
+      if (!isNP) {
+        card.append(_el('div', 'card-meta', timeAgo));
+        var btn = document.createElement('button');
+        btn.className = 'play-btn'; btn.textContent = '\u25B6';
+        btn.dataset.artist = artist; btn.dataset.track = track.name;
+        btn.title = 'Preview afspelen';
+        var bar = _el('div', 'play-bar');
+        bar.append(_el('div', 'play-bar-fill'));
+        card.append(btn, bar);
+      }
+
+      list.append(card);
+    }
+
+    frag.append(list);
+    b(frag);
+  } catch(e) { B(e.message); }
+}
+function me(){s.currentTab="recent",D(),Se()}async function Ke(e,t,a){if(s.previewBtn===e){s.previewAudio.paused?(await s.previewAudio.play(),e.textContent="\u23F8",e.classList.add("playing")):(s.previewAudio.pause(),e.textContent="\u25B6",e.classList.remove("playing"));return}if(s.previewBtn){s.previewAudio.pause(),s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let i=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");i&&(i.style.width="0%")}s.previewBtn=e,e.textContent="\u2026",e.disabled=!0;try{let i=new URLSearchParams({artist:t,track:a}),n=await f(`/api/preview?${i}`);if(!n.preview){e.textContent="\u2014",e.disabled=!1,setTimeout(()=>{e.textContent==="\u2014"&&(e.textContent="\u25B6")},1800),s.previewBtn=null;return}s.previewAudio.src=n.preview,s.previewAudio.currentTime=0,await s.previewAudio.play(),e.textContent="\u23F8",e.disabled=!1,e.classList.add("playing")}catch{e.textContent="\u25B6",e.disabled=!1,s.previewBtn=null}}s.previewAudio.addEventListener("timeupdate",()=>{if(!s.previewBtn||!s.previewAudio.duration)return;let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width=`${(s.previewAudio.currentTime/s.previewAudio.duration*100).toFixed(1)}%`)});s.previewAudio.addEventListener("ended",()=>{if(s.previewBtn){s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing");let e=s.previewBtn.closest(".card")?.querySelector(".play-bar-fill");e&&(e.style.width="0%"),s.previewBtn=null}});document.addEventListener("visibilitychange",()=>{document.hidden&&!s.previewAudio.paused&&(s.previewAudio.pause(),s.previewBtn&&(s.previewBtn.textContent="\u25B6",s.previewBtn.classList.remove("playing")))});async function mt(e){let t=document.getElementById("search-results");if(e.length<2){t.classList.remove("open");return}try{let a=await f(`/api/search?q=${encodeURIComponent(e)}`);a.results?.length?t.innerHTML=a.results.map(i=>{let n=T(i.image,56)||i.image,d=n?`<img class="search-result-img" src="${l(n)}" alt="" loading="lazy"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
              <div class="search-result-ph" style="background:${g(i.name)};display:none">${m(i.name)}</div>`:`<div class="search-result-ph" style="background:${g(i.name)}">${m(i.name)}</div>`,c=i.listeners?`${q(i.listeners)} luisteraars`:"";return`<button class="search-result-item" data-artist="${l(i.name)}">
           ${d}
@@ -343,14 +574,77 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textCont
             <span class="plib-album-title" title="${l(r)}">${l(r)}</span>
           </div>`).join("")}
         </div>
-      </div>`;return d+"</div>"}async function se(){C();try{let e=await f("/api/plex/library");s.plexLibData=e.library||[];let t=document.getElementById("plib-search");if(t&&(t.value=""),!s.plexLibData.length){b('<div class="empty">Plex bibliotheek is leeg of nog niet gesynchroniseerd.<br>Klik \u21BB Sync Plex om te beginnen.</div>');return}b(ve(s.plexLibData,""))}catch(e){B(e.message)}}async function Te(e){C();try{let a=(await f(`/api/topartists?period=${e}`)).topartists?.artist||[];if(!a.length){b('<div class="empty">Geen data.</div>');return}let i=parseInt(a[0]?.playcount||1),n=`<div class="section-title">Top artiesten \xB7 ${Y(e)}</div><div class="artist-grid">`;for(let d=0;d<a.length;d++){let c=a[d],o=Math.round(parseInt(c.playcount)/i*100),r=z(c.image,"large")||z(c.image),u=T(r,120)||r,v=u?`<img src="${u}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-           <div class="ag-photo-ph" style="display:none;background:${g(c.name,!0)}">${m(c.name)}</div>`:`<div class="ag-photo-ph" style="background:${g(c.name,!0)}">${m(c.name)}</div>`;n+=`<div class="ag-card">
-        <div class="ag-photo" id="agp-${d}" style="view-transition-name: artist-${ne(c.name)}">${v}</div>
-        <div class="ag-info">
-          <div class="ag-name artist-link" data-artist="${l(c.name)}">${l(c.name)}</div>
-          <div class="card-bar"><div class="card-bar-fill" style="width:${o}%"></div></div>
-          <div class="ag-plays">${q(c.playcount)} plays</div>
-        </div></div>`}b(n+"</div>"),a.forEach(async(d,c)=>{try{let o=await f(`/api/artist/${encodeURIComponent(d.name)}/info`);if(o.image){let r=document.getElementById(`agp-${c}`);r&&(r.innerHTML=`<img src="${T(o.image,120)||o.image}" alt="" loading="lazy" onerror="this.style.display='none'">`)}}catch{}})}catch(t){B(t.message)}}async function Be(e){C();try{let a=(await f(`/api/toptracks?period=${e}`)).toptracks?.track||[];if(!a.length){b('<div class="empty">Geen data.</div>');return}let i=parseInt(a[0]?.playcount||1),n=`<div class="section-title">Top nummers \xB7 ${Y(e)}</div><div class="card-list">`;for(let d of a){let c=Math.round(parseInt(d.playcount)/i*100);n+=`<div class="card">${J(d.image)}<div class="card-info">
+      </div>`;return d+"</div>"}async function se(){C();try{let e=await f("/api/plex/library");s.plexLibData=e.library||[];let t=document.getElementById("plib-search");if(t&&(t.value=""),!s.plexLibData.length){b('<div class="empty">Plex bibliotheek is leeg of nog niet gesynchroniseerd.<br>Klik \u21BB Sync Plex om te beginnen.</div>');return}b(ve(s.plexLibData,""))}catch(e){B(e.message)}}async function Te(period) {
+  C();
+  try {
+    var a = (await f(`/api/topartists?period=${period}`)).topartists?.artist || [];
+    if (!a.length) { b('<div class="empty">Geen data.</div>'); return; }
+
+    var maxPlays = parseInt(a[0]?.playcount || 1);
+    var frag     = document.createDocumentFragment();
+    frag.append(_el('div', 'section-title', `Top artiesten \u00B7 ${Y(period)}`));
+    var grid = _el('div', 'artist-grid');
+
+    for (var idx = 0; idx < a.length; idx++) {
+      var ar  = a[idx];
+      var pct = Math.round(parseInt(ar.playcount) / maxPlays * 100);
+      var url = z(ar.image, "large") || z(ar.image);
+      var proxied = T(url, 120) || url;
+
+      var card  = _el('div', 'ag-card');
+      var photo = _el('div', 'ag-photo');
+      photo.id = `agp-${idx}`;
+      photo.style.viewTransitionName = `artist-${ne(ar.name)}`;
+
+      if (proxied) {
+        var pi = document.createElement('img');
+        pi.src = proxied; pi.alt = ''; pi.loading = 'lazy';
+        pi.onerror = function() { this.style.display = 'none'; if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex'; };
+        var pp = _el('div', 'ag-photo-ph');
+        pp.style.cssText = `display:none;background:${g(ar.name, true)}`;
+        pp.textContent = m(ar.name);
+        photo.append(pi, pp);
+      } else {
+        var pp = _el('div', 'ag-photo-ph');
+        pp.style.background = g(ar.name, true);
+        pp.textContent = m(ar.name);
+        photo.append(pp);
+      }
+
+      var info    = _el('div', 'ag-info');
+      var nameEl  = _el('div', 'ag-name artist-link', ar.name);
+      nameEl.dataset.artist = ar.name;
+      var barWrap = _el('div', 'card-bar');
+      var barFill = _el('div', 'card-bar-fill');
+      barFill.style.width = `${pct}%`;
+      barWrap.append(barFill);
+      info.append(nameEl, barWrap, _el('div', 'ag-plays', `${q(ar.playcount)} plays`));
+      card.append(photo, info);
+      grid.append(card);
+    }
+
+    frag.append(grid);
+    b(frag);
+
+    /* async image enhancement */
+    a.forEach(async (artist, ci) => {
+      try {
+        var data = await f(`/api/artist/${encodeURIComponent(artist.name)}/info`);
+        if (data.image) {
+          var el = document.getElementById(`agp-${ci}`);
+          if (el) {
+            var ni = document.createElement('img');
+            ni.src = T(data.image, 120) || data.image;
+            ni.alt = ''; ni.loading = 'lazy';
+            ni.onerror = function() { this.style.display = 'none'; };
+            el.replaceChildren(ni);
+          }
+        }
+      } catch {}
+    });
+  } catch(err) { B(err.message); }
+}
+async function Be(e){C();try{let a=(await f(`/api/toptracks?period=${e}`)).toptracks?.track||[];if(!a.length){b('<div class="empty">Geen data.</div>');return}let i=parseInt(a[0]?.playcount||1),n=`<div class="section-title">Top nummers \xB7 ${Y(e)}</div><div class="card-list">`;for(let d of a){let c=Math.round(parseInt(d.playcount)/i*100);n+=`<div class="card">${J(d.image)}<div class="card-info">
         <div class="card-title">${l(d.name)}</div>
         <div class="card-sub artist-link" data-artist="${l(d.artist?.name||"")}">${l(d.artist?.name||"")}</div>
         <div class="card-bar"><div class="card-bar-fill" style="width:${c}%"></div></div>
@@ -396,12 +690,12 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),a&&(a.disabled=!1,a.textCont
           </div>
         </div>
         <div class="gaps-sub">Ontbrekende albums</div>
-        <div class="gaps-album-grid">`;_h+=i.missingAlbums.map(r=>Z(r,!1,i.name)).join("");_h+="</div>";if(i.allAlbums?.filter(r=>r.inPlex).length>0){_h+=`<details style="margin-top:12px">
+        <div class="gaps-album-grid">`;_h+=i.missingAlbums.map(r=>Z(r,false,i.name).outerHTML).join("");_h+="</div>";if(i.allAlbums?.filter(r=>r.inPlex).length>0){_h+=`<details style="margin-top:12px">
         <summary style="font-size:11px;color:var(--muted2);cursor:pointer;user-select:none">
           \u25B8 ${i.ownedCount} albums die je al hebt
         </summary>
         <div class="gaps-album-grid" style="margin-top:10px">
-          ${i.allAlbums.filter(r=>r.inPlex).map(r=>Z(r,!1,i.name)).join("")}
+          ${i.allAlbums.filter(r=>r.inPlex).map(r=>Z(r,false,i.name).outerHTML).join("")}
         </div>
       </details>`}_h+="</div>";return _h;},{batchSize:8,rootMargin:"400px"});}}async function et(e){s.bibSubTab=e;let t=document.getElementById("bib-sub-content"),a=document.getElementById("bib-subtoolbar");if(!t)return;document.querySelectorAll(".bib-tab").forEach(n=>n.classList.toggle("active",n.dataset.bibtab===e)),a&&(e==="collectie"?(a.innerHTML=`
         <div class="inline-toolbar" style="margin-bottom:12px">
