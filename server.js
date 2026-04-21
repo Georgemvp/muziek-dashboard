@@ -642,8 +642,9 @@ app.get('/api/plex/library', (req, res) => {
 app.get('/api/plex/clients', async (req, res) => {
   if (!PLEX_TOKEN) return res.json({ clients: [] });
   try {
-    const clients = await getPlexClients();
-    res.set('Cache-Control', 'private, max-age=30');
+    // Invalideer cache als ?t= (forced refresh) meegegeven wordt
+    const clients = await getPlexClients(!!req.query.t);
+    res.set('Cache-Control', 'no-store');
     res.json({ clients });
   } catch (e) {
     res.json({ clients: [], error: e.message });

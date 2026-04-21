@@ -32,7 +32,8 @@ function _updateZoneUI() {
 
 async function _loadClients() {
   try {
-    const data = await fetch('/api/plex/clients').then(r => r.json());
+    // ?t= om browser-cache te omzeilen bij elke keer openen van de picker
+    const data = await fetch(`/api/plex/clients?t=${Date.now()}`).then(r => r.json());
     return data.clients || [];
   } catch { return []; }
 }

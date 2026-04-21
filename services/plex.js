@@ -181,68 +181,140 @@ function getAlbumRatingKey(artist, album) {
 }
 
 // ── Plex Clients cache ─────────────────────────────────────────────────────
-let _clientsCache    = null;
+let _clientsCache     = null;
 let _clientsCacheTime = 0;
+let _commandId        = 0; // oplopend commandID voor Plex companion-protocol
 
 /**
- * Haal beschikbare Plex clients/players op (gecached 30 seconden).
- * @returns {Promise<Array<{name,host,port,machineId,product}>>}
+ * Haal beschikbare Plex players op.
+ *
+ * Strategie (van meest naar minst betrouwbaar):
+ *   1. Actieve sessies via /status/sessions — bevat Player-object van
+ *      elk apparaat dat op dit moment iets afspeelt. Dit werkt altijd
+ *      als er iemand speelt, ook als /clients leeg is.
+ *   2. /clients endpoint — alleen clients die zich recentelijk aangemeld
+ *      hebben via het Plex companion-protocol (vaak leeg).
+ *
+ * Gecached voor 30 seconden.
+ * @returns {Promise<Array<{name, machineId, product, state, host, port}>>}
  */
-async function getPlexClients() {
-  if (_clientsCache && Date.now() - _clientsCacheTime < 30_000) {
+async function getPlexClients(force = false) {
+  if (!force && _clientsCache && Date.now() - _clientsCacheTime < 30_000) {
     return _clientsCache;
   }
+
+  const seen = new Map(); // machineId → client-object
+
+  // ── 1. Actieve sessies ── (meest betrouwbaar)
+  try {
+    const sessions  = await plexGet('/status/sessions');
+    const metadata  = sessions?.MediaContainer?.Metadata || [];
+    for (const m of metadata) {
+      const p = m.Player;
+      if (!p?.machineIdentifier) continue;
+      seen.set(p.machineIdentifier, {
+        name:      p.title || p.product || 'Onbekend',
+        machineId: p.machineIdentifier,
+        product:   p.product || '',
+        state:     p.state   || 'playing',
+        host:      p.address || null,
+        port:      parseInt(p.port) || 32500,
+      });
+    }
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex: sessies ophalen mislukt bij client-discovery');
+  }
+
+  // ── 2. /clients endpoint ── (aanvulling; vaak leeg)
   try {
     const data    = await plexGet('/clients');
     const servers = data?.MediaContainer?.Server || [];
-    const clients = servers.map(c => ({
-      name:      c.name || c.title || 'Onbekend',
-      host:      c.host,
-      port:      parseInt(c.port) || 32500,
-      machineId: c.machineIdentifier,
-      product:   c.product || '',
-    }));
-    _clientsCache     = clients;
-    _clientsCacheTime = Date.now();
-    return clients;
+    for (const c of servers) {
+      if (!c.machineIdentifier || seen.has(c.machineIdentifier)) continue;
+      seen.set(c.machineIdentifier, {
+        name:      c.name || c.title || 'Onbekend',
+        machineId: c.machineIdentifier,
+        product:   c.product || '',
+        state:     'idle',
+        host:      c.host || null,
+        port:      parseInt(c.port) || 32500,
+      });
+    }
   } catch (e) {
-    logger.warn({ err: e }, 'Plex: clients ophalen mislukt');
-    return [];
+    logger.warn({ err: e }, 'Plex: /clients ophalen mislukt');
   }
+
+  const clients = [...seen.values()];
+  _clientsCache     = clients;
+  _clientsCacheTime = Date.now();
+  logger.info({ count: clients.length, machineIds: clients.map(c => c.machineId) }, 'Plex: players gevonden');
+  return clients;
 }
 
-/** Intern: stuur een commando direct naar een Plex client-player. */
+/**
+ * Stuur een playback-commando naar een Plex client.
+ *
+ * Gebruikt de Plex companion-protocol relay via de server:
+ *   GET {PLEX_URL}/player/playback/{command}
+ *   Header: X-Plex-Target-Client-Identifier: {machineId}
+ *
+ * De Plex server stuurt het commando door naar de client via de open
+ * WebSocket-verbinding. Dit werkt vanuit Docker zonder directe
+ * netwerktoegang tot het client-apparaat.
+ *
+ * Als server-relay mislukt, proberen we de client direct te bereiken
+ * op http://{host}:{port}/player/... als fallback.
+ */
 async function _playerCmd(machineId, command, extraParams = {}) {
-  const clients = await getPlexClients();
-  const client  = clients.find(c => c.machineId === machineId);
-  if (!client) throw new Error(`Plex client '${machineId}' niet gevonden`);
+  const cmdId  = String(++_commandId);
+  const params = new URLSearchParams({ commandID: cmdId, ...extraParams });
 
-  const params = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN, ...extraParams });
-  const res = await fetch(
-    `http://${client.host}:${client.port}/player/playback/${command}?${params}`,
+  // ── Aanpak 1: relay via Plex server (werkt vanuit Docker) ──────────────
+  try {
+    const res = await fetch(`${PLEX_URL}/player/playback/${command}?${params}`, {
+      headers: {
+        'X-Plex-Token':                    PLEX_TOKEN,
+        'X-Plex-Target-Client-Identifier': machineId,
+        'Accept':                          'application/json',
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    // 200 of 204 = succes; andere statussen = relay mislukt → probeer direct
+    if (res.ok || res.status === 204) return true;
+    logger.warn({ status: res.status, command }, 'Plex relay niet succesvol, probeer direct');
+  } catch (e) {
+    logger.warn({ err: e, command }, 'Plex relay mislukt, probeer direct');
+  }
+
+  // ── Aanpak 2: direct naar client-IP (fallback) ──────────────────────────
+  const clients = _clientsCache || [];
+  const client  = clients.find(c => c.machineId === machineId);
+  if (!client?.host) throw new Error(`Plex: geen route gevonden naar client '${machineId}'`);
+
+  const directParams = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN, commandID: cmdId, ...extraParams });
+  const res2 = await fetch(
+    `http://${client.host}:${client.port}/player/playback/${command}?${directParams}`,
     {
       headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
       signal:  AbortSignal.timeout(8_000),
     }
   );
-  // 204 No Content is een geldig succes-antwoord
-  if (!res.ok && res.status !== 204) throw new Error(`Plex client HTTP ${res.status}`);
+  if (!res2.ok && res2.status !== 204) throw new Error(`Plex direct HTTP ${res2.status}`);
   return true;
 }
 
 /**
  * Speel een item af op de opgegeven Plex client.
- * @param {string} machineId   - machineIdentifier van de doelclient
- * @param {string} ratingKey   - ratingKey van het Plex-item
- * @param {string} [type]      - mediatype (standaard 'music')
+ * @param {string} machineId - machineIdentifier van de doelclient
+ * @param {string} ratingKey - ratingKey van het Plex-album of -nummer
+ * @param {string} [type]    - mediatype ('music')
  */
 async function playOnClient(machineId, ratingKey, type = 'music') {
-  // Haal server-identity op voor machineIdentifier en adres
-  const identity       = await plexGet('/identity');
+  const identity        = await plexGet('/identity');
   const serverMachineId = identity?.MediaContainer?.machineIdentifier || '';
-  const url    = new URL(PLEX_URL);
-  const address = url.hostname;
-  const port    = url.port || (url.protocol === 'https:' ? '443' : '80');
+  const url      = new URL(PLEX_URL);
+  const address  = url.hostname;
+  const port     = url.port || (url.protocol === 'https:' ? '443' : '80');
   const protocol = url.protocol === 'https:' ? 'https' : 'http';
 
   return _playerCmd(machineId, 'playMedia', {
@@ -253,7 +325,6 @@ async function playOnClient(machineId, ratingKey, type = 'music') {
     port,
     protocol,
     type,
-    'X-Plex-Token':    PLEX_TOKEN,
   });
 }
 
