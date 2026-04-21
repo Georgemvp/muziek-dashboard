@@ -412,12 +412,28 @@ async function getPlaylistTracks(ratingKey) {
   }));
 }
 
+/**
+ * Haal alle nummers van een Plex-album op.
+ * @param {string} albumRatingKey - ratingKey van het album
+ * @returns {Promise<Array<{ratingKey, title, trackNumber, duration, artist}>>}
+ */
+async function getAlbumTracks(albumRatingKey) {
+  const data = await plexGet(`/library/metadata/${albumRatingKey}/children`);
+  return (data?.MediaContainer?.Metadata || []).map(t => ({
+    ratingKey: t.ratingKey,
+    title: t.title,
+    trackNumber: t.index,
+    duration: t.duration,
+    artist: t.grandparentTitle || t.originalTitle || ''
+  }));
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
   getPlexStatus, getPlexArtistNames, getPlexLibrary,
   getAlbumRatingKey,
   getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev,
-  getPlexPlaylists, getPlaylistTracks,
+  getPlexPlaylists, getPlaylistTracks, getAlbumTracks,
   PLEX_TOKEN,
 };

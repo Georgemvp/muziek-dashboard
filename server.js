@@ -43,7 +43,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -680,6 +680,30 @@ app.get('/api/plex/playlists/:key/tracks', async (req, res) => {
   } catch (e) {
     logger.warn({ err: e }, 'Plex playlist tracks ophalen mislukt');
     res.set('Cache-Control', 'private, max-age=120');
+    res.status(500).json({ error: e.message, tracks: [] });
+  }
+});
+
+app.get('/api/plex/album/:key/tracks', async (req, res) => {
+  if (!PLEX_TOKEN) {
+    res.set('Cache-Control', 'private, max-age=60');
+    return res.json({ tracks: [] });
+  }
+  try {
+    const key = req.params.key;
+    const cached = getCache(`api:plex:album:${key}`, 120_000); // 2 min cache
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=600');
+      return res.json(cached);
+    }
+    const tracks = await getAlbumTracks(key);
+    const result = { tracks };
+    setCache(`api:plex:album:${key}`, result);
+    res.set('Cache-Control', 'private, max-age=600');
+    res.json(result);
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex album tracks ophalen mislukt');
+    res.set('Cache-Control', 'private, max-age=600');
     res.status(500).json({ error: e.message, tracks: [] });
   }
 });
