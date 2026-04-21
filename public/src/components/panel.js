@@ -5,6 +5,7 @@ import {
   esc, initials, gradientFor, sanitizeArtistName,
   countryFlag, tagsHtml, bookmarkBtn, downloadBtn, proxyImg
 } from '../helpers.js';
+import { playOnZone } from './plexRemote.js';
 
 export function openArtistPanel(name) {
   const overlay     = document.getElementById('panel-overlay');
@@ -55,8 +56,11 @@ export function openArtistPanel(name) {
           : `<div class="panel-album-ph">♪</div>`;
         const plexMark = state.plexOk && a.inPlex
           ? `<span class="badge plex" style="font-size:9px">▶</span>` : '';
+        const plexPlayBtn = state.plexOk && a.inPlex && a.ratingKey
+          ? `<button class="plex-play-album-btn" data-rating-key="${esc(a.ratingKey)}" title="Afspelen op Plex">▶ Speel af</button>`
+          : '';
         albumsHtml += `<div class="panel-album-row">${imgEl}
-          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(name, a.name, a.inPlex)}</div>`;
+          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${plexPlayBtn}${downloadBtn(name, a.name, a.inPlex)}</div>`;
       }
       albumsHtml += `</div>`;
     }
@@ -81,6 +85,22 @@ export function openArtistPanel(name) {
         ${albumsHtml}
         ${simHtml}
       </div>`;
+
+    // Plex album play knoppen
+    panelContent.querySelectorAll('.plex-play-album-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const ratingKey = btn.dataset.ratingKey;
+        if (ratingKey) {
+          btn.disabled = true;
+          btn.textContent = '…';
+          const ok = await playOnZone(ratingKey, 'music');
+          btn.disabled = false;
+          btn.textContent = ok ? '▶ Speelt af' : '▶ Speel af';
+          if (ok) setTimeout(() => { btn.textContent = '▶ Speel af'; }, 3000);
+        }
+      });
+    });
   });
 }
 

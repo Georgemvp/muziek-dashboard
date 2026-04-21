@@ -303,3 +303,32 @@
 .plib-album-row:hover { background: var(--surface2); }
 .plib-album-badge { font-size: 9px; color: var(--plex); flex-shrink: 0; opacity: 0.8; }
 .plib-album-title { font-size: 12px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4; }
+
+/* ── Plex Playback Controls (widget + panel) ─────────────────────────────── */
+.w-np-controls {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto;
+}
+.plex-ctrl-btn {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 7px; font-size: 13px;
+  color: var(--text); cursor: pointer; line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+}
+.plex-ctrl-btn:hover { background: var(--plex); border-color: var(--plex); color: #fff; }
+
+/* Play button op album cards in het artiest-panel */
+.plex-play-album-btn {
+  background: var(--plex); border: none; border-radius: 6px;
+  padding: 4px 8px; font-size: 11px; color: #fff; cursor: pointer;
+  margin-left: 4px; flex-shrink: 0; transition: opacity 0.15s;
+}
+.plex-play-album-btn:hover { opacity: 0.8; }
+
+/* Play button op track-rijen (naast de bestaande preview-knop) */
+.plex-play-track-btn {
+  background: transparent; border: 1px solid var(--plex);
+  border-radius: 6px; padding: 3px 7px; font-size: 11px;
+  color: var(--plex); cursor: pointer; flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.plex-play-track-btn:hover { background: var(--plex); color: #fff; }

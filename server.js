@@ -43,7 +43,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -279,11 +279,13 @@ app.get('/api/artist/:name/info', async (req, res) => {
         .slice(0, 5)
         .map(a => {
           const img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+          const inPlex = albumInPlex(name, a.name);
           return {
             name:      a.name,
             image:     (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
             playcount: parseInt(a.playcount) || 0,
-            inPlex:    albumInPlex(name, a.name)
+            inPlex,
+            ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
           };
         });
     }
@@ -600,7 +602,7 @@ app.get('/api/plex/nowplaying', async (req, res) => {
       return res.json({ playing: false });
     }
     res.set('Cache-Control', 'private, max-age=30');
-    res.json({ playing: true, track: music.title, artist: music.grandparentTitle || music.originalTitle, album: music.parentTitle });
+    res.json({ playing: true, track: music.title, artist: music.grandparentTitle || music.originalTitle, album: music.parentTitle, ratingKey: music.ratingKey || null, albumRatingKey: music.parentRatingKey || null });
   } catch {
     res.set('Cache-Control', 'private, max-age=30');
     res.json({ playing: false });
@@ -633,6 +635,56 @@ app.get('/api/plex/library', (req, res) => {
   const slice = lib.slice((page - 1) * limit, page * limit);
   res.set('Cache-Control', 'private, max-age=300');
   res.json({ connected: ok, artistCount, total, page, limit, library: slice });
+});
+
+// ── API: Plex Playback Control ────────────────────────────────────────────
+
+app.get('/api/plex/clients', async (req, res) => {
+  if (!PLEX_TOKEN) return res.json({ clients: [] });
+  try {
+    const clients = await getPlexClients();
+    res.set('Cache-Control', 'private, max-age=30');
+    res.json({ clients });
+  } catch (e) {
+    res.json({ clients: [], error: e.message });
+  }
+});
+
+app.post('/api/plex/play', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
+  const { machineId, ratingKey, type = 'music' } = req.body || {};
+  if (!machineId || !ratingKey) return res.status(400).json({ error: 'machineId en ratingKey zijn vereist' });
+  try {
+    await playOnClient(machineId, String(ratingKey), type);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/plex/pause', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
+  const { machineId } = req.body || {};
+  if (!machineId) return res.status(400).json({ error: 'machineId is vereist' });
+  try {
+    await pauseClient(machineId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/plex/skip', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
+  const { machineId, direction = 'next' } = req.body || {};
+  if (!machineId) return res.status(400).json({ error: 'machineId is vereist' });
+  try {
+    if (direction === 'prev') await skipPrev(machineId);
+    else await skipNext(machineId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── API: Zoeken ────────────────────────────────────────────────────────────

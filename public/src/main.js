@@ -9,6 +9,7 @@ import { loadWishlistState } from './components/wishlist.js';
 import { loadTidarrStatus, startTidarrSSE } from './tabs/downloads.js';
 import { checkSpotifyStatus } from './tabs/ontdek.js';
 import { loadNu, loadPlexNP } from './tabs/nu.js';
+import { initZonePicker } from './components/plexRemote.js';
 
 // Laad event-listener modules (side-effecten)
 import './components/player.js';
@@ -51,6 +52,7 @@ document.getElementById('download-quality')?.addEventListener('change', e => {
 });
 
 // ── Initialisatie ─────────────────────────────────────────────────────────
+initZonePicker();
 loadPlexStatus();
 loadPlexNP();
 loadUser();

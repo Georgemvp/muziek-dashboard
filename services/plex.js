@@ -84,7 +84,7 @@ async function syncPlexLibrary(force = false) {
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
     plexLibrary    = albumMeta
-      .map(a => ({ artist: a.parentTitle || '', album: a.title || '' }))
+      .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null }))
       .filter(x => x.artist && x.album)
       .sort((a, b) => a.artist.localeCompare(b.artist, 'nl', { sensitivity: 'base' }));
     plexLastSync   = Date.now();
@@ -156,10 +156,132 @@ function getPlexArtistNames() {
 
 /**
  * Geeft alle albums uit de Plex-bibliotheek terug als array van
- * { artist, album } objecten, gesorteerd op artiestNaam.
+ * { artist, album, ratingKey } objecten, gesorteerd op artiestNaam.
  */
 function getPlexLibrary() {
   return plexLibrary;
 }
 
-module.exports = { plexGet, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, PLEX_TOKEN };
+/**
+ * Zoek de ratingKey van een album in de Plex-bibliotheek.
+ * Gebruikt fuzzy matching op artiestNaam en albumnaam.
+ * @returns {string|null} ratingKey of null
+ */
+function getAlbumRatingKey(artist, album) {
+  const normArtist = normalizeTitle(artist);
+  const normAlbum  = normalizeTitle(album);
+  for (const entry of plexLibrary) {
+    const eArtist = normalizeTitle(entry.artist);
+    const eAlbum  = normalizeTitle(entry.album);
+    const artistOk = normArtist === eArtist || eArtist.includes(normArtist) || normArtist.includes(eArtist);
+    const albumOk  = normAlbum  === eAlbum  || eAlbum.includes(normAlbum)  || normAlbum.includes(eAlbum);
+    if (artistOk && albumOk && entry.ratingKey) return entry.ratingKey;
+  }
+  return null;
+}
+
+// ── Plex Clients cache ─────────────────────────────────────────────────────
+let _clientsCache    = null;
+let _clientsCacheTime = 0;
+
+/**
+ * Haal beschikbare Plex clients/players op (gecached 30 seconden).
+ * @returns {Promise<Array<{name,host,port,machineId,product}>>}
+ */
+async function getPlexClients() {
+  if (_clientsCache && Date.now() - _clientsCacheTime < 30_000) {
+    return _clientsCache;
+  }
+  try {
+    const data    = await plexGet('/clients');
+    const servers = data?.MediaContainer?.Server || [];
+    const clients = servers.map(c => ({
+      name:      c.name || c.title || 'Onbekend',
+      host:      c.host,
+      port:      parseInt(c.port) || 32500,
+      machineId: c.machineIdentifier,
+      product:   c.product || '',
+    }));
+    _clientsCache     = clients;
+    _clientsCacheTime = Date.now();
+    return clients;
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex: clients ophalen mislukt');
+    return [];
+  }
+}
+
+/** Intern: stuur een commando direct naar een Plex client-player. */
+async function _playerCmd(machineId, command, extraParams = {}) {
+  const clients = await getPlexClients();
+  const client  = clients.find(c => c.machineId === machineId);
+  if (!client) throw new Error(`Plex client '${machineId}' niet gevonden`);
+
+  const params = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN, ...extraParams });
+  const res = await fetch(
+    `http://${client.host}:${client.port}/player/playback/${command}?${params}`,
+    {
+      headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
+      signal:  AbortSignal.timeout(8_000),
+    }
+  );
+  // 204 No Content is een geldig succes-antwoord
+  if (!res.ok && res.status !== 204) throw new Error(`Plex client HTTP ${res.status}`);
+  return true;
+}
+
+/**
+ * Speel een item af op de opgegeven Plex client.
+ * @param {string} machineId   - machineIdentifier van de doelclient
+ * @param {string} ratingKey   - ratingKey van het Plex-item
+ * @param {string} [type]      - mediatype (standaard 'music')
+ */
+async function playOnClient(machineId, ratingKey, type = 'music') {
+  // Haal server-identity op voor machineIdentifier en adres
+  const identity       = await plexGet('/identity');
+  const serverMachineId = identity?.MediaContainer?.machineIdentifier || '';
+  const url    = new URL(PLEX_URL);
+  const address = url.hostname;
+  const port    = url.port || (url.protocol === 'https:' ? '443' : '80');
+  const protocol = url.protocol === 'https:' ? 'https' : 'http';
+
+  return _playerCmd(machineId, 'playMedia', {
+    key:               `/library/metadata/${ratingKey}`,
+    offset:            '0',
+    machineIdentifier: serverMachineId,
+    address,
+    port,
+    protocol,
+    type,
+    'X-Plex-Token':    PLEX_TOKEN,
+  });
+}
+
+/** Pauzeer/hervat afspelen op een Plex client. */
+async function pauseClient(machineId) {
+  return _playerCmd(machineId, 'pause');
+}
+
+/** Stop afspelen op een Plex client. */
+async function stopClient(machineId) {
+  return _playerCmd(machineId, 'stop');
+}
+
+/** Sla over naar het volgende nummer op een Plex client. */
+async function skipNext(machineId) {
+  return _playerCmd(machineId, 'skipNext');
+}
+
+/** Ga terug naar het vorige nummer op een Plex client. */
+async function skipPrev(machineId) {
+  return _playerCmd(machineId, 'skipPrevious');
+}
+
+module.exports = {
+  plexGet, syncPlexLibrary,
+  artistInPlex, albumInPlex,
+  getPlexStatus, getPlexArtistNames, getPlexLibrary,
+  getAlbumRatingKey,
+  getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev,
+  PLEX_TOKEN,
+};

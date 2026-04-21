@@ -1,0 +1,214 @@
+// ── Plex Remote Control ───────────────────────────────────────────────────
+// Zone picker (client/player selectie) en playback-commando's voor Plex.
+
+const ZONE_KEY = 'plexSelectedZone'; // localStorage key
+
+// ── Zone beheer ───────────────────────────────────────────────────────────
+
+/** Haal de geselecteerde Plex zone op uit localStorage. */
+export function getSelectedZone() {
+  try {
+    const raw = localStorage.getItem(ZONE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+/** Sla een zone op in localStorage en werk de header-UI bij. */
+function setSelectedZone(zone) {
+  localStorage.setItem(ZONE_KEY, JSON.stringify(zone));
+  _updateZoneUI();
+}
+
+/** Werk de zone-naam in de header bij. */
+function _updateZoneUI() {
+  const zone   = getSelectedZone();
+  const nameEl = document.getElementById('plex-zone-name');
+  if (nameEl) nameEl.textContent = zone ? zone.name : '—';
+  const btn = document.getElementById('plex-zone-btn');
+  if (btn) btn.classList.toggle('has-zone', !!zone);
+}
+
+// ── Clients ophalen ───────────────────────────────────────────────────────
+
+async function _loadClients() {
+  try {
+    const data = await fetch('/api/plex/clients').then(r => r.json());
+    return data.clients || [];
+  } catch { return []; }
+}
+
+// ── Zone picker dropdown ──────────────────────────────────────────────────
+
+let _pickerOpen = false;
+
+/** Verberg de zone-dropdown. */
+export function closeZonePicker() {
+  const dropdown = document.getElementById('plex-zone-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  _pickerOpen = false;
+}
+
+/**
+ * Toon/verberg de zone picker dropdown.
+ * Geeft een Promise terug die resolvet zodra de gebruiker een zone kiest
+ * (of meteen als de picker sluit zonder keuze).
+ */
+export async function toggleZonePicker() {
+  const dropdown = document.getElementById('plex-zone-dropdown');
+  if (!dropdown) return;
+
+  if (_pickerOpen) {
+    closeZonePicker();
+    return;
+  }
+
+  _pickerOpen = true;
+  dropdown.style.display = '';
+  dropdown.innerHTML = '<div class="plex-zone-loading">Laden…</div>';
+
+  const clients  = await _loadClients();
+  const selected = getSelectedZone();
+
+  if (!clients.length) {
+    dropdown.innerHTML = '<div class="plex-zone-empty">Geen Plex clients gevonden.<br><small>Zorg dat Plexamp of een andere player actief is.</small></div>';
+    return;
+  }
+
+  dropdown.innerHTML = clients.map(c => `
+    <button class="plex-zone-item${selected?.machineId === c.machineId ? ' active' : ''}"
+      data-machine-id="${c.machineId}"
+      data-name="${c.name}"
+      data-product="${c.product}">
+      <span class="plex-zone-icon">🔊</span>
+      <span class="plex-zone-label">
+        <span class="plex-zone-item-name">${c.name}</span>
+        <small class="plex-zone-item-product">${c.product}</small>
+      </span>
+      ${selected?.machineId === c.machineId ? '<span class="plex-zone-check">✓</span>' : ''}
+    </button>
+  `).join('');
+
+  dropdown.querySelectorAll('.plex-zone-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setSelectedZone({
+        machineId: btn.dataset.machineId,
+        name:      btn.dataset.name,
+        product:   btn.dataset.product,
+      });
+      closeZonePicker();
+    });
+  });
+}
+
+// ── Playback commando's ───────────────────────────────────────────────────
+
+/**
+ * Speel een item af op de geselecteerde zone.
+ * Als er geen zone geselecteerd is, open dan de zone picker.
+ * @param {string|number} ratingKey - Plex ratingKey van het album/track
+ * @param {string} [type]           - mediatype ('music')
+ * @returns {Promise<boolean>} true als afspelen gestart is
+ */
+export async function playOnZone(ratingKey, type = 'music') {
+  const zone = getSelectedZone();
+  if (!zone) {
+    await toggleZonePicker();
+    return false;
+  }
+  try {
+    const res  = await fetch('/api/plex/play', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ machineId: zone.machineId, ratingKey: String(ratingKey), type }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Afspelen mislukt');
+    _showPlayFeedback(zone.name);
+    return true;
+  } catch (e) {
+    console.error('[Plex Remote] play fout:', e);
+    _showError(`Afspelen mislukt: ${e.message}`);
+    return false;
+  }
+}
+
+/** Pauzeer/hervat afspelen op de geselecteerde zone. */
+export async function pauseZone() {
+  const zone = getSelectedZone();
+  if (!zone) return;
+  await fetch('/api/plex/pause', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ machineId: zone.machineId }),
+  }).catch(e => console.warn('[Plex Remote] pause fout:', e));
+}
+
+/** Sla over naar volgend/vorig nummer op de geselecteerde zone. */
+export async function skipZone(direction = 'next') {
+  const zone = getSelectedZone();
+  if (!zone) return;
+  await fetch('/api/plex/skip', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ machineId: zone.machineId, direction }),
+  }).catch(e => console.warn('[Plex Remote] skip fout:', e));
+}
+
+// ── Feedback toasts ───────────────────────────────────────────────────────
+
+function _showPlayFeedback(zoneName) {
+  _toast(`▶ Afspelen op ${zoneName}`, '#1db954');
+}
+
+function _showError(msg) {
+  _toast(`⚠ ${msg}`, '#e05a2b');
+}
+
+function _toast(msg, bg = '#333') {
+  const existing = document.getElementById('plex-remote-toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'plex-remote-toast';
+  Object.assign(el.style, {
+    position:     'fixed',
+    bottom:       '80px',
+    left:         '50%',
+    transform:    'translateX(-50%)',
+    background:   bg,
+    color:        '#fff',
+    padding:      '10px 20px',
+    borderRadius: '8px',
+    zIndex:       '9998',
+    fontSize:     '13px',
+    fontFamily:   'sans-serif',
+    boxShadow:    '0 4px 16px rgba(0,0,0,0.35)',
+    pointerEvents:'none',
+    whiteSpace:   'nowrap',
+  });
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── Initialisatie ─────────────────────────────────────────────────────────
+
+/**
+ * Initialiseer de zone picker in de header.
+ * Roep aan vanuit main.js na DOMContentLoaded.
+ */
+export function initZonePicker() {
+  _updateZoneUI();
+
+  document.getElementById('plex-zone-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleZonePicker();
+  });
+
+  // Sluit dropdown bij klik buiten de zone-wrap
+  document.addEventListener('click', e => {
+    const wrap = document.getElementById('plex-zone-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      closeZonePicker();
+    }
+  });
+}

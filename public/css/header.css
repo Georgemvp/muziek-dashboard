@@ -121,3 +121,44 @@
 }
 .search-result-name { font-size: 14px; font-weight: 500; }
 .search-result-sub { font-size: 11px; color: var(--muted2); margin-top: 1px; }
+
+/* ── Plex Zone Picker ────────────────────────────────────────────────────── */
+.plex-zone-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.plex-zone-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 12px;
+  font-size: 12px; color: var(--muted2); cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.plex-zone-btn:hover { border-color: var(--plex); color: var(--plex); }
+.plex-zone-btn.has-zone { color: var(--plex); border-color: var(--plex); }
+.plex-zone-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 300;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.plex-zone-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 14px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text); cursor: pointer; text-align: left;
+  transition: background 0.1s;
+}
+.plex-zone-item:last-child { border-bottom: none; }
+.plex-zone-item:hover { background: var(--surface2); }
+.plex-zone-item.active { color: var(--plex); }
+.plex-zone-icon { font-size: 14px; flex-shrink: 0; }
+.plex-zone-label { display: flex; flex-direction: column; flex: 1; }
+.plex-zone-item-name { font-size: 13px; font-weight: 500; }
+.plex-zone-item-product { font-size: 11px; color: var(--muted2); margin-top: 1px; }
+.plex-zone-check { color: var(--plex); font-weight: 700; font-size: 13px; }
+.plex-zone-loading, .plex-zone-empty {
+  padding: 12px 14px; font-size: 12px; color: var(--muted2); line-height: 1.5;
+}

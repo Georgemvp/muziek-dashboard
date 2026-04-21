@@ -7,6 +7,7 @@ import {
   plexBadge, bookmarkBtn, downloadBtn, contentEl, fmt
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling, renderDashboardQueue } from './downloads.js';
+import { playOnZone, pauseZone, skipZone, getSelectedZone } from '../components/plexRemote.js';
 
 // ── Dashboard polling interval ────────────────────────────────────────────
 let _dashPoller = null;
@@ -156,6 +157,8 @@ export async function dw_nuLuisteren() {
 
     if (plexRes.status === 'fulfilled' && plexRes.value?.playing) {
       const p = plexRes.value;
+      const hasZone = !!getSelectedZone();
+      const rk = p.ratingKey || '';
       html += `<div class="w-np-row">
         <div class="w-np-dot plex"></div>
         <div class="w-np-info">
@@ -163,6 +166,13 @@ export async function dw_nuLuisteren() {
           <div class="w-np-sub">${esc(p.artist)}${p.album ? ' · ' + esc(p.album) : ''}</div>
           <span class="badge plex" style="font-size:10px">▶ Plex</span>
         </div>
+        ${hasZone ? `<div class="w-np-controls">
+          <button class="plex-ctrl-btn" data-plex-action="prev" title="Vorige">⏮</button>
+          <button class="plex-ctrl-btn" data-plex-action="pause" title="Pauze/Hervat">⏸</button>
+          <button class="plex-ctrl-btn" data-plex-action="next" title="Volgende">⏭</button>
+        </div>` : `<div class="w-np-controls">
+          <button class="plex-ctrl-btn" data-plex-action="zone" title="Selecteer zone">🔊</button>
+        </div>`}
       </div>`;
     }
 
@@ -185,6 +195,20 @@ export async function dw_nuLuisteren() {
     }
 
     el.innerHTML = html || '<div class="empty" style="font-size:12px;padding:8px 0">Niets aan het afspelen</div>';
+
+    // Plex playback-control knoppen
+    el.querySelectorAll('[data-plex-action]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const action = btn.dataset.plexAction;
+        if      (action === 'pause') pauseZone();
+        else if (action === 'next')  skipZone('next');
+        else if (action === 'prev')  skipZone('prev');
+        else if (action === 'zone') {
+          const { toggleZonePicker } = await import('../components/plexRemote.js');
+          toggleZonePicker();
+        }
+      });
+    });
   } catch (e) { if (e.name === 'AbortError') return; dwErr('nu-luisteren', e.message); }
 }
 
