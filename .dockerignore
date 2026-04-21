@@ -6,4 +6,3 @@ data
 *.backup
 *.bak
 tests/
-public/src
