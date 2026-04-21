@@ -1082,14 +1082,18 @@ app.get('/health', (req, res) => {
 
 // ── Start ──────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  logger.info({ port: PORT }, 'App gestart');
-  syncPlexLibrary(true).catch(() => {});
-  initDiscover();
-  initGaps();
-  initReleases();
-  // Automatische Plex achtergrond-sync elke 30 minuten
-  setInterval(() => {
-    syncPlexLibrary(true).catch(e => logger.warn({ err: e }, 'Plex achtergrond-sync mislukt'));
-  }, 30 * 60 * 1_000);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, 'App gestart');
+    syncPlexLibrary(true).catch(() => {});
+    initDiscover();
+    initGaps();
+    initReleases();
+    // Automatische Plex achtergrond-sync elke 30 minuten
+    setInterval(() => {
+      syncPlexLibrary(true).catch(e => logger.warn({ err: e }, 'Plex achtergrond-sync mislukt'));
+    }, 30 * 60 * 1_000);
+  });
+}
+
+module.exports = app;

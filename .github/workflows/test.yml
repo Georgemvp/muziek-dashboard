@@ -1,0 +1,37 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Node.js ${{ matrix.node-version }} instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Integration tests draaien
+        run: npm test
+        env:
+          # Tijdelijke data-map voor de SQLite-database tijdens tests
+          DATA_DIR: /tmp/lastfm-test-ci
+          # Dummy-waarden zodat de startup-validatie in server.js slaagt
+          LASTFM_API_KEY: ci-test-key
+          LASTFM_USER: ci-test-user
