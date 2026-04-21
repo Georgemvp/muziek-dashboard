@@ -43,7 +43,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -975,6 +975,8 @@ app.post('/api/tidarr/download', async (req, res) => {
   const q = validQualities.includes(quality) ? quality : null;
   try {
     const result = await addToQueue(url, type || 'album', title || '', artist || '', id || '', q);
+    // Trigger Plex library scan na succesvolle toevoeging aan wachtrij
+    triggerPlexScan().catch(e => logger.warn({ err: e }, 'Plex scan trigger mislukt'));
     // Sla op in de persistente download-geschiedenis
     addDownload({ tidal_id: id || null, artist: artist || '', title: title || '', url, quality: q || process.env.LOCK_QUALITY || 'high' });
     res.json({ ok: true, result });

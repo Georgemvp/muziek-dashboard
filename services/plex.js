@@ -428,6 +428,25 @@ async function getAlbumTracks(albumRatingKey) {
   }));
 }
 
+// ── Plex library scan trigger ──────────────────────────────────────────────────
+let _musicSectionKey = null;
+async function triggerPlexScan() {
+  if (!PLEX_TOKEN) return;
+  if (!_musicSectionKey) {
+    const sections = await plexGet('/library/sections');
+    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    if (music) _musicSectionKey = music.key;
+  }
+  if (_musicSectionKey) {
+    await fetch(`${PLEX_URL}/library/sections/${_musicSectionKey}/refresh`, {
+      method: 'POST',
+      headers: { 'X-Plex-Token': PLEX_TOKEN },
+      signal: AbortSignal.timeout(5_000)
+    });
+    logger.info({ section: _musicSectionKey }, 'Plex: library scan getriggerd');
+  }
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
@@ -435,5 +454,6 @@ module.exports = {
   getAlbumRatingKey,
   getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev,
   getPlexPlaylists, getPlaylistTracks, getAlbumTracks,
+  triggerPlexScan,
   PLEX_TOKEN,
 };
