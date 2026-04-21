@@ -50,10 +50,12 @@ ENV SHELL=bash \
     NODE_ENV=production \
     PORT=80
 
-# Systeempakketten — geen build-tools meer nodig voor lastfm-app
+# Systeempakketten — nodejs/npm NIET via apk: apk installeert Node 22 op
+# Alpine 3.21, maar native modules zijn gecompileerd tegen Node 20 (app_builder).
+# Andere V8-versie = ABI-mismatch = crash. Node wordt hieronder gekopieerd.
 RUN apk update && apk upgrade && \
     apk add --no-cache \
-        nodejs npm \
+        libstdc++ \
         ffmpeg \
         bash \
         su-exec \
@@ -61,8 +63,14 @@ RUN apk update && apk upgrade && \
         wget \
         rsgain \
         supervisor && \
-    npm install -g yarn && \
     rm -rf /var/cache/apk/*
+
+# Node.js 20 — exact dezelfde binary als in app_builder (V8 ABI match)
+COPY --from=app_builder /usr/local/bin/node          /usr/local/bin/node
+COPY --from=app_builder /usr/local/lib/node_modules  /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    npm install -g yarn
 
 # ── Tidarr: Python-afhankelijkheden (tiddl downloader) ──────────────────────
 COPY tidarr/docker/requirements.txt /tidarr/docker/requirements.txt
