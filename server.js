@@ -43,7 +43,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, PLEX_TOKEN, PLEX_URL } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -658,7 +658,10 @@ app.get('/api/plex/library', (req, res) => {
   );
   const { ok, artistCount } = getPlexStatus();
   const total = lib.length;
-  const slice = lib.slice((page - 1) * limit, page * limit);
+  const slice = lib.slice((page - 1) * limit, page * limit).map(x => ({
+    ...x,
+    thumb: x.thumb ? `${PLEX_URL}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+  }));
   res.set('Cache-Control', 'private, max-age=300');
   res.json({ connected: ok, artistCount, total, page, limit, library: slice });
 });

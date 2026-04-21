@@ -114,7 +114,7 @@ async function syncPlexLibrary(force = false) {
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
     plexLibrary    = albumMeta
-      .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null }))
+      .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null, thumb: a.thumb || null }))
       .filter(x => x.artist && x.album)
       .sort((a, b) => a.artist.localeCompare(b.artist, 'nl', { sensitivity: 'base' }));
     plexLastSync   = Date.now();
@@ -468,4 +468,5 @@ module.exports = {
   triggerPlexScan,
   rateItem,
   PLEX_TOKEN,
+  PLEX_URL,
 };

@@ -286,7 +286,15 @@
 .plib-artist-name {
   flex: 1; font-size: 13px; font-weight: 600;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  cursor: pointer;
 }
+.plib-artist-name:hover { text-decoration: underline; }
+.plib-collapse-icon {
+  font-size: 13px; color: var(--muted2); flex-shrink: 0;
+  transition: transform 0.2s var(--ease);
+  display: inline-block;
+}
+.plib-artist-block.collapsed .plib-collapse-icon { transform: rotate(-90deg); }
 .plib-album-count {
   font-size: 11px; color: var(--muted2); flex-shrink: 0;
   background: var(--surface3); padding: 2px 9px; border-radius: 10px;
@@ -294,15 +302,44 @@
 }
 .plib-albums {
   padding: 0 14px 12px;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px;
+  display: flex; flex-direction: column; gap: 2px;
+  overflow: hidden;
 }
+.plib-artist-block.collapsed .plib-albums { display: none; }
 .plib-album-row {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 10px;
   padding: 5px 8px; border-radius: 6px; transition: background 0.12s;
+  position: relative;
 }
 .plib-album-row:hover { background: var(--surface2); }
-.plib-album-badge { font-size: 9px; color: var(--plex); flex-shrink: 0; opacity: 0.8; }
-.plib-album-title { font-size: 12px; color: var(--muted2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4; }
+.plib-album-row:hover .plib-play-btn { opacity: 1; transform: scale(1); }
+/* Cover art */
+.plib-album-cover {
+  width: 48px; height: 48px; border-radius: 5px; object-fit: cover; flex-shrink: 0;
+  background: var(--surface3);
+}
+.plib-album-cover-ph {
+  width: 48px; height: 48px; border-radius: 5px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.75);
+}
+.plib-album-title {
+  flex: 1; font-size: 12px; color: var(--text); overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; line-height: 1.4;
+}
+/* Play-knop */
+.plib-play-btn {
+  flex-shrink: 0; background: var(--plex); color: #fff;
+  border: none; border-radius: 50%; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; cursor: pointer;
+  opacity: 0; transform: scale(0.8);
+  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease), background 0.12s;
+  padding: 0; line-height: 1;
+}
+.plib-play-btn:hover { background: var(--plex-hover, #e5830d); }
+[data-theme="dark"] .plib-album-cover-ph { color: rgba(255,255,255,0.65); }
+[data-theme="dark"] .plib-album-title { color: var(--text); }
 
 /* ── Plex Playback Controls (widget + panel) ─────────────────────────────── */
 .w-np-controls {

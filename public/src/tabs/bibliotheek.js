@@ -10,6 +10,7 @@ import {
 } from '../helpers.js';
 import { loadWishlist } from '../components/wishlist.js';
 import { loadPlexStatus } from '../api.js';
+import { playOnZone } from '../components/plexRemote.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 
 // ── Plex bibliotheek HTML builder ─────────────────────────────────────────
@@ -24,7 +25,7 @@ export function buildPlexLibraryHtml(library, query) {
   const byArtist = new Map();
   for (const x of filtered) {
     if (!byArtist.has(x.artist)) byArtist.set(x.artist, []);
-    byArtist.get(x.artist).push(x.album);
+    byArtist.get(x.artist).push(x); // push het volledige object
   }
 
   let html = `<div class="section-title">${byArtist.size} artiesten · ${fmt(filtered.length)} albums</div>
@@ -32,20 +33,53 @@ export function buildPlexLibraryHtml(library, query) {
   for (const [artist, albums] of byArtist) {
     html += `
       <div class="plib-artist-block">
-        <div class="plib-artist-header artist-link" data-artist="${esc(artist)}">
+        <div class="plib-artist-header">
           <div class="plib-avatar" style="background:${gradientFor(artist)}">${initials(artist)}</div>
-          <span class="plib-artist-name">${esc(artist)}</span>
+          <span class="plib-artist-name artist-link" data-artist="${esc(artist)}">${esc(artist)}</span>
+          <span class="plib-collapse-icon">▾</span>
           <span class="plib-album-count">${albums.length}</span>
         </div>
         <div class="plib-albums">
-          ${albums.map(a => `<div class="plib-album-row">
-            <span class="plib-album-badge">▶</span>
-            <span class="plib-album-title" title="${esc(a)}">${esc(a)}</span>
-          </div>`).join('')}
+          ${albums.map(a => {
+            const coverSrc = a.thumb ? proxyImg(a.thumb, 48) : null;
+            const coverHtml = coverSrc
+              ? `<img class="plib-album-cover" src="${esc(coverSrc)}" alt="" loading="lazy"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+                 ><div class="plib-album-cover-ph" style="display:none;background:${gradientFor(a.album)}">${initials(a.album)}</div>`
+              : `<div class="plib-album-cover-ph" style="background:${gradientFor(a.album)}">${initials(a.album)}</div>`;
+            return `<div class="plib-album-row" data-rating-key="${esc(a.ratingKey || '')}">
+              ${coverHtml}
+              <span class="plib-album-title" title="${esc(a.album)}">${esc(a.album)}</span>
+              ${a.ratingKey ? `<button class="plib-play-btn" data-rating-key="${esc(a.ratingKey)}" title="Afspelen in Plex">▶</button>` : ''}
+            </div>`;
+          }).join('')}
         </div>
       </div>`;
   }
   return html + '</div>';
+}
+
+/** Verwerk klikken op plib-play-btn en plib-artist-header collapse.
+ *  Wordt aangeroepen vanuit de globale click event delegation in events.js. */
+export function handlePlexLibraryClick(e) {
+  // ▶ knop → afspelen op geselecteerde zone
+  const playBtn = e.target.closest('.plib-play-btn');
+  if (playBtn) {
+    e.stopPropagation();
+    const ratingKey = playBtn.dataset.ratingKey;
+    if (ratingKey) playOnZone(ratingKey, 'music');
+    return true;
+  }
+
+  // Artiest-header → toggle collapse (maar niet als op de naam geklikt)
+  const header = e.target.closest('.plib-artist-header');
+  if (header && !e.target.closest('.artist-link')) {
+    e.stopPropagation();
+    header.closest('.plib-artist-block')?.classList.toggle('collapsed');
+    return true;
+  }
+
+  return false;
 }
 
 export async function loadPlexLibrary() {

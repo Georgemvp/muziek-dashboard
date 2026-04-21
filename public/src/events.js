@@ -8,7 +8,8 @@ import {
 } from './tabs/ontdek.js';
 import {
   renderGaps, loadBibliotheek, buildPlexLibraryHtml, loadPlexLibrary,
-  loadGaps, loadTopArtists, loadTopTracks, loadLoved, loadStats
+  loadGaps, loadTopArtists, loadTopTracks, loadLoved, loadStats,
+  handlePlexLibraryClick
 } from './tabs/bibliotheek.js';
 import { loadNu, loadRecent, clearDashboardPolling } from './tabs/nu.js';
 import {
@@ -219,6 +220,9 @@ document.getElementById('panel-close')?.addEventListener('click', closeArtistPan
 
 // ── Globale event delegation (klikken) ────────────────────────────────────
 document.addEventListener('click', async e => {
+  // Plex bibliotheek knoppen (▶ play + artiest-header collapse)
+  if (handlePlexLibraryClick(e)) return;
+
   // Play-knop → audio preview
   const playBtn = e.target.closest('.play-btn');
   if (playBtn) {
