@@ -43,7 +43,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, PLEX_TOKEN } = require('./services/plex');
+const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, PLEX_TOKEN } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -753,6 +753,24 @@ app.post('/api/plex/skip', async (req, res) => {
   try {
     if (direction === 'prev') await skipPrev(machineId);
     else await skipNext(machineId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/plex/rate', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
+  const { ratingKey, rating } = req.body || {};
+
+  // Validatie
+  if (!ratingKey) return res.status(400).json({ error: 'ratingKey is vereist' });
+  if (typeof rating !== 'number' || rating < 0 || rating > 10 || !Number.isInteger(rating)) {
+    return res.status(400).json({ error: 'rating moet een geheel getal tussen 0 en 10 zijn' });
+  }
+
+  try {
+    await rateItem(String(ratingKey), rating);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

@@ -378,6 +378,17 @@ async function skipPrev(machineId) {
   return _playerCmd(machineId, 'skipPrevious');
 }
 
+/** Geef een rating aan een item in Plex (album, track, etc).
+ *  @param {string} ratingKey - ratingKey van het item
+ *  @param {number} rating - rating van 0 tot 10 (0 = geen rating)
+ *  @returns {Promise<boolean>} true bij succes
+ */
+async function rateItem(ratingKey, rating) {
+  const url = `/:/rate?key=${ratingKey}&identifier=com.plexapp.plugins.library&rating=${rating}`;
+  await plexPut(url);
+  return true;
+}
+
 /**
  * Haal alle afspeellijsten op uit de Plex-bibliotheek.
  * Filtert op audioafspeellijsten en retourneert metadata.
@@ -455,5 +466,6 @@ module.exports = {
   getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev,
   getPlexPlaylists, getPlaylistTracks, getAlbumTracks,
   triggerPlexScan,
+  rateItem,
   PLEX_TOKEN,
 };
