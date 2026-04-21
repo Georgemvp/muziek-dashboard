@@ -1,5 +1,6 @@
 // ── Plex service ─────────────────────────────────────────────────────────────
 const { getCache, setCache } = require('../db');
+const logger = require('../logger');
 
 const PLEX_URL   = (process.env.PLEX_URL || 'http://localhost:32400').replace(/\/$/, '');
 const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
@@ -22,7 +23,7 @@ if (cached) {
   plexLibrary    = cached.library  || [];
   plexLastSync   = cached.lastSync || 0;
   plexSyncOk     = cached.syncOk   || false;
-  console.log(`Plex: ${plexArtists.size} artiesten, ${plexLibrary.length} albums geladen uit SQLite-cache`);
+  logger.info({ artists: plexArtists.size, albums: plexLibrary.length }, 'Plex: geladen uit SQLite-cache');
 }
 
 /** Normaliseer albumtitels voor fuzzy matching (Plex vs MusicBrainz). */
@@ -69,7 +70,7 @@ async function syncPlexLibrary(force = false) {
   try {
     const sections  = await plexGet('/library/sections');
     const music     = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
-    if (!music) { console.warn('Plex: geen muziekbibliotheek gevonden'); return; }
+    if (!music) { logger.warn('Plex: geen muziekbibliotheek gevonden'); return; }
 
     const [artistData, albumData] = await Promise.all([
       plexGet(`/library/sections/${music.key}/all?type=8`),
@@ -99,9 +100,9 @@ async function syncPlexLibrary(force = false) {
       syncOk:     plexSyncOk
     });
 
-    console.log(`Plex: ${plexArtists.size} artiesten, ${plexAlbums.size} albums gesynchroniseerd`);
+    logger.info({ artists: plexArtists.size, albums: plexAlbums.size }, 'Plex: gesynchroniseerd');
   } catch (e) {
-    console.warn('Plex sync mislukt:', e.message);
+    logger.warn({ err: e }, 'Plex sync mislukt');
     plexSyncOk = false;
   }
 }

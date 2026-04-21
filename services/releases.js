@@ -1,4 +1,5 @@
 // ── Releases service — recente releases van Plex-artiesten via MusicBrainz ──
+const logger = require('../logger');
 const { lfm }                                        = require('./lastfm');
 const { artistInPlex, albumInPlex, getPlexArtistNames } = require('./plex');
 const { mbzGet }                                     = require('./musicbrainz');
@@ -112,7 +113,7 @@ async function getLastfmPlaycounts() {
 // ── Incrementele cache-build ───────────────────────────────────────────────
 
 async function buildReleasesCache() {
-  console.log('Releases cache bouwen (Plex + MusicBrainz)...');
+  logger.info('Releases cache bouwen (Plex + MusicBrainz)');
 
   const oldCache = getCache('releases');
 
@@ -126,14 +127,14 @@ async function buildReleasesCache() {
     const total         = allArtists.length;
 
     if (total === 0) {
-      console.warn('Releases: geen artiesten in Plex — is syncPlexLibrary al gedraaid?');
+      logger.warn('Releases: geen artiesten in Plex — is syncPlexLibrary al gedraaid?');
       return;
     }
-    console.log(`Releases: ${total} Plex-artiesten gevonden`);
+    logger.info({ total }, 'Releases: Plex-artiesten gevonden');
 
     // STAP 2 — Last.fm playcounts voor sortering
     const playcountMap = await getLastfmPlaycounts();
-    console.log(`Releases: ${playcountMap.size} Last.fm-playcounts opgehaald`);
+    logger.info({ playcounts: playcountMap.size }, 'Releases: Last.fm-playcounts opgehaald');
 
     // STAP 3 — Controleer of er een vorige, onvoltooide run is
     const wip = getCache('releases:wip', Infinity);
@@ -143,10 +144,7 @@ async function buildReleasesCache() {
     if (wip && !wip.completed && Array.isArray(wip.artistsDone) && wip.total === total) {
       processedSet = new Set(wip.artistsDone);
       releases     = wip.releases || [];
-      console.log(
-        `Releases: WIP gevonden — ${processedSet.size}/${total} artiesten al verwerkt, ` +
-        `${releases.length} releases tot nu toe`
-      );
+      logger.info({ done: processedSet.size, total, releases: releases.length }, 'Releases: WIP gevonden, hervat vorige run');
     } else {
       // Verse run
       setCache('releases:wip', { completed: false, artistsDone: [], releases: [], total, startedAt: Date.now() });
@@ -197,15 +195,12 @@ async function buildReleasesCache() {
 
       // Log + WIP opslaan elke LOG_INTERVAL artiesten
       if (count % LOG_INTERVAL === 0) {
-        console.log(
-          `Releases: ${count}/${total} artiesten verwerkt ` +
-          `(${releases.length} releases gevonden)`
-        );
+        logger.info({ count, total, releases: releases.length }, 'Releases: voortgang');
         saveWip();
       }
     }
 
-    console.log(`Releases: alle ${total} artiesten verwerkt — ${releases.length} releases gevonden`);
+    logger.info({ total, releases: releases.length }, 'Releases: alle artiesten verwerkt');
 
     // STAP 5 — Sorteren: playcount desc, dan datum desc
     releases.sort((a, b) => {
@@ -224,13 +219,13 @@ async function buildReleasesCache() {
     setCache('releases', { releases, builtAt: Date.now(), newReleaseIds });
     setCache('releases:wip', { completed: true, total, finishedAt: Date.now() });
 
-    console.log(`Releases cache klaar: ${releases.length} releases, ${newReleaseIds.length} nieuw`);
+    logger.info({ releases: releases.length, newReleases: newReleaseIds.length }, 'Releases cache klaar');
   } catch (e) {
-    console.error('Releases cache mislukt:', e.message);
+    logger.error({ err: e }, 'Releases cache mislukt');
     // Error recovery: herstel de oude cache zodat de frontend niet leeg blijft
     if (oldCache) {
       setCache('releases', oldCache);
-      console.log('Releases: oude cache hersteld na fout.');
+      logger.info('Releases: oude cache hersteld na fout');
     }
   }
 }

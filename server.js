@@ -1,6 +1,8 @@
 // ── Startup validatie ──────────────────────────────────────────────────────
+const logger = require('./logger');
+
 if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
-  console.error('FOUT: LASTFM_API_KEY en LASTFM_USER zijn verplicht. Controleer je .env bestand.');
+  logger.fatal('LASTFM_API_KEY en LASTFM_USER zijn verplicht. Controleer je .env bestand.');
   process.exit(1);
 }
 
@@ -54,6 +56,25 @@ const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./ser
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// ── Request logging middleware ─────────────────────────────────────────────
+// Logt elke inkomende request met method, pad, statuscode en responstijd.
+// Slaat /health en statische bestanden over voor een cleaner logboek.
+app.use((req, res, next) => {
+  const SKIP_PREFIXES = ['/health'];
+  if (SKIP_PREFIXES.some(p => req.path === p || req.path.startsWith('/tidarr-ui'))) {
+    return next();
+  }
+  const t0 = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - t0;
+    const level = res.statusCode >= 500 ? 'error'
+                : res.statusCode >= 400 ? 'warn'
+                : 'info';
+    logger[level]({ method: req.method, path: req.path, status: res.statusCode, ms }, 'request');
+  });
+  next();
+});
 
 // ── Rate limiting ──────────────────────────────────────────────────────────
 
@@ -511,12 +532,12 @@ app.get('/api/recs', async (req, res) => {
     };
     markLastFmUp();
     setCache(cacheKey, result); // Cache per 2-uur rotatie
-    console.log(`[/api/recs] voltooid in ${Date.now() - t0}ms`);
+    logger.info({ ms: Date.now() - t0 }, '/api/recs voltooid');
     res.set('Cache-Control', 'private, max-age=300');
     res.json(result);
   } catch (e) {
     markLastFmDown();
-    console.log(`[/api/recs] fout na ${Date.now() - t0}ms: ${e.message}`);
+    logger.error({ err: e, ms: Date.now() - t0 }, '/api/recs fout');
     // Probeer huidige rotatie-sleutel (stale), daarna vorige rotatie
     const currentKey  = `api:recs:${Math.floor(Date.now() / 7_200_000)}`;
     const previousKey = `api:recs:${Math.floor(Date.now() / 7_200_000) - 1}`;
@@ -994,7 +1015,7 @@ app.get('/api/spotify/recs', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=300');
     res.json(result);
   } catch (e) {
-    console.warn('Spotify recs fout (graceful fallback):', e.message);
+    logger.warn({ err: e }, 'Spotify recs fout (graceful fallback)');
     res.set('Cache-Control', 'private, max-age=300');
     res.json([]);
   }
@@ -1035,7 +1056,7 @@ app.get('/api/img', async (req, res) => {
     return res.send(buffer);
   } catch (err) {
     // Als sharp faalt (bijv. SVG of corrupt bestand): stuur redirect
-    console.warn(`[/api/img] proxy mislukt voor ${url}: ${err.message}`);
+    logger.warn({ err, url }, '/api/img proxy mislukt, redirect naar origineel');
     return res.redirect(302, url);
   }
 });
@@ -1062,13 +1083,13 @@ app.get('/health', (req, res) => {
 // ── Start ──────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`App draait op poort ${PORT}`);
+  logger.info({ port: PORT }, 'App gestart');
   syncPlexLibrary(true).catch(() => {});
   initDiscover();
   initGaps();
   initReleases();
   // Automatische Plex achtergrond-sync elke 30 minuten
   setInterval(() => {
-    syncPlexLibrary(true).catch(e => console.warn('Plex achtergrond-sync mislukt:', e.message));
+    syncPlexLibrary(true).catch(e => logger.warn({ err: e }, 'Plex achtergrond-sync mislukt'));
   }, 30 * 60 * 1_000);
 });

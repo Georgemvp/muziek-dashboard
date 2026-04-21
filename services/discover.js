@@ -1,4 +1,5 @@
 // ── Discover service ─────────────────────────────────────────────────────────
+const logger = require('../logger');
 const { lfm, getSimilarArtists }           = require('./lastfm');
 const { syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus } = require('./plex');
 const { getMBZArtist, getMBZAlbums }       = require('./musicbrainz');
@@ -25,7 +26,7 @@ async function buildDiscoverCache() {
   // Kies elke build een andere combinatie van periodes voor variatie
   const period1 = SEED_PERIODS[Math.floor(Math.random() * SEED_PERIODS.length)];
   const period2 = SEED_PERIODS[Math.floor(Math.random() * SEED_PERIODS.length)];
-  console.log(`Discover cache bouwen (periodes: ${period1} + ${period2})...`);
+  logger.info({ period1, period2 }, 'Discover cache bouwen');
   try {
     await syncPlexLibrary();
 
@@ -129,12 +130,12 @@ async function buildDiscoverCache() {
     const newHistory = [...historyArray, ...diversePool.map(a => a.name)].slice(-200);
     setCache('discover:history', newHistory, 7 * 86_400_000);
 
-    console.log(`Discover cache klaar: ${diversePool.length} artiesten (genre-gefilterd, periodes: ${period1} + ${period2})`);
+    logger.info({ artists: diversePool.length, period1, period2 }, 'Discover cache klaar');
   } catch (e) {
-    console.error('Discover cache mislukt:', e.message);
+    logger.error({ err: e }, 'Discover cache mislukt');
     // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,
     // zodat het systeem de volgende keer opnieuw probeert ipv 24u wacht.
-    console.log('Discover: oude cache blijft actief (timestamp behouden voor volgende poging).');
+    logger.info('Discover: oude cache blijft actief (timestamp behouden voor volgende poging)');
   }
 }
 

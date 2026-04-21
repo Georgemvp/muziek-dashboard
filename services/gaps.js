@@ -1,4 +1,5 @@
 // ── Gaps service ─────────────────────────────────────────────────────────────
+const logger = require('../logger');
 const { lfm }                                     = require('./lastfm');
 const { syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus } = require('./plex');
 const { getMBZArtist, getMBZAlbums }              = require('./musicbrainz');
@@ -47,7 +48,7 @@ function limitConcurrency(tasks, limit) {
 async function buildGapsCache() {
   // Kies willekeurig een periode voor afwisseling
   const period = PERIODS[Math.floor(Math.random() * PERIODS.length)];
-  console.log(`Gaps cache bouwen (periode: ${period})...`);
+  logger.info({ period }, 'Gaps cache bouwen');
   try {
     await syncPlexLibrary();
 
@@ -92,7 +93,7 @@ async function buildGapsCache() {
           totalCount:    albums.length
         };
       } catch (e) {
-        console.error(`Fout bij verwerken artiest ${name}:`, e.message);
+        logger.error({ err: e, artist: name }, 'Gaps: fout bij verwerken artiest');
         return null;
       }
     });
@@ -106,12 +107,12 @@ async function buildGapsCache() {
       .map(r => r.value);
 
     setCache('gaps', { artists: gapArtists, builtAt: Date.now(), period });
-    console.log(`Gaps cache klaar: ${gapArtists.length} artiesten met gaten (periode: ${period})`);
+    logger.info({ artists: gapArtists.length, period }, 'Gaps cache klaar');
   } catch (e) {
-    console.error('Gaps cache mislukt:', e.message);
+    logger.error({ err: e }, 'Gaps cache mislukt');
     // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,
     // zodat het systeem de volgende keer opnieuw probeert ipv 24u wacht.
-    console.log('Gaps: oude cache blijft actief (timestamp behouden voor volgende poging).');
+    logger.info('Gaps: oude cache blijft actief (timestamp behouden voor volgende poging)');
   }
 }
 
