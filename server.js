@@ -601,8 +601,34 @@ app.get('/api/plex/nowplaying', async (req, res) => {
       res.set('Cache-Control', 'private, max-age=30');
       return res.json({ playing: false });
     }
+
+    // Konstrueer thumb URL met token
+    let thumbUrl = null;
+    const thumb = music.parentThumb || music.grandparentThumb;
+    if (thumb) {
+      thumbUrl = `${PLEX_URL}${thumb}?X-Plex-Token=${PLEX_TOKEN}`;
+    }
+
+    // Extraheer player-informatie
+    const playerState = music.Player?.state || 'unknown';
+    const playerName = music.Player?.title || music.Player?.product || null;
+    const machineId = music.Player?.machineIdentifier || null;
+
     res.set('Cache-Control', 'private, max-age=30');
-    res.json({ playing: true, track: music.title, artist: music.grandparentTitle || music.originalTitle, album: music.parentTitle, ratingKey: music.ratingKey || null, albumRatingKey: music.parentRatingKey || null });
+    res.json({
+      playing: true,
+      track: music.title,
+      artist: music.grandparentTitle || music.originalTitle,
+      album: music.parentTitle,
+      ratingKey: music.ratingKey || null,
+      albumRatingKey: music.parentRatingKey || null,
+      thumb: thumbUrl,
+      duration: music.duration || null,
+      viewOffset: music.viewOffset || null,
+      state: playerState,
+      playerName,
+      machineId
+    });
   } catch {
     res.set('Cache-Control', 'private, max-age=30');
     res.json({ playing: false });
