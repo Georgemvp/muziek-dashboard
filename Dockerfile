@@ -15,7 +15,29 @@ RUN yarn install --prefer-offline --frozen-lockfile && \
     yarn workspace tidarr-api run build
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Stage 2 — Gecombineerd productie-image (Tidarr + muziekdashboard)
+# Stage 2 — Bouw lastfm-app (frontend bundle + productie node_modules)
+# ═══════════════════════════════════════════════════════════════════════════
+FROM node:20-alpine AS app_builder
+
+WORKDIR /app
+
+# Build-tools voor native modules (better-sqlite3, sharp)
+RUN apk add --no-cache python3 make g++
+
+# Layer-cache: package-bestanden eerst → npm ci draait alleen opnieuw bij
+# gewijzigde dependencies, niet bij gewijzigde broncode
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Bouw de frontend bundle
+COPY public/ ./public/
+RUN npm run build
+
+# Verwijder devDependencies; alleen productie-modules blijven over
+RUN npm prune --production
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Stage 3 — Productie-image (Tidarr + muziekdashboard)
 # ═══════════════════════════════════════════════════════════════════════════
 FROM python:3.13-alpine3.21
 
@@ -24,9 +46,11 @@ WORKDIR /tidarr
 ENV SHELL=bash \
     PYTHONUNBUFFERED=1 \
     HOME=/shared \
-    ENVIRONMENT=production
+    ENVIRONMENT=production \
+    NODE_ENV=production \
+    PORT=80
 
-# Systeempakketten voor Tidarr én het muziekdashboard
+# Systeempakketten — geen build-tools meer nodig voor lastfm-app
 RUN apk update && apk upgrade && \
     apk add --no-cache \
         nodejs npm \
@@ -66,22 +90,13 @@ RUN apk add --no-cache --virtual .nodedeps python3-dev build-base && \
 # ── Muziekdashboard (lastfm-app) ────────────────────────────────────────────
 WORKDIR /app
 
-# Native module better-sqlite3 heeft buildtools nodig
-RUN apk add --no-cache python3 make g++
-
-COPY package.json package-lock.json ./
-# Installeer inclusief devDependencies (esbuild) voor de build-stap
-RUN npm install
-
-# Bouw de frontend bundle (ES modules → gebundeld app.js)
-COPY public/ ./public/
-RUN npm run build
-
-# Verwijder devDependencies na het builden
-RUN npm prune --production
+# Kopieer pre-built node_modules en gebundelde frontend uit app_builder
+# → geen npm install, geen build-tools nodig in het productie-image
+COPY --from=app_builder /app/node_modules ./node_modules
+COPY --from=app_builder /app/public/      ./public/
 
 COPY server.js db.js ./
-COPY services/         ./services/
+COPY services/       ./services/
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
@@ -90,7 +105,8 @@ COPY supervisord.conf /etc/supervisord.conf
 # Tidarr draait intern op poort 8484.
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=45s \
-  CMD node -e "require('http').get('http://localhost/',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"
+# wget is al aanwezig in het image; sneller dan een Node-process spawnen
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s \
+  CMD wget -q --spider http://localhost:80/health || exit 1
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

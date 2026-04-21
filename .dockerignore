@@ -3,3 +3,7 @@ node_modules
 .git
 data
 *.log
+*.backup
+*.bak
+tests/
+public/src
