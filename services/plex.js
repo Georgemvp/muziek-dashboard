@@ -53,7 +53,7 @@ function normalizeTitle(title) {
     .trim();
 }
 
-/** Doe een Plex-API-aanroep met timeout. */
+/** Doe een Plex-API-aanroep (GET) met timeout. */
 async function plexGet(urlPath) {
   const res = await fetch(`${PLEX_URL}${urlPath}`, {
     headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
@@ -61,6 +61,36 @@ async function plexGet(urlPath) {
   });
   if (!res.ok) throw new Error(`Plex HTTP ${res.status}`);
   return res.json();
+}
+
+/** Doe een Plex-API-aanroep (POST) met timeout. Parse als JSON als er body is, anders return {}. */
+async function plexPost(urlPath) {
+  const res = await fetch(`${PLEX_URL}${urlPath}`, {
+    method: 'POST',
+    headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(8_000)
+  });
+  if (!res.ok) throw new Error(`Plex HTTP ${res.status}`);
+
+  const contentLength = res.headers.get('content-length');
+  if (contentLength === '0' || !contentLength) return {};
+
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
+/** Doe een Plex-API-aanroep (PUT) met timeout. Return true bij succes. */
+async function plexPut(urlPath) {
+  const res = await fetch(`${PLEX_URL}${urlPath}`, {
+    method: 'PUT',
+    headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(8_000)
+  });
+  if (!res.ok) throw new Error(`Plex HTTP ${res.status}`);
+  return true;
 }
 
 /** Synchroniseer de Plex-bibliotheek. Slaat resultaat op in SQLite. */
@@ -349,7 +379,7 @@ async function skipPrev(machineId) {
 }
 
 module.exports = {
-  plexGet, syncPlexLibrary,
+  plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
   getPlexStatus, getPlexArtistNames, getPlexLibrary,
   getAlbumRatingKey,
