@@ -299,38 +299,77 @@ async function _playerCmd(machineId, command, extraParams = {}) {
   const cmdId  = String(++_commandId);
   const params = new URLSearchParams({ commandID: cmdId, ...extraParams });
 
-  // ── Aanpak 1: relay via Plex server (werkt vanuit Docker) ──────────────
+  // ── Aanpak 1: relay via Plex server ────────────────────────────────────
+  // Werkt alleen als de client een actieve WebSocket-verbinding heeft met de server.
+  // Stuur extra headers mee die Plex nodig heeft voor het companion-protocol.
+  let relayOk = false;
   try {
     const res = await fetch(`${PLEX_URL}/player/playback/${command}?${params}`, {
       headers: {
         'X-Plex-Token':                    PLEX_TOKEN,
         'X-Plex-Target-Client-Identifier': machineId,
+        'X-Plex-Client-Identifier':        'lastfm-app-server',
+        'X-Plex-Device-Name':              'LastFM App',
+        'X-Plex-Product':                  'LastFM App',
         'Accept':                          'application/json',
       },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(5_000),
     });
-    // 200 of 204 = succes; andere statussen = relay mislukt → probeer direct
-    if (res.ok || res.status === 204) return true;
-    logger.warn({ status: res.status, command }, 'Plex relay niet succesvol, probeer direct');
+    if (res.ok || res.status === 204) {
+      logger.info({ command, machineId }, 'Plex relay gelukt via server');
+      return true;
+    }
+    const body = await res.text().catch(() => '');
+    logger.warn({ status: res.status, command, body }, 'Plex relay niet succesvol, probeer direct');
   } catch (e) {
-    logger.warn({ err: e, command }, 'Plex relay mislukt, probeer direct');
+    logger.warn({ err: e.message, command }, 'Plex relay mislukt, probeer direct');
   }
 
-  // ── Aanpak 2: direct naar client-IP (fallback) ──────────────────────────
-  const clients = _clientsCache || [];
-  const client  = clients.find(c => c.machineId === machineId);
-  if (!client?.host) throw new Error(`Plex: geen route gevonden naar client '${machineId}'`);
+  // ── Aanpak 2: direct naar client-IP (fallback) ─────────────────────────
+  // Ververs de client-cache zodat we het meest actuele host/port hebben.
+  let clients = _clientsCache || [];
+  const cacheAge = Date.now() - _clientsCacheTime;
+  if (!clients.length || cacheAge > 60_000) {
+    try { clients = await getPlexClients(true); } catch {}
+  }
+  const client = clients.find(c => c.machineId === machineId);
 
-  const directParams = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN, commandID: cmdId, ...extraParams });
-  const res2 = await fetch(
-    `http://${client.host}:${client.port}/player/playback/${command}?${directParams}`,
-    {
-      headers: { 'X-Plex-Token': PLEX_TOKEN, 'Accept': 'application/json' },
-      signal:  AbortSignal.timeout(8_000),
+  if (!client?.host) {
+    throw new Error(
+      `Plex: geen route naar client '${machineId}'. ` +
+      `Relay mislukt (server WebSocket niet actief) en geen client-IP beschikbaar. ` +
+      `Controleer of de Plex player actief is en zichtbaar via /api/plex/clients.`
+    );
+  }
+
+  // Probeer poort 32500 (companion HTTP) én de poort uit de sessie.
+  const portsToTry = [...new Set([32500, client.port || 32500])];
+  let lastErr = null;
+  for (const port of portsToTry) {
+    try {
+      const directParams = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN, commandID: cmdId, ...extraParams });
+      const res2 = await fetch(
+        `http://${client.host}:${port}/player/playback/${command}?${directParams}`,
+        {
+          headers: {
+            'X-Plex-Token':             PLEX_TOKEN,
+            'X-Plex-Client-Identifier': 'lastfm-app-server',
+            'Accept':                   'application/json',
+          },
+          signal: AbortSignal.timeout(5_000),
+        }
+      );
+      if (res2.ok || res2.status === 204) {
+        logger.info({ command, machineId, host: client.host, port }, 'Plex direct commando gelukt');
+        return true;
+      }
+      lastErr = new Error(`Plex direct HTTP ${res2.status} op poort ${port}`);
+    } catch (e) {
+      lastErr = e;
+      logger.warn({ err: e.message, host: client.host, port, command }, 'Plex direct poging mislukt');
     }
-  );
-  if (!res2.ok && res2.status !== 204) throw new Error(`Plex direct HTTP ${res2.status}`);
-  return true;
+  }
+  throw lastErr || new Error('Plex direct commando mislukt');
 }
 
 /**

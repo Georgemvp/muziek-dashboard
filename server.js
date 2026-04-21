@@ -751,6 +751,36 @@ app.get('/api/plex/clients', async (req, res) => {
   }
 });
 
+// Debug-endpoint: toon ruwe Plex sessies en /clients om relay-problemen te diagnosticeren
+app.get('/api/plex/clients/debug', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN' });
+  try {
+    const [sessionsRaw, clientsRaw] = await Promise.allSettled([
+      plexGet('/status/sessions'),
+      plexGet('/clients'),
+    ]);
+    const sessions = sessionsRaw.status === 'fulfilled'
+      ? (sessionsRaw.value?.MediaContainer?.Metadata || []).map(m => ({
+          title: m.title, type: m.type,
+          player: m.Player ? {
+            machineId: m.Player.machineIdentifier,
+            name: m.Player.title, product: m.Player.product,
+            state: m.Player.state, address: m.Player.address, port: m.Player.port,
+          } : null,
+        }))
+      : { error: sessionsRaw.reason?.message };
+    const clientsList = clientsRaw.status === 'fulfilled'
+      ? (clientsRaw.value?.MediaContainer?.Server || []).map(c => ({
+          name: c.name, machineId: c.machineIdentifier,
+          product: c.product, host: c.host, port: c.port,
+        }))
+      : { error: clientsRaw.reason?.message };
+    res.json({ sessions, clients: clientsList });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/plex/play', async (req, res) => {
   if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
   const { machineId, ratingKey, type = 'music' } = req.body || {};
