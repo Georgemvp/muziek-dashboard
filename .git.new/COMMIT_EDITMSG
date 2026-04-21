@@ -1,0 +1,15 @@
+feat: PWA setup - manifest, service worker improvements, en icons
+
+- Voeg manifest.json toe met PWA configuratie
+- Voeg PWA meta tags toe aan index.html (theme-color, apple-mobile-web-app)
+- Update service worker (sw.js) met verbeterde caching strategie:
+  * Cache-first voor statische assets (CSS, JS, PNG, SVG, fonts)
+  * Network-first met cache fallback voor API calls
+  * Aparte caches voor static/api/images met automatische cleanup
+  * Versioning voor cache invalidatie
+- Genereer 192x192 en 512x512 PNG icons met muzieknoot symbool
+- Voeg generate-icons.js toe voor toekomstige icon updates
+
+De app is nu volledig installeerbaar als PWA op alle platforms.
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
