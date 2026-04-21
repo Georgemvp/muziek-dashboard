@@ -61,6 +61,16 @@ docker compose up -d --build
 
 ---
 
+## Externe toegang
+
+Wil je je dashboard van buiten je netwerk bereiken? Cloudflare Tunnel biedt veilige externe toegang zonder poortforwarding!
+
+**Voordelen:** Geen poortforwarding nodig · Versleuteld · Gratis · Eenvoudig in te stellen
+
+Zie **[SETUP_TUNNEL.md](SETUP_TUNNEL.md)** voor volledige stap-voor-stap instructies.
+
+---
+
 ## Handige commando's
 
 ```bash
