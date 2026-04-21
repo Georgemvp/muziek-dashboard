@@ -1,23 +1,30 @@
 // ============================================================
-// Muziek Dashboard — Service Worker
-// Cache naam: muziek-dashboard-v1
+// Muziek Dashboard — Service Worker (PWA v2)
+// Verbeterde caching strategie voor Progressive Web App
 // ============================================================
 
-const CACHE_NAME = 'muziek-dashboard-v1';
+const CACHE_VERSION = 'v2';
+const CACHE_STATIC = `muziek-dashboard-static-${CACHE_VERSION}`;
+const CACHE_API = `muziek-dashboard-api-${CACHE_VERSION}`;
+const CACHE_IMAGES = `muziek-dashboard-images-${CACHE_VERSION}`;
 
-// Bestanden die direct bij installatie worden gecached
+// Bestanden die direct bij installatie worden gecached (statische assets)
 const PRECACHE_URLS = [
   '/index.html',
+  '/manifest.json',
   '/style.css',
   '/app.js',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
 
 function isStaticAsset(url) {
-  return url.pathname.match(/\.(css|js|woff2?|ttf|ico|png|svg)$/) !== null
+  return url.pathname.match(/\.(css|js|woff2?|ttf|ico|png|svg|webp|jpg|jpeg|gif)$/) !== null
     && !url.hostname.includes('deezer')
-    && !url.hostname.includes('cdns-images');
+    && !url.hostname.includes('cdns-images')
+    && !url.hostname.includes('cdnjs.cloudflare.com');
 }
 
 function isApiEndpoint(pathname) {
@@ -54,8 +61,11 @@ async function cacheResponse(cacheName, request, response) {
 // ── Installatie: precache static assets ──────────────────────
 
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installeren... cache versie:', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches.open(CACHE_STATIC).then((cache) => {
+      return cache.addAll(PRECACHE_URLS);
+    })
   );
   // Activeer meteen zonder te wachten op oude clients
   self.skipWaiting();
@@ -64,14 +74,24 @@ self.addEventListener('install', (event) => {
 // ── Activatie: oude caches opruimen ──────────────────────────
 
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activeren... opruimen oude caches');
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
+    caches.keys().then((keys) => {
+      return Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
+          .filter((key) => {
+            // Verwijder oude versies
+            const isOldVersion =
+              key.includes('muziek-dashboard') &&
+              !key.includes(CACHE_VERSION);
+            return isOldVersion;
+          })
+          .map((key) => {
+            console.log('[SW] Oude cache verwijderd:', key);
+            return caches.delete(key);
+          })
+      );
+    })
   );
   self.clients.claim();
 });
@@ -87,7 +107,7 @@ self.addEventListener('fetch', (event) => {
   // ── Strategie 1: Deezer CDN afbeeldingen — Cache First, 7 dagen TTL ──
   if (isDeezerImage(url)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
+      caches.open(CACHE_IMAGES).then(async (cache) => {
         const cached = await cache.match(event.request);
         if (cached) {
           // Controleer leeftijd via Date header
@@ -123,18 +143,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Strategie 2: Static assets — Cache First, update in achtergrond ──
+  // ── Strategie 2: Static assets — Cache First ──
+  // Alle CSS, JS, fonts, PNG's, SVG's uit /public worden gecached
   if (isStaticAsset(url)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
+      caches.open(CACHE_STATIC).then(async (cache) => {
         const cached = await cache.match(event.request);
-        // Altijd op de achtergrond vernieuwen
-        const networkFetch = fetch(event.request).then((response) => {
-          if (response.ok) cache.put(event.request, response.clone());
+        if (cached) {
+          return cached;
+        }
+        // Niet in cache: haal op en sla op
+        try {
+          const response = await fetch(event.request);
+          if (response.ok) {
+            cache.put(event.request, response.clone());
+          }
           return response;
-        }).catch(() => null);
-
-        return cached || networkFetch;
+        } catch (err) {
+          console.warn('[SW] Offline - kan statische asset niet laden:', event.request.url);
+          return new Response('Offline - asset niet beschikbaar', { status: 503 });
+        }
       })
     );
     return;
@@ -143,12 +171,15 @@ self.addEventListener('fetch', (event) => {
   // ── Strategie 3: Snel veranderende API — Network First, 3s timeout ──
   if (isApiEndpoint(url.pathname) && isFastChangingApi(url.pathname)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
+      caches.open(CACHE_API).then(async (cache) => {
         try {
           const response = await fetchWithTimeout(event.request, 3000);
-          if (response.ok) cache.put(event.request, response.clone());
+          if (response.ok) {
+            cache.put(event.request, response.clone());
+          }
           return response;
-        } catch {
+        } catch (err) {
+          console.warn('[SW] Network timeout of offline - terugvallen op cache:', event.request.url);
           const cached = await cache.match(event.request);
           return cached || new Response(JSON.stringify({ error: 'Offline', cached: false }), {
             status: 503,
@@ -160,19 +191,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Strategie 4: Stabiele API endpoints — Stale While Revalidate ──
+  // ── Strategie 4: Stabiele API endpoints — Network First met cache fallback ──
   if (isApiEndpoint(url.pathname)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(event.request);
-        // Altijd op de achtergrond vernieuwen
-        const networkFetch = fetch(event.request).then((response) => {
-          if (response.ok) cache.put(event.request, response.clone());
+      caches.open(CACHE_API).then(async (cache) => {
+        try {
+          const response = await fetch(event.request);
+          if (response.ok) {
+            cache.put(event.request, response.clone());
+          }
           return response;
-        }).catch(() => null);
-
-        // Geef cache direct terug als die er is; anders wacht op netwerk
-        return cached || networkFetch;
+        } catch (err) {
+          console.warn('[SW] Network error - terugvallen op cache:', event.request.url);
+          const cached = await cache.match(event.request);
+          return cached || new Response(JSON.stringify({ error: 'Offline', cached: true }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
       })
     );
     return;
@@ -187,12 +223,19 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'CLEAR_CACHE') {
     event.waitUntil(
-      caches.delete(CACHE_NAME).then(() => {
+      Promise.all([
+        caches.delete(CACHE_STATIC),
+        caches.delete(CACHE_API),
+        caches.delete(CACHE_IMAGES),
+      ]).then(() => {
+        console.log('[SW] Alle caches gewist');
         // Bevestig aan de afzender
         if (event.source) {
-          event.source.postMessage({ type: 'CACHE_CLEARED', cache: CACHE_NAME });
+          event.source.postMessage({ type: 'CACHE_CLEARED', caches: [CACHE_STATIC, CACHE_API, CACHE_IMAGES] });
         }
       })
     );
   }
 });
+
+console.log('[SW] Service Worker geladen, versie:', CACHE_VERSION);
