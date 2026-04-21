@@ -378,11 +378,46 @@ async function skipPrev(machineId) {
   return _playerCmd(machineId, 'skipPrevious');
 }
 
+/**
+ * Haal alle afspeellijsten op uit de Plex-bibliotheek.
+ * Filtert op audioafspeellijsten en retourneert metadata.
+ * @returns {Promise<Array<{ratingKey, title, duration, trackCount, thumb, smart}>>}
+ */
+async function getPlexPlaylists() {
+  const data = await plexGet('/playlists?playlistType=audio');
+  return (data?.MediaContainer?.Metadata || []).map(p => ({
+    ratingKey: p.ratingKey,
+    title: p.title,
+    duration: p.duration,
+    trackCount: p.leafCount,
+    thumb: p.composite ? `${PLEX_URL}${p.composite}?X-Plex-Token=${PLEX_TOKEN}` : null,
+    smart: !!p.smart
+  }));
+}
+
+/**
+ * Haal alle nummers van een Plex-afspeellijst op.
+ * @param {string} ratingKey - ratingKey van de afspeellijst
+ * @returns {Promise<Array<{ratingKey, title, artist, album, duration, thumb}>>}
+ */
+async function getPlaylistTracks(ratingKey) {
+  const data = await plexGet(`/playlists/${ratingKey}/items`);
+  return (data?.MediaContainer?.Metadata || []).map(t => ({
+    ratingKey: t.ratingKey,
+    title: t.title,
+    artist: t.grandparentTitle || t.originalTitle || '',
+    album: t.parentTitle || '',
+    duration: t.duration,
+    thumb: t.parentThumb ? `${PLEX_URL}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+  }));
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
   getPlexStatus, getPlexArtistNames, getPlexLibrary,
   getAlbumRatingKey,
   getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev,
+  getPlexPlaylists, getPlaylistTracks,
   PLEX_TOKEN,
 };
