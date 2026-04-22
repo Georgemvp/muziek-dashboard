@@ -774,6 +774,23 @@ app.get('/api/plex/library', (req, res) => {
   res.json({ connected: ok, artistCount, total, page, limit, library: slice });
 });
 
+app.get('/api/plex/library/all', (req, res) => {
+  if (!PLEX_TOKEN) {
+    return res.json({ ok: false, library: [] });
+  }
+  const lib = getPlexLibrary();
+  // Compact array-formaat: [artist, album, ratingKey, thumb] per item
+  // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
+  const compact = lib.map(x => ([
+    x.artist,
+    x.album,
+    x.ratingKey || '',
+    x.thumb ? `${PLEX_URL}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
+  ]));
+  res.set('Cache-Control', 'private, max-age=300');
+  res.json({ ok: true, total: compact.length, library: compact });
+});
+
 app.get('/api/plex/playlists', async (req, res) => {
   if (!PLEX_TOKEN) {
     res.set('Cache-Control', 'private, max-age=300');
