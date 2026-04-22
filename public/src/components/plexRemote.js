@@ -75,30 +75,46 @@ export async function toggleZonePicker() {
     return;
   }
 
+  const isPlexWeb = c => (c.product || '').toLowerCase().includes('web');
+
   dropdown.innerHTML = clients.map(c => `
-    <button class="plex-zone-item${selected?.machineId === c.machineId ? ' active' : ''}"
+    <button class="plex-zone-item${selected?.machineId === c.machineId ? ' active' : ''}${isPlexWeb(c) ? ' plex-web-zone' : ''}"
       data-machine-id="${c.machineId}"
       data-name="${c.name}"
       data-product="${c.product}">
-      <span class="plex-zone-icon">🔊</span>
+      <span class="plex-zone-icon">${isPlexWeb(c) ? '🌐' : '🔊'}</span>
       <span class="plex-zone-label">
         <span class="plex-zone-item-name">${c.name}</span>
-        <small class="plex-zone-item-product">${c.product}</small>
+        <small class="plex-zone-item-product">${c.product}${isPlexWeb(c) ? ' · ⚠ beperkt' : ''}</small>
       </span>
       ${selected?.machineId === c.machineId ? '<span class="plex-zone-check">✓</span>' : ''}
     </button>
-  `).join('');
+  `).join('') +
+  (clients.some(isPlexWeb)
+    ? `<div class="plex-zone-webwarning">⚠ Plex Web ondersteunt geen afstandsbediening via de API. Gebruik <strong>Plexamp</strong> voor volledige besturing.</div>`
+    : '');
 
   dropdown.querySelectorAll('.plex-zone-item').forEach(btn => {
     btn.addEventListener('click', () => {
+      const product = btn.dataset.product || '';
       setSelectedZone({
         machineId: btn.dataset.machineId,
         name:      btn.dataset.name,
-        product:   btn.dataset.product,
+        product,
       });
       closeZonePicker();
+      // Toon extra waarschuwing als Plex Web geselecteerd
+      if (product.toLowerCase().includes('web')) {
+        _showError('Plex Web ondersteunt geen afstandsbediening. Gebruik Plexamp voor play/pause/skip.');
+      }
     });
   });
+}
+
+/** Controleer of de huidige geselecteerde zone een Plex Web client is. */
+export function isWebZone() {
+  const zone = getSelectedZone();
+  return zone ? (zone.product || '').toLowerCase().includes('web') : false;
 }
 
 // ── Playback commando's ───────────────────────────────────────────────────

@@ -573,6 +573,113 @@ app.post('/api/releases/refresh', (req, res) => res.json(refreshReleases()));
 
 // ── API: Plex ──────────────────────────────────────────────────────────────
 
+// ── Plex Webhook state + SSE ──────────────────────────────────────────────
+// Ontvangt real-time events van de Plex Media Server via webhooks (Plex Pass).
+// Clients kunnen live updates ontvangen via GET /api/plex/stream (SSE).
+
+let _webhookState = null; // laatste ontvangen Plex webhook event
+let _webhookTime  = 0;
+const _sseClients = new Set(); // actieve SSE verbindingen
+
+/** Stuur een SSE event naar alle verbonden clients. */
+function _sseEmit(eventName, data) {
+  const msg = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of _sseClients) {
+    try { client.write(msg); }
+    catch { _sseClients.delete(client); }
+  }
+}
+
+/** Parse de Plex multipart/form-data webhook body en retourneer het JSON payload-object. */
+function parsePlexWebhook(rawBody, contentType) {
+  const bMatch = (contentType || '').match(/boundary=([^\s;]+)/);
+  if (!bMatch) return null;
+  const bodyStr = rawBody.toString('utf8');
+  // Zoek het "payload" form-field in de multipart body
+  const re = /Content-Disposition:\s*form-data;\s*name="payload"[\r\n]+[\r\n]+([\s\S]+?)(?:\r?\n--)/;
+  const m  = bodyStr.match(re);
+  if (!m) return null;
+  try { return JSON.parse(m[1].trim()); } catch { return null; }
+}
+
+/** POST /api/plex/webhook — ontvang Plex webhooks (Plex Pass vereist).
+ *  Configureer in Plex: Instellingen → Webhooks → voeg toe: http://<jouw-server>:9090/api/plex/webhook */
+app.post('/api/plex/webhook',
+  express.raw({ type: ['multipart/form-data', 'application/x-www-form-urlencoded', '*/*'], limit: '10mb' }),
+  (req, res) => {
+    const contentType = req.headers['content-type'] || '';
+    const payload = parsePlexWebhook(req.body, contentType);
+    if (!payload) {
+      logger.warn({ contentType }, 'Plex webhook: kon payload niet parsen');
+      return res.sendStatus(400);
+    }
+
+    const event = payload.event || '';
+    const meta  = payload.Metadata;
+
+    // Alleen muziek-events verwerken
+    if (!meta || meta.type !== 'track') return res.sendStatus(200);
+
+    if (['media.play','media.resume','media.pause','media.stop','media.scrobble'].includes(event)) {
+      const thumb = meta.parentThumb
+        ? `${PLEX_URL}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
+        : (meta.grandparentThumb ? `${PLEX_URL}${meta.grandparentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null);
+
+      _webhookState = {
+        event,
+        playing:        event === 'media.play' || event === 'media.resume',
+        paused:         event === 'media.pause',
+        stopped:        event === 'media.stop',
+        track:          meta.title || '',
+        artist:         meta.grandparentTitle || meta.originalTitle || '',
+        album:          meta.parentTitle || '',
+        ratingKey:      meta.ratingKey      || null,
+        albumRatingKey: meta.parentRatingKey || null,
+        thumb,
+        duration:       meta.duration   || null,
+        viewOffset:     meta.viewOffset  || null,
+        state:          event === 'media.pause' ? 'paused' : event === 'media.stop' ? 'stopped' : 'playing',
+        playerName:     payload.Player?.title || null,
+        playerProduct:  payload.Player?.product || null,
+        machineId:      payload.Player?.machineIdentifier || null,
+        updatedAt:      Date.now(),
+        source:         'webhook',
+      };
+      _webhookTime = Date.now();
+      logger.info({ event, track: meta.title, artist: meta.grandparentTitle }, 'Plex webhook ontvangen');
+      _sseEmit('plex', _webhookState);
+    }
+
+    res.sendStatus(200);
+  }
+);
+
+/** GET /api/plex/stream — SSE stream voor real-time Plex events (webhook doorsturen naar browser). */
+app.get('/api/plex/stream', (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  _sseClients.add(res);
+
+  // Stuur huidige staat direct bij verbinden
+  if (_webhookState) {
+    res.write(`event: plex\ndata: ${JSON.stringify(_webhookState)}\n\n`);
+  }
+
+  // Heartbeat elke 30s zodat de verbinding open blijft
+  const hb = setInterval(() => {
+    try { res.write(':heartbeat\n\n'); }
+    catch { clearInterval(hb); _sseClients.delete(res); }
+  }, 30_000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    _sseClients.delete(res);
+  });
+});
+
 app.get('/api/plex/status', async (req, res) => {
   if (!PLEX_TOKEN) {
     res.set('Cache-Control', 'private, max-age=300');
@@ -594,6 +701,16 @@ app.get('/api/plex/nowplaying', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=30');
     return res.json({ playing: false });
   }
+
+  // ── Webhook state preferentie (real-time, max 2 min oud) ─────────────────
+  if (_webhookState && Date.now() - _webhookTime < 120_000) {
+    const s = _webhookState;
+    res.set('Cache-Control', 'no-store');
+    if (s.stopped) return res.json({ playing: false, source: 'webhook' });
+    return res.json({ ...s, webhookActive: true });
+  }
+
+  // ── Fallback: poll Plex API ───────────────────────────────────────────────
   try {
     const data  = await plexGet('/status/sessions');
     const music = (data?.MediaContainer?.Metadata || []).find(s => s.type === 'track');
@@ -601,33 +718,24 @@ app.get('/api/plex/nowplaying', async (req, res) => {
       res.set('Cache-Control', 'private, max-age=30');
       return res.json({ playing: false });
     }
-
-    // Konstrueer thumb URL met token
-    let thumbUrl = null;
     const thumb = music.parentThumb || music.grandparentThumb;
-    if (thumb) {
-      thumbUrl = `${PLEX_URL}${thumb}?X-Plex-Token=${PLEX_TOKEN}`;
-    }
-
-    // Extraheer player-informatie
-    const playerState = music.Player?.state || 'unknown';
-    const playerName = music.Player?.title || music.Player?.product || null;
-    const machineId = music.Player?.machineIdentifier || null;
-
     res.set('Cache-Control', 'private, max-age=30');
     res.json({
-      playing: true,
-      track: music.title,
-      artist: music.grandparentTitle || music.originalTitle,
-      album: music.parentTitle,
-      ratingKey: music.ratingKey || null,
+      playing:        music.Player?.state !== 'paused',
+      paused:         music.Player?.state === 'paused',
+      track:          music.title,
+      artist:         music.grandparentTitle || music.originalTitle,
+      album:          music.parentTitle,
+      ratingKey:      music.ratingKey      || null,
       albumRatingKey: music.parentRatingKey || null,
-      thumb: thumbUrl,
-      duration: music.duration || null,
-      viewOffset: music.viewOffset || null,
-      state: playerState,
-      playerName,
-      machineId
+      thumb:          thumb ? `${PLEX_URL}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+      duration:       music.duration   || null,
+      viewOffset:     music.viewOffset || null,
+      state:          music.Player?.state || 'playing',
+      playerName:     music.Player?.title || music.Player?.product || null,
+      playerProduct:  music.Player?.product || null,
+      machineId:      music.Player?.machineIdentifier || null,
+      source:         'poll',
     });
   } catch {
     res.set('Cache-Control', 'private, max-age=30');
