@@ -477,44 +477,87 @@ Probeer het handmatig via de \u{1F30A} Tidal-tab.`),s&&(s.disabled=!1,s.textCont
       <span class="blib-count" id="blib-count"></span>
       <button class="tool-btn" id="btn-sync-plex-blib" style="margin-left:8px">\u21BB Sync Plex</button>
     </div>
-    <div class="blib-az-rail" id="blib-az-rail"></div>`}function Is(e){document.getElementById("blib-search")?.addEventListener("input",t=>{X=t.target.value,ye(e)}),document.querySelectorAll(".blib-pill").forEach(t=>{t.addEventListener("click",()=>{V=t.dataset.sort,document.querySelectorAll(".blib-pill").forEach(s=>s.classList.toggle("active",s.dataset.sort===V)),ye(e)})}),document.getElementById("btn-sync-plex-blib")?.addEventListener("click",async()=>{let t=document.getElementById("btn-sync-plex-blib"),s=t.textContent;t.disabled=!0,t.textContent="\u21BB Bezig\u2026";try{try{await k("/api/plex/refresh",{method:"POST"})}catch(i){if(i.name!=="AbortError")throw i}await W(),le=null,await et(),ye(e)}catch{}finally{t.disabled=!1,t.textContent=s}})}function Nt(e,t){return""}function Gt(e){let t=e.target.closest(".blib-play-btn");if(t){e.stopPropagation();let i=t.closest(".blib-album");return i?.dataset.ratingKey&&(K(i.dataset.ratingKey,"music"),Xe({ratingKey:i.dataset.ratingKey,album:i.dataset.album,artist:i.dataset.artist,thumb:i.dataset.thumb})),!0}let s=e.target.closest(".blib-album");return s?.dataset.ratingKey?(ks({ratingKey:s.dataset.ratingKey,album:s.dataset.album,artist:s.dataset.artist,thumb:s.dataset.thumb}),!0):!1}async function tt(){try{await et();let e=document.getElementById("bib-sub-content");e&&a.bibSubTab==="collectie"&&ye(e)}catch(e){e.name!=="AbortError"&&M(e.message)}}async function Ft(e){a.bibSubTab=e;let t=document.getElementById("bib-sub-content"),s=document.getElementById("bib-subtoolbar");if(t){if(document.querySelectorAll(".bib-tab").forEach(i=>i.classList.toggle("active",i.dataset.bibtab===e)),e==="collectie"){if(a.activeSubTab="collectie",s&&(s.innerHTML=Ss(),Is(t)),!document.getElementById("blib-detail-overlay")){let i=document.createElement("div");i.id="blib-detail-overlay",i.className="blib-detail-overlay",document.body.appendChild(i)}_t(),t.innerHTML='<div class="loading"><div class="spinner"></div>Bibliotheek laden\u2026</div>';try{await et(),await ye(t)}catch(i){i.name!=="AbortError"&&M(i.message)}}else if(e==="lijst"){a.activeSubTab="lijst",s&&(s.innerHTML="");let i=t;a.sectionContainerEl=i;try{await me()}finally{a.sectionContainerEl===i&&(a.sectionContainerEl=null)}}}}async function st(){a.activeSubTab="collectie",j(),I.innerHTML=`
-    <div class="bib-layout">
-      <div class="bib-strips-wrap">
-        <div class="scroll-strip">
-          <div class="strip-label">Top artiesten <span class="strip-period">(${oe(a.currentPeriod)})</span></div>
-          <div class="strip-body" id="strip-artists-body">
-            <div class="loading"><div class="spinner"></div></div>
-          </div>
-        </div>
-        <div class="scroll-strip" style="margin-top:16px">
-          <div class="strip-label">Top nummers <span class="strip-period">(${oe(a.currentPeriod)})</span></div>
-          <div class="strip-body" id="strip-tracks-body">
-            <div class="loading"><div class="spinner"></div></div>
-          </div>
-        </div>
-      </div>
+    <div class="blib-az-rail" id="blib-az-rail"></div>`}function Is(e){document.getElementById("blib-search")?.addEventListener("input",t=>{X=t.target.value,ye(e)}),document.querySelectorAll(".blib-pill").forEach(t=>{t.addEventListener("click",()=>{V=t.dataset.sort,document.querySelectorAll(".blib-pill").forEach(s=>s.classList.toggle("active",s.dataset.sort===V)),ye(e)})}),document.getElementById("btn-sync-plex-blib")?.addEventListener("click",async()=>{let t=document.getElementById("btn-sync-plex-blib"),s=t.textContent;t.disabled=!0,t.textContent="\u21BB Bezig\u2026";try{try{await k("/api/plex/refresh",{method:"POST"})}catch(i){if(i.name!=="AbortError")throw i}await W(),le=null,await et(),ye(e)}catch{}finally{t.disabled=!1,t.textContent=s}})}function Nt(e,t){return""}function Gt(e){let t=e.target.closest(".blib-play-btn");if(t){e.stopPropagation();let i=t.closest(".blib-album");return i?.dataset.ratingKey&&(K(i.dataset.ratingKey,"music"),Xe({ratingKey:i.dataset.ratingKey,album:i.dataset.album,artist:i.dataset.artist,thumb:i.dataset.thumb})),!0}let s=e.target.closest(".blib-album");return s?.dataset.ratingKey?(ks({ratingKey:s.dataset.ratingKey,album:s.dataset.album,artist:s.dataset.artist,thumb:s.dataset.thumb}),!0):!1}async function tt(){try{await et();let e=document.getElementById("bib-sub-content");e&&a.bibSubTab==="collectie"&&ye(e)}catch(e){e.name!=="AbortError"&&M(e.message)}}async function Ft(e){a.bibSubTab=e;let t=document.getElementById("bib-sub-content"),s=document.getElementById("bib-subtoolbar");if(t){if(document.querySelectorAll(".bib-tab").forEach(i=>i.classList.toggle("active",i.dataset.bibtab===e)),e==="collectie"){if(a.activeSubTab="collectie",s&&(s.innerHTML=Ss(),Is(t)),!document.getElementById("blib-detail-overlay")){let i=document.createElement("div");i.id="blib-detail-overlay",i.className="blib-detail-overlay",document.body.appendChild(i)}_t(),t.innerHTML='<div class="loading"><div class="spinner"></div>Bibliotheek laden\u2026</div>';try{await et(),await ye(t)}catch(i){i.name!=="AbortError"&&M(i.message)}}else if(e==="lijst"){a.activeSubTab="lijst",s&&(s.innerHTML="");let i=t;a.sectionContainerEl=i;try{await me()}finally{a.sectionContainerEl===i&&(a.sectionContainerEl=null)}}}}async function st() {
+  a.activeSubTab = "collectie";
+  j();
 
-      <div class="bib-subtabs" id="bib-subtabs">
-        <button class="bib-tab${a.bibSubTab==="collectie"?" active":""}" data-bibtab="collectie">Collectie</button>
-        <button class="bib-tab${a.bibSubTab==="lijst"?" active":""}" data-bibtab="lijst">Lijst</button>
-      </div>
+  I.innerHTML = `
+    
+      
+      
+        
+          Bibliotheek laden…
+        
+      
 
-      <div id="bib-subtoolbar"></div>
-      <div class="blib-wrap">
-        <div class="bib-sub-content" id="bib-sub-content">
-          <div class="loading"><div class="spinner"></div>Laden\u2026</div>
-        </div>
-      </div>
+      
+        
+          Top artiesten (${oe(a.currentPeriod)})
+          
+            
+          
+        
+        
+          Top nummers (${oe(a.currentPeriod)})
+          
+            
+          
+        
+      
 
-      <div class="section-block" style="margin-top:32px">
-        <div class="section-hdr">
-          <span class="section-hdr-title">Statistieken</span>
-        </div>
-        <div class="section-content" id="bib-stats-content">
-          <div class="loading"><div class="spinner"></div>Laden\u2026</div>
-        </div>
-      </div>
-    </div>`,I.style.opacity="1",I.style.transform="",document.querySelectorAll(".bib-tab").forEach(e=>e.addEventListener("click",()=>Ft(e.dataset.bibtab))),await Promise.all([H(document.getElementById("strip-artists-body"),()=>at(a.currentPeriod)),H(document.getElementById("strip-tracks-body"),()=>it(a.currentPeriod))]),await Ft(a.bibSubTab),ue(document.getElementById("bib-stats-content"),()=>{let e=document.getElementById("bib-stats-content");return H(e,nt)})}async function at(e){z();let t=a.tabAbort?.signal;try{let s=`topartists:${e}`,i=B(s,300*1e3);if(!i){if(i=await g(`/api/topartists?period=${e}`,{signal:t}),t?.aborted)return;C(s,i)}let n=i.topartists?.artist||[];if(!n.length){x('<div class="empty">Geen data.</div>');return}let d=parseInt(n[0]?.playcount||1),c=`<div class="section-title">Top artiesten \xB7 ${oe(e)}</div><div class="artist-grid">`;for(let l=0;l<n.length;l++){let r=n[l],u=Math.round(parseInt(r.playcount)/d*100),y=O(r.image,"large")||O(r.image),p=T(y,120)||y,f=p?`<img src="${p}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      
+        
+          Statistieken
+        
+        
+          Laden…
+        
+      
+    `;
+
+  I.style.opacity = "1";
+  I.style.transform = "";
+
+  // Toolbar + albumgrid meteen laden
+  let t = document.getElementById("bib-subtoolbar");
+  let e = document.getElementById("bib-sub-content");
+
+  if (t) {
+    t.innerHTML = Ss();
+    Is(e);
+  }
+
+  if (!document.getElementById("blib-detail-overlay")) {
+    let i = document.createElement("div");
+    i.id = "blib-detail-overlay";
+    i.className = "blib-detail-overlay";
+    document.body.appendChild(i);
+  }
+  _t();
+
+  // Albumgrid direct laden
+  try {
+    await et();
+    await ye(e);
+  } catch (i) {
+    if (i.name !== "AbortError") M(i.message);
+  }
+
+  // Strips lazy-loaden
+  ue(document.getElementById("bib-strips-lazy"), () =>
+    Promise.all([
+      H(document.getElementById("strip-artists-body"), () => at(a.currentPeriod)),
+      H(document.getElementById("strip-tracks-body"), () => it(a.currentPeriod))
+    ])
+  );
+
+  // Stats lazy-loaden
+  ue(document.getElementById("bib-stats-content"), () => {
+    let s = document.getElementById("bib-stats-content");
+    return H(s, nt);
+  });
+}
+async function at(e){z();let t=a.tabAbort?.signal;try{let s=`topartists:${e}`,i=B(s,300*1e3);if(!i){if(i=await g(`/api/topartists?period=${e}`,{signal:t}),t?.aborted)return;C(s,i)}let n=i.topartists?.artist||[];if(!n.length){x('<div class="empty">Geen data.</div>');return}let d=parseInt(n[0]?.playcount||1),c=`<div class="section-title">Top artiesten \xB7 ${oe(e)}</div><div class="artist-grid">`;for(let l=0;l<n.length;l++){let r=n[l],u=Math.round(parseInt(r.playcount)/d*100),y=O(r.image,"large")||O(r.image),p=T(y,120)||y,f=p?`<img src="${p}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
            <div class="ag-photo-ph" style="display:none;background:${b(r.name,!0)}">${v(r.name)}</div>`:`<div class="ag-photo-ph" style="background:${b(r.name,!0)}">${v(r.name)}</div>`;c+=`<div class="ag-card">
         <div class="ag-photo" id="agp-${l}" style="view-transition-name: artist-${$e(r.name)}">${f}</div>
         <div class="ag-info">
