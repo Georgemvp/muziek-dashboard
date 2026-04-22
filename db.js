@@ -14,6 +14,44 @@ db.exec(`
     updated_at INTEGER NOT NULL
   )
 `);
+// Index helpt bij prune-queries (DELETE/ORDER BY updated_at)
+db.exec('CREATE INDEX IF NOT EXISTS idx_cache_updated_at ON cache(updated_at)');
+
+// Cache-prune configuratie: voorkomt onbegrensde groei van de cache-tabel.
+const CACHE_MAX_ROWS = Number(process.env.CACHE_MAX_ROWS || 2000);
+const CACHE_MAX_AGE_MS = Number(process.env.CACHE_MAX_AGE_MS || (14 * 24 * 60 * 60 * 1000));
+
+let _cacheWriteCount = 0;
+const CACHE_PRUNE_EVERY_WRITES = 100;
+
+/**
+ * Houd cache performant door oude records en overtollige rows op te ruimen.
+ * @param {object} [opts]
+ * @param {number} [opts.maxRows] - Max aantal rows om te bewaren.
+ * @param {number} [opts.maxAgeMs] - Max ouderdom in ms (Infinity = niet op leeftijd schonen).
+ */
+function pruneCache({ maxRows = CACHE_MAX_ROWS, maxAgeMs = CACHE_MAX_AGE_MS } = {}) {
+  if (Number.isFinite(maxAgeMs) && maxAgeMs > 0) {
+    db.prepare('DELETE FROM cache WHERE updated_at < ?').run(Date.now() - maxAgeMs);
+  }
+
+  if (Number.isFinite(maxRows) && maxRows > 0) {
+    // Verwijder oudste items boven het maximum.
+    db.prepare(`
+      DELETE FROM cache
+      WHERE key IN (
+        SELECT key
+        FROM cache
+        ORDER BY updated_at DESC
+        LIMIT -1 OFFSET ?
+      )
+    `).run(maxRows);
+  }
+}
+
+// Eenmalige startup-prune
+pruneCache();
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS wishlist (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +76,12 @@ function getCache(key, maxAgeMs = Infinity) {
 function setCache(key, data) {
   db.prepare('INSERT OR REPLACE INTO cache (key, data, updated_at) VALUES (?, ?, ?)')
     .run(key, JSON.stringify(data), Date.now());
+
+  _cacheWriteCount++;
+  if (_cacheWriteCount >= CACHE_PRUNE_EVERY_WRITES) {
+    _cacheWriteCount = 0;
+    pruneCache();
+  }
 }
 
 /** Verwijder een cache-entry. */
@@ -91,7 +135,7 @@ db.exec(`
   )
 `);
 // Index voor snelle opzoekacties op artiest+titel
-db.exec(`CREATE INDEX IF NOT EXISTS idx_dl_artist_title ON downloads(artist, title)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_dl_artist_title ON downloads(artist, title)');
 
 /** Sla een gedownload album op in de geschiedenis. */
 function addDownload({ tidal_id, artist, title, url, quality }) {
@@ -126,7 +170,7 @@ function normalizeKey(artist, title) {
 }
 
 module.exports = {
-  getCache, setCache, clearCache, getCacheAge,
+  getCache, setCache, clearCache, getCacheAge, pruneCache,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey
 };
