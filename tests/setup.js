@@ -80,6 +80,13 @@ function removeFromWishlist(id) {
   _tables.wishlist = _tables.wishlist.filter(r => r.id !== id);
 }
 
+function isInWishlist(type, name) {
+  const row = _tables.wishlist.find(r => r.type === type && r.name === name);
+  return row ? row.id : null;
+}
+
+function pruneCache() {}
+
 function addDownload({ tidal_id, artist, title, url, quality }) {
   const id = ++_downloadSeq;
   _tables.downloads.push({ id, tidal_id, artist, title, url, quality, downloaded_at: Date.now() });
@@ -102,8 +109,8 @@ function removeDownload(id) {
 const fakeDbModule    = new Module(DB_JS_PATH, null);
 fakeDbModule.exports  = {
   getCache, setCache, clearCache, getCacheAge,
-  getWishlist, addToWishlist, removeFromWishlist,
-  addDownload, getDownloads, getDownloadKeys, removeDownload,
+  getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
+  addDownload, getDownloads, getDownloadKeys, removeDownload, pruneCache,
 };
 fakeDbModule.filename = DB_JS_PATH;
 fakeDbModule.loaded   = true;
