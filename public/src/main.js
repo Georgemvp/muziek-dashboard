@@ -6,8 +6,6 @@ import { state } from './state.js';
 import { prefersReducedMotion } from './helpers.js';
 import { loadPlexStatus, loadUser, loadDownloadHistory } from './api.js';
 import { loadWishlistState } from './components/wishlist.js';
-import { loadTidarrStatus, startTidarrSSE } from './tabs/downloads.js';
-import { checkSpotifyStatus } from './tabs/ontdek.js';
 import { loadNu, loadPlexNP } from './tabs/nu.js';
 import { initZonePicker } from './components/plexRemote.js';
 
@@ -57,9 +55,12 @@ loadPlexStatus();
 loadPlexNP();
 loadUser();
 loadWishlistState();
-loadTidarrStatus();
 loadDownloadHistory();
-startTidarrSSE();
-checkSpotifyStatus();
 loadNu();
 setInterval(loadPlexNP, 30_000);
+
+import('./tabs/downloads.js').then(({ loadTidarrStatus, startTidarrSSE }) => {
+  loadTidarrStatus();
+  startTidarrSSE();
+});
+import('./tabs/ontdek.js').then(({ checkSpotifyStatus }) => checkSpotifyStatus());

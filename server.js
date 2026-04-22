@@ -57,7 +57,22 @@ const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromW
 const { TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./services/spotify');
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return;
+    }
+    if (filePath.includes(`${path.sep}chunks${path.sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return;
+    }
+    if (/\.(?:css|js|mjs|png|jpg|jpeg|gif|webp|svg|ico|woff2?)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+  }
+}));
 app.use(express.json());
 
 // ── Request logging middleware ─────────────────────────────────────────────
