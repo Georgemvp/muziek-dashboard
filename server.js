@@ -7,6 +7,7 @@ if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
 }
 
 const express    = require('express');
+const compression = require('compression');
 const path       = require('path');
 const rateLimit  = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -39,6 +40,8 @@ app.use('/tidarr-ui', createProxyMiddleware({
     }
   }
 }));
+
+app.use(compression());
 
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
