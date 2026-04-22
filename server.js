@@ -670,6 +670,11 @@ app.get('/api/plex/library/all', (req, res) => {
   if (!PLEX_TOKEN) {
     return res.json({ ok: false, library: [] });
   }
+  const { ok } = getPlexStatus();
+  if (!ok) {
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.json({ ok: false, library: [] });
+  }
   const lib = getPlexLibrary();
   // Compact array-formaat: [artist, album, ratingKey, thumb] per item
   // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
