@@ -16,7 +16,7 @@ const MOCK_ARTISTS = [
 ];
 
 const MOCK_TRACKS = [
-  { name: 'Creep', playcount: '800', url: 'https://www.last.fm/music/Radiohead/_/Creep',
+  { name: 'Creep', artist: { '#text': 'Radiohead', mbid: '' }, playcount: '800', url: 'https://www.last.fm/music/Radiohead/_/Creep',
     date: { uts: String(Math.floor(Date.now() / 1000) - 3600) } },
 ];
 
