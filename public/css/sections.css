@@ -340,7 +340,7 @@
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 /* ── Virtual scroll ── */
-.blib-virtual-container { position:relative; overflow:hidden; }
+.blib-virtual-container { position:relative; }
 .blib-virtual-spacer { width:100%; }
 .blib-virtual-window { position:absolute; left:0; right:0; }
 /* ── A-Z Rail ── */
