@@ -256,116 +256,201 @@
   .widget-grid { grid-template-columns: 1fr; }
 }
 
-/* ── Plex bibliotheek view ── */
-.plib-search {
-  flex: 1; min-width: 180px; max-width: 320px;
-  padding: 5px 14px; border-radius: 7px;
+/* ═══════════════════════════════════════════════════════════
+   Plex Bibliotheek — Apple Music style (REDESIGN)
+   ═══════════════════════════════════════════════════════════ */
+.blib-wrap { position: relative; min-height: 60vh; }
+/* ── Toolbar ── */
+.blib-toolbar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+  flex-wrap: wrap; position: sticky; top: 52px; z-index: 200;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.blib-search {
+  flex: 1; min-width: 200px; max-width: 360px;
+  padding: 8px 14px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface);
   color: var(--text); font-size: 13px; outline: none;
-  transition: border-color 0.18s var(--ease), box-shadow 0.18s;
+  transition: border-color 0.18s, box-shadow 0.18s; font-family: inherit;
 }
-.plib-search:focus { border-color: var(--muted2); box-shadow: 0 0 0 3px rgba(108,92,231,0.1); }
-.plib-search::placeholder { color: var(--muted); }
-.plib-list { display: flex; flex-direction: column; gap: 8px; }
-.plib-artist-block {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); overflow: hidden;
-  transition: box-shadow 0.22s var(--ease), border-color 0.18s;
+.blib-search:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(213,16,7,0.08); }
+.blib-search::placeholder { color: var(--muted); }
+.blib-pill {
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px;
+  background: var(--surface); color: var(--muted2); font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all 0.15s;
+  white-space: nowrap; font-family: inherit;
 }
-.plib-artist-block:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--border-hover); }
-.plib-artist-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 14px; cursor: pointer; user-select: none; transition: background 0.15s;
+.blib-pill:hover { border-color: var(--muted); color: var(--text); }
+.blib-pill.active { background: var(--red); border-color: var(--red); color: #fff; }
+.blib-count { font-size: 12px; color: var(--muted2); margin-left: auto; flex-shrink: 0; }
+/* ── Letter header ── */
+.blib-letter-header {
+  font-size: 22px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.02em; padding: 18px 0 10px;
+  position: sticky; top: 110px; z-index: 100;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
-.plib-artist-header:hover { background: var(--surface2); }
-.plib-avatar {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.8);
+/* ── Album grid ── */
+.blib-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; padding-bottom: 8px;
 }
-.plib-artist-name {
-  flex: 1; font-size: 13px; font-weight: 600;
-  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  cursor: pointer;
+.blib-album { cursor: pointer; position: relative; animation: blib-fadeIn 0.25s ease both; }
+@keyframes blib-fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+.blib-cover {
+  width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+  position: relative; margin-bottom: 8px; background: var(--surface2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.25s;
 }
-.plib-artist-name:hover { text-decoration: underline; }
-.plib-collapse-icon {
-  font-size: 13px; color: var(--muted2); flex-shrink: 0;
-  transition: transform 0.2s var(--ease);
-  display: inline-block;
+.blib-album:hover .blib-cover { transform: scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.blib-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+.blib-cover-ph {
+  width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+  font-size:22px; font-weight:800; color:rgba(255,255,255,0.7);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
-.plib-artist-block.collapsed .plib-collapse-icon { transform: rotate(-90deg); }
-.plib-album-count {
-  font-size: 11px; color: var(--muted2); flex-shrink: 0;
-  background: var(--surface3); padding: 2px 9px; border-radius: 10px;
-  border: 1px solid var(--border); font-weight: 600;
+.blib-cover::after {
+  content:''; position:absolute; inset:0; border-radius:8px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); pointer-events:none;
 }
-.plib-albums {
-  padding: 0 14px 12px;
-  display: flex; flex-direction: column; gap: 2px;
-  overflow: hidden;
+/* Play overlay */
+.blib-play-overlay {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  opacity:0; transition:opacity 0.18s; background:rgba(0,0,0,0.3); border-radius:8px;
 }
-.plib-artist-block.collapsed .plib-albums { display: none; }
-.plib-album-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 5px 8px; border-radius: 6px; transition: background 0.12s;
-  position: relative;
+.blib-album:hover .blib-play-overlay { opacity:1; }
+.blib-play-btn {
+  width:40px; height:40px; border-radius:50%; border:none;
+  background:rgba(255,255,255,0.95); color:#111; font-size:14px;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25); transition:transform 0.12s;
+  padding:0; line-height:1;
 }
-.plib-album-row:hover { background: var(--surface2); }
-.plib-album-row:hover .plib-play-btn { opacity: 1; transform: scale(1); }
-/* Cover art */
-.plib-album-cover {
-  width: 48px; height: 48px; border-radius: 5px; object-fit: cover; flex-shrink: 0;
-  background: var(--surface3);
+.blib-play-btn:hover { transform:scale(1.1); }
+.blib-album-title {
+  font-size:12px; font-weight:600; color:var(--text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3;
 }
-.plib-album-cover-ph {
-  width: 48px; height: 48px; border-radius: 5px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.75);
+.blib-album-artist {
+  font-size:11px; color:var(--muted2);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.plib-album-title {
-  flex: 1; font-size: 12px; color: var(--text); overflow: hidden;
-  white-space: nowrap; text-overflow: ellipsis; line-height: 1.4;
+/* ── Virtual scroll ── */
+.blib-virtual-container { position:relative; overflow:hidden; }
+.blib-virtual-spacer { width:100%; }
+.blib-virtual-window { position:absolute; left:0; right:0; }
+/* ── A-Z Rail ── */
+.blib-az-rail {
+  position:fixed; right: max(12px, calc((100vw - 1120px)/2 - 20px));
+  top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:1px;
+  z-index:300; background:color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  padding:6px 4px; border-radius:12px; border:1px solid var(--border);
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
 }
-/* Play-knop */
-.plib-play-btn {
-  flex-shrink: 0; background: var(--plex); color: #fff;
-  border: none; border-radius: 50%; width: 28px; height: 28px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; cursor: pointer;
-  opacity: 0; transform: scale(0.8);
-  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease), background 0.12s;
-  padding: 0; line-height: 1;
+.blib-az-btn {
+  width:22px; height:18px; display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:700; color:var(--muted2); cursor:pointer;
+  border:none; background:none; border-radius:4px; transition:all 0.12s;
+  padding:0; font-family:inherit;
 }
-.plib-play-btn:hover { background: var(--plex-hover, #e5830d); }
-[data-theme="dark"] .plib-album-cover-ph { color: rgba(255,255,255,0.65); }
-[data-theme="dark"] .plib-album-title { color: var(--text); }
-
-/* ── Plex Playback Controls (widget + panel) ─────────────────────────────── */
-.w-np-controls {
-  display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto;
+.blib-az-btn:hover { background:var(--red); color:#fff; }
+.blib-az-btn.disabled { opacity:0.25; pointer-events:none; }
+/* ── Detail overlay ── */
+.blib-detail-overlay {
+  position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.5);
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; pointer-events:none; transition:opacity 0.2s;
 }
-.plex-ctrl-btn {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 4px 7px; font-size: 13px;
-  color: var(--text); cursor: pointer; line-height: 1;
-  transition: background 0.12s, border-color 0.12s;
+.blib-detail-overlay.open { opacity:1; pointer-events:auto; }
+.blib-detail-panel {
+  background:var(--surface); border-radius:16px; width:min(520px,90vw);
+  max-height:80vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.2);
+  transform:translateY(20px) scale(0.97);
+  transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
 }
-.plex-ctrl-btn:hover { background: var(--plex); border-color: var(--plex); color: #fff; }
-
-/* Play button op album cards in het artiest-panel */
-.plex-play-album-btn {
-  background: var(--plex); border: none; border-radius: 6px;
-  padding: 4px 8px; font-size: 11px; color: #fff; cursor: pointer;
-  margin-left: 4px; flex-shrink: 0; transition: opacity 0.15s;
+.blib-detail-overlay.open .blib-detail-panel { transform:translateY(0) scale(1); }
+.blib-detail-hero { position:relative; padding:28px 28px 20px; display:flex; gap:20px; align-items:flex-end; }
+.blib-detail-cover {
+  width:140px; height:140px; border-radius:10px; overflow:hidden;
+  flex-shrink:0; box-shadow:0 4px 16px rgba(0,0,0,0.15);
 }
-.plex-play-album-btn:hover { opacity: 0.8; }
-
-/* Play button op track-rijen (naast de bestaande preview-knop) */
-.plex-play-track-btn {
-  background: transparent; border: 1px solid var(--plex);
-  border-radius: 6px; padding: 3px 7px; font-size: 11px;
-  color: var(--plex); cursor: pointer; flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
+.blib-detail-cover img { width:100%; height:100%; object-fit:cover; }
+.blib-detail-cover-ph {
+  width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+  font-size:32px; font-weight:800; color:rgba(255,255,255,0.7);
 }
-.plex-play-track-btn:hover { background: var(--plex); color: #fff; }
+.blib-detail-info { flex:1; min-width:0; }
+.blib-detail-title { font-size:20px; font-weight:800; letter-spacing:-0.02em; line-height:1.2; margin-bottom:4px; }
+.blib-detail-artist { font-size:14px; color:var(--red); font-weight:600; cursor:pointer; margin-bottom:12px; }
+.blib-detail-artist:hover { text-decoration:underline; }
+.blib-detail-play-all {
+  display:inline-flex; align-items:center; gap:6px; padding:8px 18px;
+  border:none; border-radius:20px; background:var(--red); color:#fff;
+  font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.15s; font-family:inherit;
+}
+.blib-detail-play-all:hover { opacity:0.85; }
+.blib-detail-close {
+  position:absolute; top:14px; right:14px; width:28px; height:28px;
+  border-radius:50%; border:none; background:var(--surface2); color:var(--text);
+  font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.blib-detail-close:hover { background:var(--surface3); }
+.blib-tracklist { padding:0 28px 28px; }
+.blib-track-row {
+  display:flex; align-items:center; gap:12px; padding:10px 8px;
+  border-radius:8px; transition:background 0.12s; cursor:pointer;
+}
+.blib-track-row:hover { background:var(--surface2); }
+.blib-track-num { width:24px; text-align:center; font-size:13px; color:var(--muted2); font-weight:500; flex-shrink:0; }
+.blib-track-row:hover .blib-track-num { color:var(--red); }
+.blib-track-row:hover .blib-track-num::before { content:'▶'; }
+.blib-track-row:hover .blib-track-num span { display:none; }
+.blib-track-title { flex:1; font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.blib-track-duration { font-size:12px; color:var(--muted2); flex-shrink:0; }
+/* ── Player bar ── */
+.blib-player {
+  position:fixed; bottom:0; left:0; right:0; z-index:1500;
+  background:color-mix(in srgb, var(--surface) 95%, transparent);
+  backdrop-filter:blur(20px) saturate(150%); -webkit-backdrop-filter:blur(20px) saturate(150%);
+  border-top:1px solid var(--border); padding:10px 24px;
+  display:flex; align-items:center; gap:14px;
+  transform:translateY(100%); transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 -4px 20px rgba(0,0,0,0.06);
+}
+.blib-player.visible { transform:translateY(0); }
+.blib-player-cover { width:44px; height:44px; border-radius:6px; overflow:hidden; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+.blib-player-cover img { width:100%; height:100%; object-fit:cover; }
+.blib-player-info { flex:1; min-width:0; }
+.blib-player-title { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.blib-player-artist { font-size:11px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.blib-player-controls { display:flex; align-items:center; gap:8px; }
+.blib-ctrl-btn {
+  width:32px; height:32px; border-radius:50%; border:none; background:none;
+  color:var(--text); font-size:14px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; transition:background 0.12s; padding:0;
+}
+.blib-ctrl-btn:hover { background:var(--surface2); }
+.blib-ctrl-btn.primary { width:36px; height:36px; background:var(--red); color:#fff; font-size:15px; }
+.blib-ctrl-btn.primary:hover { opacity:0.85; background:var(--red); }
+.blib-player-progress { position:absolute; top:-2px; left:0; right:0; height:3px; background:var(--border); }
+.blib-player-progress-fill { height:100%; background:var(--red); width:0%; transition:width 1s linear; }
+/* ── Empty state ── */
+.blib-empty { text-align:center; padding:60px 20px; color:var(--muted2); }
+.blib-empty-icon { font-size:48px; margin-bottom:12px; opacity:0.4; }
+.blib-empty h3 { font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.blib-empty p { font-size:13px; max-width:320px; margin:0 auto; }
+/* ── Responsive ── */
+@media (max-width:1000px) { .blib-grid { grid-template-columns:repeat(5,1fr); gap:14px; } }
+@media (max-width:800px) { .blib-grid { grid-template-columns:repeat(4,1fr); gap:12px; } .blib-az-rail { display:none; } }
+@media (max-width:640px) {
+  .blib-grid { grid-template-columns:repeat(3,1fr); gap:10px; }
+  .blib-detail-hero { flex-direction:column; align-items:center; text-align:center; }
+  .blib-detail-cover { width:160px; height:160px; }
+  .blib-player { padding:8px 16px; gap:10px; }
+}
+@media (max-width:420px) { .blib-grid { grid-template-columns:repeat(2,1fr); gap:8px; } }
