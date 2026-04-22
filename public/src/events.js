@@ -2,48 +2,52 @@
 import { state } from './state.js';
 import { invalidate } from './cache.js';
 import { p } from './helpers.js';
-import {
-  applyRecsFilter, loadOntdek, renderDiscover, renderReleases,
-  loadSpotifyRecs, clearSpotifyRecs, loadRecs, loadReleases, loadDiscover
-} from './tabs/ontdek.js';
-import {
-  renderGaps, loadBibliotheek, buildPlexLibraryHtml, loadPlexLibrary,
-  loadGaps, loadTopArtists, loadTopTracks, loadLoved, loadStats,
-  handlePlexLibraryClick
-} from './tabs/bibliotheek.js';
 import { loadNu, loadRecent, clearDashboardPolling } from './tabs/nu.js';
-import {
-  setTidalView, loadTidarrUI, hideTidarrUI,
-  triggerTidarrDownload, refreshTidarrQueueBadge,
-  stopTidarrQueuePolling, loadDownloads, loadTidal,
-  renderTidalSearch
-} from './tabs/downloads.js';
 import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { playPreview } from './components/player.js';
 import { loadPlexStatus } from './api.js';
 import { contentEl, runWithSection } from './helpers.js';
 
+let ontdekModulePromise;
+let bibliotheekModulePromise;
+let downloadsModulePromise;
+
+function loadOntdekModule() {
+  if (!ontdekModulePromise) ontdekModulePromise = import('./tabs/ontdek.js');
+  return ontdekModulePromise;
+}
+
+function loadBibliotheekModule() {
+  if (!bibliotheekModulePromise) bibliotheekModulePromise = import('./tabs/bibliotheek.js');
+  return bibliotheekModulePromise;
+}
+
+function loadDownloadsModule() {
+  if (!downloadsModulePromise) downloadsModulePromise = import('./tabs/downloads.js');
+  return downloadsModulePromise;
+}
+
 // ── Tab loaders map ────────────────────────────────────────────────────────
 export const tabLoaders = {
   // Hoofd-tabs
   nu:          () => loadNu(),
-  ontdek:      () => loadOntdek(),
-  bibliotheek: () => loadBibliotheek(),
-  downloads:   () => loadDownloads(),
+  ontdek:      async () => (await loadOntdekModule()).loadOntdek(),
+  bibliotheek: async () => (await loadBibliotheekModule()).loadBibliotheek(),
+  downloads:   async () => (await loadDownloadsModule()).loadDownloads(),
   // Backward-compat voor keyboard shortcuts en sub-tab loaders
-  discover:    () => loadDiscover(),
-  gaps:        () => loadGaps(),
+  discover:    async () => (await loadOntdekModule()).loadDiscover(),
+  gaps:        async () => (await loadBibliotheekModule()).loadGaps(),
   recent:      () => loadRecent(),
-  recs:        () => loadRecs(),
-  releases:    () => loadReleases(),
-  topartists:  () => loadTopArtists(state.currentPeriod),
-  toptracks:   () => loadTopTracks(state.currentPeriod),
-  loved:       () => loadLoved(),
-  stats:       () => loadStats(),
+  recs:        async () => (await loadOntdekModule()).loadRecs(),
+  releases:    async () => (await loadOntdekModule()).loadReleases(),
+  topartists:  async () => (await loadBibliotheekModule()).loadTopArtists(state.currentPeriod),
+  toptracks:   async () => (await loadBibliotheekModule()).loadTopTracks(state.currentPeriod),
+  loved:       async () => (await loadBibliotheekModule()).loadLoved(),
+  stats:       async () => (await loadBibliotheekModule()).loadStats(),
   wishlist:    () => loadWishlist(),
-  plexlib:     () => loadPlexLibrary(),
-  tidal:       () => loadTidal(),
+  plexlib:     async () => (await loadBibliotheekModule()).loadPlexLibrary(),
+  tidal:       async () => (await loadDownloadsModule()).loadTidal(),
 };
 
 // ── Hoofd-tab navigatie ────────────────────────────────────────────────────
@@ -72,8 +76,12 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById('tb-gaps')?.classList.toggle('visible', tab === 'gaps');
     document.getElementById('tb-tidal')?.classList.toggle('visible', tab === 'downloads');
 
-    if (tab !== 'downloads') hideTidarrUI();
-    if (tab !== 'downloads') stopTidarrQueuePolling();
+    if (tab !== 'downloads') {
+      loadDownloadsModule().then(m => {
+        m.hideTidarrUI();
+        m.stopTidarrQueuePolling();
+      });
+    }
     if (tab !== 'nu') clearDashboardPolling();
 
     if (document.startViewTransition) {
@@ -110,47 +118,47 @@ document.querySelectorAll('[data-period]').forEach(btn => {
 
 // ── Filter-knoppen (externe toolbars, legacy) ─────────────────────────────
 document.querySelectorAll('[data-filter]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
     state.recsFilter = btn.dataset.filter;
     btn.classList.add(state.recsFilter === 'all' ? 'sel-def' : state.recsFilter === 'new' ? 'sel-new' : 'sel-plex');
-    applyRecsFilter();
+    (await loadOntdekModule()).applyRecsFilter();
   });
 });
 
 document.querySelectorAll('[data-dfilter]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
     state.discFilter = btn.dataset.dfilter;
     btn.classList.add(state.discFilter === 'all' ? 'sel-def' : state.discFilter === 'new' ? 'sel-new' : 'sel-miss');
-    renderDiscover();
+    (await loadOntdekModule()).renderDiscover();
   });
 });
 
 document.querySelectorAll('[data-gsort]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
     btn.classList.add('sel-def');
     state.gapsSort = btn.dataset.gsort;
-    renderGaps();
+    (await loadBibliotheekModule()).renderGaps();
   });
 });
 
 document.querySelectorAll('[data-rtype]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
     btn.classList.add('sel-def');
     state.releasesFilter = btn.dataset.rtype;
-    renderReleases();
+    (await loadOntdekModule()).renderReleases();
   });
 });
 
 document.querySelectorAll('[data-rsort]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
     btn.classList.add('sel-def');
     state.releasesSort = btn.dataset.rsort;
-    renderReleases();
+    (await loadOntdekModule()).renderReleases();
   });
 });
 
@@ -159,26 +167,28 @@ document.getElementById('btn-refresh-releases')?.addEventListener('click', async
   state.lastReleases = null;
   invalidate('releases');  // Wis cache VOOR de fetch
   try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
-  loadReleases();
+  (await loadOntdekModule()).loadReleases();
 });
 
 document.getElementById('btn-refresh-discover')?.addEventListener('click', async () => {
   state.lastDiscover = null;
   invalidate('discover');  // Wis cache VOOR de fetch
   try { await p('/api/discover/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
-  loadDiscover();
+  (await loadOntdekModule()).loadDiscover();
 });
 
 document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () => {
   state.lastGaps = null;
   try { await p('/api/gaps/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
-  loadGaps();
+  (await loadBibliotheekModule()).loadGaps();
 });
 
 // ── Plex lib zoeken (externe toolbar) ────────────────────────────────────
 document.getElementById('plib-search')?.addEventListener('input', e => {
   if (!state.plexLibData || state.activeSubTab !== 'collectie') return;
-  contentEl.innerHTML = buildPlexLibraryHtml(state.plexLibData, e.target.value);
+  loadBibliotheekModule().then(m => {
+    contentEl.innerHTML = m.buildPlexLibraryHtml(state.plexLibData, e.target.value);
+  });
 });
 
 document.getElementById('btn-sync-plex')?.addEventListener('click', async () => {
@@ -189,7 +199,7 @@ document.getElementById('btn-sync-plex')?.addEventListener('click', async () => 
     try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await loadPlexStatus();
     state.plexLibData = null;
-    if (state.activeSubTab === 'collectie') await loadPlexLibrary();
+    if (state.activeSubTab === 'collectie') await (await loadBibliotheekModule()).loadPlexLibrary();
   } catch {}
   finally { btn.disabled = false; btn.textContent = orig; }
 });
@@ -211,7 +221,7 @@ document.getElementById('tidal-search')?.addEventListener('input', e => {
   const q = e.target.value.trim();
   state.tidalSearchTimeout = setTimeout(() => {
     if (state.activeSubTab === 'tidal' && state.tidalView === 'search')
-      renderTidalSearch(q);
+      loadDownloadsModule().then(m => m.renderTidalSearch(q));
   }, 400);
 });
 
@@ -221,7 +231,7 @@ document.getElementById('panel-close')?.addEventListener('click', closeArtistPan
 // ── Globale event delegation (klikken) ────────────────────────────────────
 document.addEventListener('click', async e => {
   // Plex bibliotheek knoppen (▶ play + artiest-header collapse)
-  if (handlePlexLibraryClick(e)) return;
+  if ((await loadBibliotheekModule()).handlePlexLibraryClick(e)) return;
 
   // Play-knop → audio preview
   const playBtn = e.target.closest('.play-btn');
@@ -326,7 +336,7 @@ document.addEventListener('click', async e => {
         if (!res.ok || !data.ok) throw new Error(data.error || 'download mislukt');
         dlBtn.textContent = '✓ Toegevoegd';
         dlBtn.classList.add('downloaded');
-        refreshTidarrQueueBadge();
+        (await loadDownloadsModule()).refreshTidarrQueueBadge();
       } catch (err) {
         alert('Downloaden mislukt: ' + err.message);
         dlBtn.textContent = orig; dlBtn.disabled = false;
@@ -334,7 +344,7 @@ document.addEventListener('click', async e => {
       return;
     }
     const { dlartist, dlalbum } = dlBtn.dataset;
-    await triggerTidarrDownload(dlartist, dlalbum, dlBtn);
+    await (await loadDownloadsModule()).triggerTidarrDownload(dlartist, dlalbum, dlBtn);
     return;
   }
 
@@ -364,7 +374,7 @@ document.addEventListener('click', async e => {
     document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
     state.recsFilter = inlineFilter.dataset.filter;
     inlineFilter.classList.add(state.recsFilter==='all'?'sel-def':state.recsFilter==='new'?'sel-new':'sel-plex');
-    applyRecsFilter();
+    (await loadOntdekModule()).applyRecsFilter();
     return;
   }
 
@@ -377,9 +387,9 @@ document.addEventListener('click', async e => {
     const secRel = document.getElementById('sec-releases-content');
     if (secRel && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secRel;
-      renderReleases();
+      (await loadOntdekModule()).renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
-    } else { renderReleases(); }
+    } else { (await loadOntdekModule()).renderReleases(); }
     return;
   }
 
@@ -392,9 +402,9 @@ document.addEventListener('click', async e => {
     const secRel = document.getElementById('sec-releases-content');
     if (secRel && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secRel;
-      renderReleases();
+      (await loadOntdekModule()).renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
-    } else { renderReleases(); }
+    } else { (await loadOntdekModule()).renderReleases(); }
     return;
   }
 
@@ -407,9 +417,9 @@ document.addEventListener('click', async e => {
     const secDisc = document.getElementById('sec-discover-content');
     if (secDisc && state.activeTab === 'ontdek') {
       state.sectionContainerEl = secDisc;
-      renderDiscover();
+      (await loadOntdekModule()).renderDiscover();
       if (state.sectionContainerEl === secDisc) state.sectionContainerEl = null;
-    } else { renderDiscover(); }
+    } else { (await loadOntdekModule()).renderDiscover(); }
     return;
   }
 
@@ -420,9 +430,9 @@ document.addEventListener('click', async e => {
     state.gapsSort = inlineGsort.dataset.gsort;
     inlineGsort.classList.add('sel-def');
     if (state.activeTab === 'gaps') {
-      renderGaps();
+      (await loadBibliotheekModule()).renderGaps();
     } else {
-      renderGaps();
+      (await loadBibliotheekModule()).renderGaps();
     }
     return;
   }
@@ -434,8 +444,9 @@ document.addEventListener('click', async e => {
     if (state.activeMood === mood) {
       state.activeMood = null;
       document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood', 'loading'));
-      clearSpotifyRecs();
-      loadOntdek();
+      const ontdek = await loadOntdekModule();
+      ontdek.clearSpotifyRecs();
+      ontdek.loadOntdek();
       return;
     }
     state.activeMood = mood;
@@ -449,11 +460,11 @@ document.addEventListener('click', async e => {
       clr.addEventListener('click', () => {
         state.activeMood = null;
         document.querySelectorAll('[data-mood]').forEach(b => b.classList.remove('sel-mood','loading'));
-        clearSpotifyRecs(); loadOntdek();
+        loadOntdekModule().then(m => { m.clearSpotifyRecs(); m.loadOntdek(); });
       });
       itb.appendChild(sep); itb.appendChild(clr);
     }
-    loadSpotifyRecs(mood);
+    (await loadOntdekModule()).loadSpotifyRecs(mood);
     return;
   }
 
@@ -464,12 +475,12 @@ document.addEventListener('click', async e => {
     if (view === 'tidarr') {
       document.getElementById('tb-tidal')?.classList.remove('visible');
       document.getElementById('tb-tidarr-ui')?.classList.add('visible');
-      loadTidarrUI();
+      (await loadDownloadsModule()).loadTidarrUI();
     } else {
-      hideTidarrUI();
+      (await loadDownloadsModule()).hideTidarrUI();
       document.getElementById('tb-tidal')?.classList.add('visible');
       document.getElementById('tb-tidarr-ui')?.classList.remove('visible');
-      setTidalView(view);
+      (await loadDownloadsModule()).setTidalView(view);
     }
     return;
   }
@@ -482,7 +493,7 @@ document.addEventListener('click', async e => {
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', async e => {
   if (e.key === 'Escape') {
     closeArtistPanel();
     document.getElementById('search-results').classList.remove('open');
@@ -495,10 +506,10 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'r' && !inInput) {
-    if (state.activeTab === 'ontdek')           loadOntdek();
-    else if (state.activeTab === 'bibliotheek') loadBibliotheek();
-    else if (state.activeTab === 'gaps')        loadGaps();
-    else tabLoaders[state.activeTab]?.();
+    if (state.activeTab === 'ontdek')           (await loadOntdekModule()).loadOntdek();
+    else if (state.activeTab === 'bibliotheek') (await loadBibliotheekModule()).loadBibliotheek();
+    else if (state.activeTab === 'gaps')        (await loadBibliotheekModule()).loadGaps();
+    else await tabLoaders[state.activeTab]?.();
     return;
   }
   if (!inInput && /^[1-5]$/.test(e.key)) {
