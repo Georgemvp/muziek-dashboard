@@ -1290,6 +1290,12 @@ app.get('/api/tidarr/stream', async (req, res) => {
   const ac = new AbortController();
   req.on('close', () => ac.abort());
 
+  // Stuur elke 25s een keepalive comment zodat de verbinding open blijft
+  // en ERR_INCOMPLETE_CHUNKED_ENCODING wordt voorkomen bij idle streams.
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) res.write(': keepalive\n\n');
+  }, 25_000);
+
   try {
     const upstream = await fetch(sseUrl, { signal: ac.signal });
     const reader   = upstream.body.getReader();
@@ -1300,7 +1306,8 @@ app.get('/api/tidarr/stream', async (req, res) => {
       res.write(dec.decode(value, { stream: true }));
     }
   } catch { /* verbinding gesloten */ }
-  res.end();
+  clearInterval(heartbeat);
+  if (!res.writableEnded) res.end();
 });
 
 // ── API: Spotify mood-aanbevelingen ───────────────────────────────────────────

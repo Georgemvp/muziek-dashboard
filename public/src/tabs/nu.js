@@ -18,14 +18,16 @@ export function clearDashboardPolling() {
 // ── Plex Nu Bezig (globale header, ook buiten dashboard) ──────────────────
 export async function loadPlexNP() {
   const wrap = document.getElementById('plex-np-wrap');
+  if (!wrap) return;
   try {
     const d = await fetch('/api/plex/nowplaying').then(r => r.json());
+    if (!wrap.isConnected) return; // element kan weg zijn na async fetch
     wrap.innerHTML = d.playing
       ? `<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
            <div class="card-info"><div class="card-title">${esc(d.track)}</div>
            <div class="card-sub">${esc(d.artist)}${d.album ? ' · '+esc(d.album) : ''}</div></div></div>`
       : '';
-  } catch { wrap.innerHTML = ''; }
+  } catch { if (wrap.isConnected) wrap.innerHTML = ''; }
 }
 
 // ── Widget-label lookup ───────────────────────────────────────────────────

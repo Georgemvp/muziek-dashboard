@@ -57,7 +57,10 @@ loadUser();
 loadWishlistState();
 loadDownloadHistory();
 loadNu();
-setInterval(loadPlexNP, 30_000);
+// Alleen de header-pill bijwerken als de Nu-tab NIET actief is.
+// Op de Nu-tab doet de dashboard-poller (dw_nuLuisteren) dit al,
+// anders dubbele aanroepen naar /api/plex/nowplaying.
+setInterval(() => { if (state.activeTab !== 'nu') loadPlexNP(); }, 30_000);
 
 import('./tabs/downloads.js').then(({ loadTidarrStatus, startTidarrSSE }) => {
   loadTidarrStatus();
