@@ -24,8 +24,8 @@
   flex-direction: column;
   height: 100dvh;
   overflow-y: auto;
-  background: var(--surface1);
-  border-right: 1px solid var(--border);
+  background: #000000;
+  border-right: 1px solid rgba(255,255,255,0.06);
   transition: width var(--transition-normal), left var(--transition-normal),
               transform var(--transition-normal);
   z-index: 100;
@@ -80,14 +80,27 @@
 }
 
 .nav-item:hover {
-  background: var(--surface2);
+  background: rgba(255,255,255,0.05);
   color: var(--text-primary);
 }
 
 .nav-item.active {
-  background: var(--surface3);
-  color: var(--text-primary);
-  font-weight: 600;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  position: relative;
+}
+
+/* Rode indicator links naast actief item */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
 }
 
 .nav-item svg,
@@ -250,8 +263,10 @@
   align-items: center;
   gap: 12px;
   padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   flex-shrink: 0;
 }
 
@@ -286,9 +301,9 @@
 .search-input {
   width: 100%;
   padding: 8px 36px 8px 14px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-family: var(--font-body);
@@ -352,8 +367,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   min-height: 0;
   flex-shrink: 0;
   overflow-x: auto;
