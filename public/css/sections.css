@@ -15,7 +15,7 @@
 }
 
 .album-card:hover {
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .album-card-art {
@@ -522,7 +522,7 @@
 }
 
 .blib-album { cursor: pointer; position: relative; transition: transform var(--transition-fast); }
-.blib-album:hover { transform: translateY(-2px); }
+.blib-album:hover { transform: none; }
 
 @keyframes blib-fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
@@ -532,7 +532,7 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: transform 0.2s, box-shadow 0.25s;
 }
 
-.blib-album:hover .blib-cover { transform: none; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+.blib-album:hover .blib-cover { transform: none; box-shadow: none; }
 .blib-cover img { width:100%; height:100%; object-fit:cover; display:block; }
 
 .blib-cover-ph {
@@ -645,7 +645,7 @@
 }
 
 .blib-artist-card:hover {
-  transform: translateY(-4px);
+  transform: none;
 }
 
 .blib-artist-photo {
@@ -848,7 +848,7 @@
 }
 
 .blib-playlist-card:hover {
-  transform: translateY(-4px);
+  transform: none;
 }
 
 .blib-playlist-cover {
@@ -1396,7 +1396,7 @@
 }
 
 .blib-album-detail-card:hover {
-  transform: translateY(-4px);
+  transform: none;
 }
 
 .blib-album-detail-cover {
@@ -1462,7 +1462,7 @@
 }
 
 .blib-genre-artist-card:hover {
-  transform: translateY(-4px);
+  transform: none;
 }
 
 .blib-genre-artist-card .blib-artist-photo {
