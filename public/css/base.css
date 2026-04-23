@@ -1,124 +1,346 @@
-/* ── Reset ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ═══════════════════════════════════════════════════════════════════
+   base.css — Design Token System
+   Muziek-client (Apple Music / Plexamp stijl)
+   Donker thema als default, licht als alternatief.
+   Bevat: tokens, reset, keyframes. Geen layout of components.
+   ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Theme variabelen (light default, dark via data-theme) ── */
+
+/* ── Typografie ── */
+:root {
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text',    'Segoe UI', system-ui, sans-serif;
+  --font-mono:    'SF Mono', 'Fira Code', 'Fira Mono', 'Consolas', monospace;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  28px;
+
+  /* ── Spacing ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 40px;
+  --space-8: 64px;
+
+  /* ── Border radius ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* ── Transitions ── */
+  --transition-fast:   120ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-normal: 200ms cubic-bezier(0.2, 0, 0, 1);
+  --ease:              cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── Layout constanten ── */
+  --player-height:     72px;
+  --sidebar-width:    220px;
+  --sidebar-collapsed: 64px;
+  --art-radius:         8px;
+
+  /* ── View Transition richting (behouden voor bestaande tab-animaties) ── */
+  --tab-direction: -1;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   DONKER THEMA — default
+   ══════════════════════════════════════════════════════════════════ */
 :root,
+[data-theme="dark"] {
+  /* Achtergrond & surfaces */
+  --bg:       #0D0D0D;
+  --surface1: #141414;
+  --surface2: #1C1C1F;
+  --surface3: #242428;
+
+  /* Backwards-compat aliassen (voor bestaande components) */
+  --surface:  var(--surface1);
+
+  /* Borders */
+  --border:       #2C2C30;
+  --border-hover: #3C3C42;
+
+  /* Tekst */
+  --text-primary:   #F2F2F7;
+  --text-secondary: #AEAEB2;
+  --text-muted:     #636366;
+
+  /* Backwards-compat aliassen */
+  --text:   var(--text-primary);
+  --muted:  var(--text-muted);
+  --muted2: var(--text-secondary);
+
+  /* Accent — warm oranje (Plex-achtig) */
+  --accent:          #FF8C00;
+  --accent-hover:    #FF9D20;
+  --accent-muted:    rgba(255, 140, 0, 0.15);
+  --accent-glow:     rgba(255, 140, 0, 0.25);
+
+  /* Backwards-compat Plex-kleur aliassen */
+  --plex:    var(--accent);
+  --plex-bg: var(--accent-muted);
+  --plex-glow: var(--accent-glow);
+
+  /* Status-kleuren */
+  --red:       #FF453A;
+  --green:     #30D158;
+  --green-bg:  rgba(48, 209, 88, 0.12);
+  --new:       #BF5AF2;
+  --new-bg:    rgba(191, 90, 242, 0.13);
+
+  /* Shadows — subtiel op donker */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40),
+               0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.50),
+               0 2px 6px  rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.65),
+               0 4px  16px rgba(0, 0, 0, 0.45);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   LICHT THEMA — alternatief
+   ══════════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  --red: #d51007;
-  --plex: #e5a00d;
-  --plex-bg: rgba(229,160,13,0.13);
-  --plex-glow: rgba(229,160,13,0.18);
-  --new: #6c5ce7;
-  --new-bg: rgba(108,92,231,0.13);
-  --green: #00b894;
-  --green-bg: rgba(0,184,148,0.1);
-  --bg: #F5F5F7;
-  --surface: #FFFFFF;
+  /* Achtergrond & surfaces */
+  --bg:       #F2F2F7;
+  --surface1: #FFFFFF;
   --surface2: #F9F9FB;
   --surface3: #EFEFEF;
-  --border: #E5E5EA;
-  --border-hover: #D0D0D5;
-  --text: #1D1D1F;
-  --muted: #86868B;
-  --muted2: #6E6E73;
-  --radius: 12px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03);
-  --shadow-md: 0 2px 12px rgba(0,0,0,0.06);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --surface:  var(--surface1);
+
+  /* Borders */
+  --border:       #E0E0E6;
+  --border-hover: #C8C8D0;
+
+  /* Tekst */
+  --text-primary:   #1C1C1E;
+  --text-secondary: #636366;
+  --text-muted:     #AEAEB2;
+
+  --text:   var(--text-primary);
+  --muted:  var(--text-muted);
+  --muted2: var(--text-secondary);
+
+  /* Accent */
+  --accent:       #E07000;
+  --accent-hover: #C86000;
+  --accent-muted: rgba(224, 112, 0, 0.12);
+  --accent-glow:  rgba(224, 112, 0, 0.20);
+
+  --plex:      var(--accent);
+  --plex-bg:   var(--accent-muted);
+  --plex-glow: var(--accent-glow);
+
+  /* Status-kleuren */
+  --red:       #FF3B30;
+  --green:     #34C759;
+  --green-bg:  rgba(52, 199, 89, 0.12);
+  --new:       #AF52DE;
+  --new-bg:    rgba(175, 82, 222, 0.13);
+
+  /* Shadows — luchtig op licht */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06),
+               0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08),
+               0 2px 6px  rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12),
+               0 4px  12px rgba(0, 0, 0, 0.08);
 }
-[data-theme="dark"] {
-  --red: #d51007;
-  --plex: #e5a00d;
-  --plex-bg: rgba(229,160,13,0.13);
-  --plex-glow: rgba(229,160,13,0.18);
-  --new: #6c5ce7;
-  --new-bg: rgba(108,92,231,0.13);
-  --green: #00b894;
-  --green-bg: rgba(0,184,148,0.1);
-  --bg: #0c0c0d;
-  --surface: #161618;
-  --surface2: #1f1f22;
-  --surface3: #27272b;
-  --border: #2a2a2e;
-  --border-hover: #3a3a40;
-  --text: #f0f0f0;
-  --muted: #5a5a62;
-  --muted2: #888892;
-  --radius: 12px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.2);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-}
-/* Fallback voor wanneer data-theme nog niet is gezet */
+
+
+/* ── Systeemvoorkeur fallback (geen data-theme gezet) ── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0c0c0d; --surface: #161618; --surface2: #1f1f22; --surface3: #27272b;
-    --border: #2a2a2e; --text: #f0f0f0; --muted: #5a5a62; --muted2: #888892;
+    --bg:       #0D0D0D;
+    --surface1: #141414;
+    --surface2: #1C1C1F;
+    --surface3: #242428;
+    --surface:  #141414;
+    --border:        #2C2C30;
+    --border-hover:  #3C3C42;
+    --text-primary:  #F2F2F7;
+    --text-secondary:#AEAEB2;
+    --text-muted:    #636366;
+    --text:   #F2F2F7;
+    --muted:  #636366;
+    --muted2: #AEAEB2;
+    --accent:        #FF8C00;
+    --accent-hover:  #FF9D20;
+    --accent-muted:  rgba(255, 140, 0, 0.15);
+    --accent-glow:   rgba(255, 140, 0, 0.25);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.40), 0 1px 2px rgba(0,0,0,0.30);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.35);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.45);
   }
 }
 
-/* ── View Transitions API ── */
-:root {
-  --tab-direction: -1;
-}
-::view-transition-old(root) { animation: fade-out 0.15s ease-in; }
-::view-transition-new(root) { animation: fade-in 0.2s ease-out; }
 
-/* ── Globale keyframes ── */
-@keyframes fade-out {
-  to { opacity: 0; transform: translateY(-4px) translateX(calc(-8px * var(--tab-direction))); }
+/* ══════════════════════════════════════════════════════════════════
+   MINIMALE RESET
+   ══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin:  0;
+  padding: 0;
 }
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px) translateX(calc(8px * var(--tab-direction))); }
+
+img, video, svg {
+  max-width: 100%;
+  display: block;
 }
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size:   var(--text-base);
+  background:  var(--bg);
+  color:       var(--text-primary);
+  line-height: 1.5;
+  min-height:  100vh;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLING (webkit)
+   ══════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width:  6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background:    var(--border);
+  border-radius: var(--radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Gevraagde keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0   0   var(--accent-glow),
+                0 0 8px 2px var(--accent-muted);
+  }
+  50% {
+    box-shadow: 0 0 0   6px transparent,
+                0 0 20px 4px var(--accent-glow);
+  }
+}
+
+/* View Transitions API (behouden voor tab-navigatie) */
+::view-transition-old(root) { animation: vt-fade-out 0.15s ease-in; }
+::view-transition-new(root) { animation: vt-fade-in  0.20s ease-out; }
+
+@keyframes vt-fade-out {
+  to {
+    opacity:   0;
+    transform: translateY(-4px) translateX(calc(-8px * var(--tab-direction)));
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity:   0;
+    transform: translateY(4px) translateX(calc(8px * var(--tab-direction)));
+  }
+}
+
+/* Aanvullende animaties (al in gebruik door components) */
 @keyframes fadeUpScale {
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
+
 @keyframes fadeInFromLeft {
   from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: translateX(0); }
 }
+
 @keyframes fadeUpBounce {
   from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes slideInFromRight {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
-}
+
 @keyframes rotatePhotoHover {
-  0%   { transform: rotate(0deg) scale(1); }
-  100% { transform: rotate(2deg) scale(1.05); }
+  0%   { transform: rotate(0deg)  scale(1); }
+  100% { transform: rotate(2deg)  scale(1.05); }
 }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
 @keyframes np-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(213,16,7,0.15); }
-  50%       { box-shadow: 0 0 20px rgba(213,16,7,0.3); }
+  0%, 100% { box-shadow: 0 0  8px 0px var(--accent-muted); }
+  50%       { box-shadow: 0 0 20px 4px var(--accent-glow); }
 }
+
 @keyframes shimmer {
-  0%   { background-position: 200% 0; }
+  0%   { background-position:  200% 0; }
   100% { background-position: -200% 0; }
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes pulse-preview {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(213,16,7,0.5); }
-  50%       { box-shadow: 0 0 0 7px rgba(213,16,7,0); }
+  0%, 100% { box-shadow: 0 0 0 0px var(--accent-glow); }
+  50%       { box-shadow: 0 0 0 7px transparent; }
 }
-
-/* ── Body & app wrapper ── */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-}
-.app { max-width: 1120px; margin: 0 auto; padding: 0 1rem 5rem; }
-
-/* ── Content transition ── */
-#content { transition: opacity 0.15s ease, transform 0.15s ease; }
