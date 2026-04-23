@@ -515,4 +515,250 @@ module.exports = function(app, deps) {
       res.status(500).json({ ok: false, error: e.message });
     }
   });
+
+  // ── /api/plex/artists ─────────────────────────────────────────────────────
+  // GET alle artiesten uit Plex. Cached voor 10 minuten.
+  app.get('/api/plex/artists', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json({ artists: [] });
+    }
+
+    try {
+      // Controleer cache (10 minuten)
+      const cacheKey = 'api:plex:artists:all';
+      const cached = getCache(cacheKey, 600_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=600');
+        return res.json(cached);
+      }
+
+      // Verkrijg muziek section key
+      const sections = await plexGet('/library/sections');
+      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+      if (!music) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json({ artists: [] });
+      }
+
+      // Haal alle artiesten op (type=8)
+      const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
+      const artistMeta = data?.MediaContainer?.Metadata || [];
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      // Map artiesten naar vereist formaat en sorteer op naam
+      const artists = artistMeta
+        .map(a => ({
+          ratingKey: a.ratingKey,
+          title: a.title,
+          thumb: a.thumb ? `${plexStreamUrl}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          albumCount: a.leafCount || 0,
+          genre: (a.Genre && Array.isArray(a.Genre) ? a.Genre.map(g => g.tag).join(', ') : a.Genre?.tag || '')
+        }))
+        .sort((a, b) => a.title.localeCompare(b.title, 'nl', { sensitivity: 'base' }));
+
+      const result = { artists };
+      setCache(cacheKey, result);
+      res.set('Cache-Control', 'private, max-age=600');
+      res.json(result);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex artists ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=300');
+      res.status(500).json({ error: e.message, artists: [] });
+    }
+  });
+
+  // ── /api/plex/tracks ──────────────────────────────────────────────────────
+  // GET nummers uit Plex met optioneel filtering op artiest/album en paginatie.
+  app.get('/api/plex/tracks', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=60');
+      return res.json({ tracks: [], total: 0, limit: 100, offset: 0 });
+    }
+
+    try {
+      const artist = (req.query.artist || '').trim().toLowerCase();
+      const album = (req.query.album || '').trim().toLowerCase();
+      const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+      // Verkrijg muziek section key
+      const sections = await plexGet('/library/sections');
+      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+      if (!music) {
+        res.set('Cache-Control', 'private, max-age=60');
+        return res.json({ tracks: [], total: 0, limit, offset });
+      }
+
+      // Haal alle nummers op (type=10)
+      const data = await plexGet(`/library/sections/${music.key}/all?type=10`);
+      const trackMeta = data?.MediaContainer?.Metadata || [];
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      // Filter op artiest en/of album
+      let filtered = trackMeta.map(t => ({
+        ratingKey: t.ratingKey,
+        title: t.title,
+        artist: t.grandparentTitle || t.originalTitle || '',
+        album: t.parentTitle || '',
+        duration: t.duration || 0,
+        trackNumber: t.index || 0,
+        thumb: t.parentThumb ? `${plexStreamUrl}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+      }));
+
+      if (artist) {
+        filtered = filtered.filter(t => t.artist.toLowerCase().includes(artist));
+      }
+      if (album) {
+        filtered = filtered.filter(t => t.album.toLowerCase().includes(album));
+      }
+
+      const total = filtered.length;
+      const slice = filtered.slice(offset, offset + limit);
+
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json({ tracks: slice, total, limit, offset });
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex tracks ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=60');
+      res.status(500).json({ error: e.message, tracks: [], total: 0 });
+    }
+  });
+
+  // ── /api/plex/genres ──────────────────────────────────────────────────────
+  // GET alle genres met artiesten gegroepeerd per genre.
+  app.get('/api/plex/genres', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json({ genres: [] });
+    }
+
+    try {
+      // Controleer cache (10 minuten)
+      const cacheKey = 'api:plex:genres:all';
+      const cached = getCache(cacheKey, 600_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=600');
+        return res.json(cached);
+      }
+
+      // Verkrijg muziek section key
+      const sections = await plexGet('/library/sections');
+      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+      if (!music) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json({ genres: [] });
+      }
+
+      // Haal alle artiesten op om genres te extraheren
+      const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
+      const artistMeta = data?.MediaContainer?.Metadata || [];
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      // Groepeer artiesten per genre
+      const genreMap = new Map();
+      for (const artist of artistMeta) {
+        const genres = (artist.Genre && Array.isArray(artist.Genre)) ? artist.Genre : (artist.Genre ? [artist.Genre] : []);
+        const genreList = genres.map(g => (typeof g === 'string' ? g : g.tag));
+
+        for (const genre of genreList) {
+          if (!genreMap.has(genre)) {
+            genreMap.set(genre, []);
+          }
+          genreMap.get(genre).push({
+            title: artist.title,
+            thumb: artist.thumb ? `${plexStreamUrl}${artist.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+            ratingKey: artist.ratingKey
+          });
+        }
+      }
+
+      // Converteer naar array en sorteer op genre naam
+      const genres = Array.from(genreMap.entries())
+        .map(([genre, artists]) => ({
+          genre,
+          artistCount: artists.length,
+          artists: artists.sort((a, b) => a.title.localeCompare(b.title, 'nl', { sensitivity: 'base' }))
+        }))
+        .sort((a, b) => a.genre.localeCompare(b.genre));
+
+      const result = { genres };
+      setCache(cacheKey, result);
+      res.set('Cache-Control', 'private, max-age=600');
+      res.json(result);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex genres ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=300');
+      res.status(500).json({ error: e.message, genres: [] });
+    }
+  });
+
+  // ── /api/plex/artists/:ratingKey ──────────────────────────────────────────
+  // GET detail van één artiest met albums.
+  app.get('/api/plex/artists/:ratingKey', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=60');
+      return res.json({ artist: null });
+    }
+
+    try {
+      const { ratingKey } = req.params;
+
+      // Controleer cache per artiest (5 minuten)
+      const cacheKey = `api:plex:artist:${ratingKey}`;
+      const cached = getCache(cacheKey, 300_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json(cached);
+      }
+
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      // Haal artiest-metadata op
+      const artistData = await plexGet(`/library/metadata/${ratingKey}`);
+      const artistMeta = artistData?.MediaContainer?.Metadata?.[0];
+      if (!artistMeta) {
+        res.set('Cache-Control', 'private, max-age=60');
+        return res.status(404).json({ error: 'Artiest niet gevonden' });
+      }
+
+      // Haal albums op (children)
+      const albumsData = await plexGet(`/library/metadata/${ratingKey}/children`);
+      const albumMeta = albumsData?.MediaContainer?.Metadata || [];
+
+      const albums = albumMeta.map(a => ({
+        ratingKey: a.ratingKey,
+        title: a.title,
+        year: a.year || null,
+        thumb: a.thumb ? `${plexStreamUrl}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        trackCount: a.leafCount || 0
+      }));
+
+      // Haal alle genres voor deze artiest
+      const genres = (artistMeta.Genre && Array.isArray(artistMeta.Genre))
+        ? artistMeta.Genre.map(g => typeof g === 'string' ? g : g.tag)
+        : (artistMeta.Genre ? [typeof artistMeta.Genre === 'string' ? artistMeta.Genre : artistMeta.Genre.tag] : []);
+
+      const totalTracks = albums.reduce((sum, a) => sum + a.trackCount, 0);
+
+      const result = {
+        artist: {
+          ratingKey: artistMeta.ratingKey,
+          title: artistMeta.title,
+          thumb: artistMeta.thumb ? `${plexStreamUrl}${artistMeta.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          albums,
+          genres,
+          totalTracks
+        }
+      };
+
+      setCache(cacheKey, result);
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(result);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex artist detail ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=60');
+      res.status(500).json({ error: e.message });
+    }
+  });
 };
