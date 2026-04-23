@@ -52,9 +52,8 @@ const { getDeezerImage }                                            = require('.
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
-const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus } = require('./services/tidarr');
+const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus, TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
-const { TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./services/spotify');
 
 app.use(express.static(path.join(__dirname, 'public'), {
