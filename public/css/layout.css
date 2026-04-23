@@ -336,6 +336,29 @@
 }
 
 
+.filter-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.filter-btn:hover {
+  background: var(--surface2);
+}
+
+
 /* ── Content area ────────────────────────────────────────────────── */
 .content-area {
   flex: 1;

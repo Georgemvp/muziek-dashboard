@@ -21,9 +21,6 @@
 
 /* ── Mobiel: toon bottom nav, hide desktop tabs ── */
 @media (max-width: 768px) {
-  .bottom-nav { display: flex; }
-  .tabs { display: none; }
-  .app { padding-bottom: 70px; }
 
   /* Artiest panel als bottom sheet */
   .panel-overlay { align-items: flex-end; justify-content: stretch; }
@@ -43,7 +40,7 @@
   .section-hdr { gap: 8px; }
   .section-hdr-title { font-size: 14px; }
   .inline-toolbar { gap: 4px; }
-  .tool-btn { padding: 4px 9px; font-size: 11px; }
+  .filter-btn { padding: 4px 9px; font-size: 11px; }
   .section-block { padding: 0 12px 18px; }
   .discover-grid { grid-template-columns: 1fr; }
 }
