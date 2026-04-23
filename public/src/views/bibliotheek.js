@@ -1161,10 +1161,10 @@ async function blibShowGenresTab(container) {
 
   container.innerHTML = `<div class="blib-genres-grid">
     ${genres.map(g => {
-      const color = hashStringToHSL(g.name);
+      const color = hashStringToHSL(g.genre);
       const count = g.artistCount || 0;
-      return `<div class="blib-genre-card" data-genre="${esc(g.name)}" style="background: ${color}">
-        <div class="blib-genre-name">${esc(g.name)}</div>
+      return `<div class="blib-genre-card" data-genre="${esc(g.genre)}" style="background: ${color}">
+        <div class="blib-genre-name">${esc(g.genre)}</div>
         <div class="blib-genre-count">${count} artiest${count !== 1 ? 'en' : ''}</div>
       </div>`;
     }).join('')}
