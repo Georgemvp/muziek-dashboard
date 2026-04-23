@@ -1,6 +1,7 @@
 // ── Audio preview ─────────────────────────────────────────────────────────
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
+import { getSelectedZone, pauseZone, skipZone } from './plexRemote.js';
 
 export const playerState = {
   previewAudio: new Audio(),
@@ -161,73 +162,86 @@ export function initPlayer() {
 
   // ── Play/Pause button ──────────────────────────────────────────
   playBtn?.addEventListener('click', async () => {
-    try {
-      const res = await fetch('/api/plex/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'playpause' }),
-      });
-      if (!res.ok) console.warn('[Player] Play/pause failed');
-    } catch (e) {
-      console.error('[Player] Play/pause error:', e);
+    const zone = getSelectedZone();
+    if (!zone) {
+      console.warn('[Player] No zone selected');
+      return;
+    }
+
+    // Web player
+    if (zone.machineId === '__web__') {
+      pauseWebPlayer();
+      // Toggle button text
+      if (playBtn.textContent === '▶') {
+        playBtn.textContent = '⏸';
+      } else {
+        playBtn.textContent = '▶';
+      }
+    } else {
+      // Remote Plex client
+      await pauseZone();
     }
   });
 
   // ── Next/Prev buttons ──────────────────────────────────────────
   nextBtn?.addEventListener('click', async () => {
-    try {
-      const res = await fetch('/api/plex/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'skip', direction: 'next' }),
-      });
-      if (!res.ok) console.warn('[Player] Skip next failed');
-    } catch (e) {
-      console.error('[Player] Skip next error:', e);
+    const zone = getSelectedZone();
+    if (!zone) return;
+
+    // Web player: skip not yet implemented
+    if (zone.machineId === '__web__') {
+      // TODO: Implement web queue/skip when queue management is added
+      return;
     }
+
+    // Remote Plex client
+    await skipZone('next');
   });
 
   prevBtn?.addEventListener('click', async () => {
-    try {
-      const res = await fetch('/api/plex/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'skip', direction: 'prev' }),
-      });
-      if (!res.ok) console.warn('[Player] Skip prev failed');
-    } catch (e) {
-      console.error('[Player] Skip prev error:', e);
+    const zone = getSelectedZone();
+    if (!zone) return;
+
+    // Web player: skip not yet implemented
+    if (zone.machineId === '__web__') {
+      // TODO: Implement web queue/skip when queue management is added
+      return;
     }
+
+    // Remote Plex client
+    await skipZone('prev');
   });
 
   // ── Volume control ────────────────────────────────────────────
-  volumeSlider?.addEventListener('input', async (e) => {
+  volumeSlider?.addEventListener('input', (e) => {
+    const zone = getSelectedZone();
     const volume = parseInt(e.target.value);
-    try {
-      await fetch('/api/plex/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'setVolume', volume }),
-      });
-    } catch (e) {
-      console.error('[Player] Volume error:', e);
+
+    if (zone?.machineId === '__web__') {
+      // Set web player volume (0-100 scale)
+      playerState.webPlayerAudio.volume = volume / 100;
+    } else {
+      // Remote Plex clients: volume control is unreliable, skip for now
+      // TODO: Implement volume control when reliability improves
     }
   });
 
   // ── Progress bar seeking ───────────────────────────────────────
-  progressBar?.addEventListener('click', async (e) => {
-    if (!playerState.totalDuration) return;
+  progressBar?.addEventListener('click', (e) => {
+    const zone = getSelectedZone();
+    if (!zone) return;
+
     const rect = progressBar.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
-    const seconds = percent * playerState.totalDuration;
-    try {
-      await fetch('/api/plex/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'seek', offset: Math.floor(seconds * 1000) }),
-      });
-    } catch (e) {
-      console.error('[Player] Seek error:', e);
+
+    if (zone.machineId === '__web__') {
+      // Web player: seek if duration is known
+      if (playerState.webPlayerAudio.duration) {
+        playerState.webPlayerAudio.currentTime = percent * playerState.webPlayerAudio.duration;
+      }
+    } else {
+      // Remote Plex clients: seeking not yet implemented
+      // TODO: Implement remote seeking when available
     }
   });
 
@@ -292,6 +306,42 @@ export function initPlayer() {
   playerState.sseEventSource.addEventListener('error', (event) => {
     console.error('[Player] SSE connection error:', event);
     // Optioneel: automatic reconnect logic hier
+  });
+
+  // ── Web Player Audio Events ────────────────────────────────────
+  playerState.webPlayerAudio.addEventListener('timeupdate', () => {
+    const { currentTime, duration } = playerState.webPlayerAudio;
+    if (!duration) return;
+
+    // Update progress bar
+    if (progressFill) {
+      const percent = (currentTime / duration * 100).toFixed(1);
+      progressFill.style.width = percent + '%';
+    }
+
+    // Update time displays
+    if (timeCurrent) {
+      timeCurrent.textContent = _formatTime(currentTime);
+    }
+    if (timeTotal) {
+      timeTotal.textContent = _formatTime(duration);
+    }
+
+    // Update progress bar aria-valuenow
+    if (progressBar) {
+      progressBar.setAttribute('aria-valuenow', Math.round((currentTime / duration) * 100));
+    }
+  });
+
+  playerState.webPlayerAudio.addEventListener('ended', () => {
+    // Reset progress
+    if (progressFill) progressFill.style.width = '0%';
+    if (timeCurrent) timeCurrent.textContent = '0:00';
+    if (timeTotal) timeTotal.textContent = '0:00';
+    if (progressBar) progressBar.setAttribute('aria-valuenow', 0);
+
+    // Reset play button
+    if (playBtn) playBtn.textContent = '▶';
   });
 
   // ── Progress ticker (polling fallback) ──────────────────────

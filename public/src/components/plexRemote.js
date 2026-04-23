@@ -157,6 +157,18 @@ export async function playOnZone(ratingKey, type = 'music') {
     if (data.webStream) {
       try {
         await playWebStream(data.webStream);
+
+        // Update player bar UI with track metadata
+        const titleEl = document.getElementById('player-title');
+        const artistEl = document.getElementById('player-artist');
+        const artEl = document.getElementById('player-art');
+        const playBtn = document.getElementById('player-play');
+
+        if (titleEl) titleEl.textContent = data.track || 'Onbekend nummer';
+        if (artistEl) artistEl.textContent = data.artist || '';
+        if (artEl && data.thumb) artEl.src = data.thumb;
+        if (playBtn) playBtn.textContent = '⏸';
+
         _showPlayFeedback(`${zone.name} (Browser)`);
       } catch (e) {
         console.error('[Plex Remote] web stream fout:', e);
