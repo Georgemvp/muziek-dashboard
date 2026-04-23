@@ -234,45 +234,58 @@ export function initPlayer() {
   // ── SSE Stream listener ────────────────────────────────────────
   playerState.sseEventSource = new EventSource('/api/plex/stream');
 
-  playerState.sseEventSource.addEventListener('nowplaying', (event) => {
+  playerState.sseEventSource.addEventListener('plex', (event) => {
     try {
       const data = JSON.parse(event.data);
+
+      // Update track title and artist
       if (titleEl) titleEl.textContent = data.track || 'Niet aan het afspelen';
       if (artistEl) artistEl.textContent = data.artist || '';
+
+      // Update duration if available
       if (data.duration) playerState.totalDuration = data.duration / 1000; // ms to seconds
+
       // Update play button visual state
       if (playBtn) {
-        playBtn.textContent = data.playing ? '⏸' : '▶';
+        if (data.state === 'paused') {
+          playBtn.textContent = '▶';
+        } else if (data.playing) {
+          playBtn.textContent = '⏸';
+        } else if (data.stopped) {
+          playBtn.textContent = '▶';
+        }
+      }
+
+      // Update progress if viewOffset is available
+      if (data.viewOffset !== undefined && data.viewOffset !== null) {
+        const offset = data.viewOffset / 1000; // ms to seconds
+        playerState.currentTime = offset;
+
+        if (progressFill && playerState.totalDuration) {
+          const percent = (offset / playerState.totalDuration * 100).toFixed(1);
+          progressFill.style.width = percent + '%';
+        }
+
+        if (timeCurrent) {
+          timeCurrent.textContent = _formatTime(offset);
+        }
+        if (timeTotal && playerState.totalDuration) {
+          timeTotal.textContent = _formatTime(playerState.totalDuration);
+        }
+
+        // Update progress bar aria-valuenow
+        if (progressBar && playerState.totalDuration) {
+          progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
+        }
+      }
+
+      // Update album art if available
+      const artEl = document.getElementById('player-art');
+      if (artEl && data.thumb) {
+        artEl.src = data.thumb;
       }
     } catch (e) {
       console.error('[Player] SSE parse error:', e);
-    }
-  });
-
-  playerState.sseEventSource.addEventListener('progress', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      const offset = data.offset / 1000; // ms to seconds
-      playerState.currentTime = offset;
-
-      if (progressFill && playerState.totalDuration) {
-        const percent = (offset / playerState.totalDuration * 100).toFixed(1);
-        progressFill.style.width = percent + '%';
-      }
-
-      if (timeCurrent) {
-        timeCurrent.textContent = _formatTime(offset);
-      }
-      if (timeTotal && playerState.totalDuration) {
-        timeTotal.textContent = _formatTime(playerState.totalDuration);
-      }
-
-      // Update progress bar aria-valuenow
-      if (progressBar && playerState.totalDuration) {
-        progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
-      }
-    } catch (e) {
-      console.error('[Player] Progress parse error:', e);
     }
   });
 
@@ -282,7 +295,13 @@ export function initPlayer() {
   });
 
   // ── Progress ticker (polling fallback) ──────────────────────
+  // Only poll if SSE connection is not open (10 second interval)
   setInterval(async () => {
+    // Only poll if SSE is not connected
+    if (playerState.sseEventSource?.readyState === EventSource.OPEN) {
+      return;
+    }
+
     try {
       const np = await fetch('/api/plex/nowplaying').then(r => r.json());
       if (!np) return;
@@ -295,7 +314,7 @@ export function initPlayer() {
         playBtn.textContent = np.playing ? '⏸' : '▶';
       }
 
-      const offset = (np.offset || 0) / 1000;
+      const offset = (np.viewOffset || 0) / 1000;
       playerState.currentTime = offset;
 
       if (progressFill && playerState.totalDuration) {
@@ -312,7 +331,7 @@ export function initPlayer() {
     } catch (e) {
       // noop - SSE zal dit afhandelen
     }
-  }, 1000);
+  }, 10000);
 
   console.log('[Player] Initialized');
 }
