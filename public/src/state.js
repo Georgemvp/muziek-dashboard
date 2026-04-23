@@ -3,7 +3,7 @@
 
 export const state = {
   // ── Navigatie ───────────────────────────────────────────────────────────
-  activeTab:        'nu',
+  activeTab:        'bibliotheek',
   activeSubTab:     null,
   bibSubTab:        'collectie',
   sectionContainerEl: null,

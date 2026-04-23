@@ -6,7 +6,8 @@ import { state } from './state.js';
 import { prefersReducedMotion } from './helpers.js';
 import { loadPlexStatus, loadUser, loadDownloadHistory } from './api.js';
 import { loadWishlistState } from './components/wishlist.js';
-import { loadNu, loadPlexNP } from './tabs/nu.js';
+import { loadPlexNP } from './tabs/nu.js';
+import { loadBibliotheek } from './tabs/bibliotheek.js';
 import { initZonePicker } from './components/plexRemote.js';
 
 // Laad event-listener modules (side-effecten)
@@ -56,11 +57,11 @@ loadPlexNP();
 loadUser();
 loadWishlistState();
 loadDownloadHistory();
-loadNu();
+loadBibliotheek();
 // Alleen de header-pill bijwerken als de Nu-tab NIET actief is.
 // Op de Nu-tab doet de dashboard-poller (dw_nuLuisteren) dit al,
 // anders dubbele aanroepen naar /api/plex/nowplaying.
-setInterval(() => { if (state.activeTab !== 'nu') loadPlexNP(); }, 30_000);
+setInterval(() => { if (state.activeTab !== 'nu') loadPlexNP(); }, 30_000); // update header-pill buiten Nu-tab
 
 import('./tabs/downloads.js').then(({ loadTidarrStatus, startTidarrSSE }) => {
   loadTidarrStatus();
