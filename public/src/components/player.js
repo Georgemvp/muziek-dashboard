@@ -151,6 +151,63 @@ export async function playQueue(tracks, startIndex = 0) {
   playerState.queue = tracks;
   playerState.queueIndex = startIndex;
   await _playTrackAtIndex(startIndex);
+  renderQueue();
+}
+
+/**
+ * Render the play queue panel with current queue tracks.
+ * Highlights active track and allows clicking to jump to any track.
+ */
+export function renderQueue() {
+  const listEl = document.getElementById('pq-list');
+  if (!listEl) return;
+
+  // Clear existing items
+  listEl.innerHTML = '';
+
+  // Empty queue
+  if (playerState.queue.length === 0) {
+    listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Wachtrij is leeg</div>';
+    return;
+  }
+
+  // Render tracks
+  playerState.queue.forEach((track, index) => {
+    const isActive = index === playerState.queueIndex;
+    const li = document.createElement('li');
+    li.className = `pq-track${isActive ? ' active' : ''}`;
+    li.role = 'listitem';
+
+    const trackNum = document.createElement('div');
+    trackNum.className = 'pq-track-num';
+    trackNum.textContent = (index + 1).toString().padStart(2, '0');
+
+    const trackInfo = document.createElement('div');
+    trackInfo.className = 'pq-track-info';
+
+    const trackTitle = document.createElement('div');
+    trackTitle.className = 'pq-track-title';
+    trackTitle.textContent = track.title || 'Onbekend nummer';
+    trackTitle.title = track.title || 'Onbekend nummer';
+
+    const trackArtist = document.createElement('div');
+    trackArtist.className = 'pq-track-artist';
+    trackArtist.textContent = track.artist || '';
+    trackArtist.title = track.artist || '';
+
+    trackInfo.appendChild(trackTitle);
+    trackInfo.appendChild(trackArtist);
+
+    li.appendChild(trackNum);
+    li.appendChild(trackInfo);
+
+    // Click to play track
+    li.addEventListener('click', async () => {
+      await _playTrackAtIndex(index);
+    });
+
+    listEl.appendChild(li);
+  });
 }
 
 /**
@@ -196,6 +253,7 @@ async function _playTrackAtIndex(index) {
     if (playBtn) playBtn.textContent = '⏸';
 
     playerState.isWebPlaying = true;
+    renderQueue();
   } catch (e) {
     console.error('[Queue] Error playing track at index', index, ':', e);
     playerState.isWebPlaying = false;
@@ -319,6 +377,33 @@ export function initPlayer() {
     }
   });
 
+  // ── Queue panel toggle ──────────────────────────────────────────
+  const queueBtn = document.getElementById('player-queue-btn');
+  const queuePanel = document.getElementById('play-queue-panel');
+  const queueCloseBtn = document.getElementById('pq-close');
+
+  queueBtn?.addEventListener('click', () => {
+    if (queuePanel) {
+      const isVisible = queuePanel.style.display !== 'none';
+      queuePanel.style.display = isVisible ? 'none' : '';
+    }
+  });
+
+  queueCloseBtn?.addEventListener('click', () => {
+    if (queuePanel) {
+      queuePanel.style.display = 'none';
+    }
+  });
+
+  // Close queue panel when clicking outside
+  document.addEventListener('click', (e) => {
+    if (queuePanel && queuePanel.style.display !== 'none') {
+      if (!queuePanel.contains(e.target) && !queueBtn?.contains(e.target)) {
+        queuePanel.style.display = 'none';
+      }
+    }
+  });
+
   // ── SSE Stream listener ────────────────────────────────────────
   playerState.sseEventSource = new EventSource('/api/plex/stream');
 
@@ -421,6 +506,7 @@ export function initPlayer() {
       // Reset play button
       if (playBtn) playBtn.textContent = '▶';
       playerState.isWebPlaying = false;
+      renderQueue();
     }
   });
 
