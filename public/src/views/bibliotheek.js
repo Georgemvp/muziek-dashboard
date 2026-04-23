@@ -969,7 +969,7 @@ async function blibLoadArtists() {
 function blibFilterArtists(artists) {
   const q = blibArtistSearchTerm.toLowerCase().trim();
   if (!q) return artists;
-  return artists.filter(a => (a.name || '').toLowerCase().includes(q));
+  return artists.filter(a => (a.title || '').toLowerCase().includes(q));
 }
 
 function blibRenderArtistsGrid(artists, container) {
@@ -987,15 +987,15 @@ function blibRenderArtistsGrid(artists, container) {
     ${filtered.map(a => {
       const src = a.thumb ? proxyImg(a.thumb, 200) : null;
       const img = src
-        ? `<img src="${esc(src)}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
         : '';
-      const ph = `<div class="blib-artist-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
-      return `<div class="blib-artist-card" data-artist-name="${esc(a.name)}">
+      const ph = `<div class="blib-artist-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
+      return `<div class="blib-artist-card" data-artist-name="${esc(a.title)}">
         <div class="blib-artist-photo">
           ${img}
           ${ph}
         </div>
-        <div class="blib-artist-name">${esc(a.name)}</div>
+        <div class="blib-artist-name">${esc(a.title)}</div>
       </div>`;
     }).join('')}
   </div>`;
