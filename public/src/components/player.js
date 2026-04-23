@@ -2,6 +2,7 @@
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { getSelectedZone, pauseZone, skipZone } from './plexRemote.js';
+import { setAmbientBackground, initAmbient } from './ambient.js';
 
 // ── SVG Icon Strings (Feather/Lucide style) ────────────────────────────────
 const PLAY_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
@@ -323,7 +324,10 @@ async function _playTrackAtIndex(index) {
     if (titleEl) titleEl.textContent = track.title;
     if (artistEl) artistEl.textContent = track.artist;
     if (artEl && (track.thumb || data.thumb)) {
-      artEl.src = track.thumb || data.thumb;
+      const artUrl = track.thumb || data.thumb;
+      artEl.src = artUrl;
+      // Update ambient background
+      await setAmbientBackground(artUrl);
     }
     if (playBtn) playBtn.innerHTML = PAUSE_SVG;
 
@@ -361,6 +365,9 @@ export function initPlayer() {
     console.warn('[Player] Player bar elementen niet gevonden');
     return;
   }
+
+  // Initialize ambient background module
+  initAmbient();
 
   // ── Play/Pause button ──────────────────────────────────────────
   playBtn?.addEventListener('click', async () => {
@@ -536,6 +543,11 @@ export function initPlayer() {
       const artEl = document.getElementById('player-art');
       if (artEl && data.thumb) {
         artEl.src = data.thumb;
+        // Update ambient background
+        setAmbientBackground(data.thumb);
+      } else if (!data.thumb) {
+        // No thumb available, remove ambient effect
+        setAmbientBackground(null);
       }
     } catch (e) {
       console.error('[Player] SSE parse error:', e);
@@ -586,6 +598,10 @@ export function initPlayer() {
       // Reset play button
       if (playBtn) playBtn.innerHTML = PLAY_SVG;
       playerState.isWebPlaying = false;
+
+      // Remove ambient background when playback ends
+      setAmbientBackground(null);
+
       renderQueue();
     }
   });

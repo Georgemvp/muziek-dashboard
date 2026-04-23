@@ -208,6 +208,39 @@
   height: 100dvh;
   overflow: hidden;
   min-width: 0; /* voorkom overflow buiten grid */
+  position: relative;
+}
+
+/* ── Ambient album glow achtergrond (Plexamp-style) ──────────────── */
+.main-area::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 900px 600px at 10% 90%,
+      var(--album-color-1, transparent) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 800px 500px at 90% 20%,
+      var(--album-color-2, transparent) 0%,
+      transparent 50%
+    );
+  opacity: 0;
+  transition: opacity 1.5s ease, background 1.5s ease;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+}
+
+.main-area.has-ambient::before {
+  opacity: 0.12;
+}
+
+.main-area > * {
+  position: relative;
+  z-index: 1;
 }
 
 
