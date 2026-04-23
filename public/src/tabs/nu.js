@@ -472,7 +472,7 @@ export async function loadRecent() {
 
 // ── Composiet loader (wordt aangeroepen vanuit events.js tab-routing) ─────
 export function loadNu() {
-  state.activeView = 'bibliotheek';
+  state.activeView = 'nu';
   hideTidarrUI();
   stopTidarrQueuePolling();
 

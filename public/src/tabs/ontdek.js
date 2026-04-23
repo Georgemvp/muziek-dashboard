@@ -593,7 +593,7 @@ export function setupSectionToggle(sectionId, sectionKey) {
 // ── Composiet loader: Ontdek ──────────────────────────────────────────────
 export async function loadOntdek() {
   loadCollapsibleState();
-  state.activeView = 'bibliotheek';
+  state.activeView = 'ontdek';
   hideTidarrUI();
   stopTidarrQueuePolling();
 
