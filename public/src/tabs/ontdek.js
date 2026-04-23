@@ -15,7 +15,7 @@ export async function checkSpotifyStatus() {
     const data = await apiFetch('/api/spotify/status');
     state.spotifyEnabled = !!data.enabled;
     const tb = document.getElementById('tb-mood');
-    if (state.spotifyEnabled && state.activeSubTab === 'recs') {
+    if (state.spotifyEnabled && state.activeView === 'ontdek') {
       tb.style.display = ''; tb.classList.add('visible');
     } else if (state.spotifyEnabled) {
       tb.style.display = '';
@@ -120,32 +120,34 @@ document.getElementById('btn-clear-mood')?.addEventListener('click', () => {
 document.addEventListener('click', e => {
   const spBtn = e.target.closest('.spotify-play-btn');
   if (!spBtn) return;
+  const ps = state.playerState;
+  if (!ps) return;
   e.stopPropagation();
   const previewUrl = spBtn.dataset.spotifyPreview;
   if (!previewUrl) return;
 
-  if (state.previewBtn === spBtn) {
-    if (state.previewAudio.paused) {
-      state.previewAudio.play(); spBtn.textContent = '⏸'; spBtn.classList.add('playing');
+  if (ps.previewBtn === spBtn) {
+    if (ps.previewAudio.paused) {
+      ps.previewAudio.play(); spBtn.textContent = '⏸'; spBtn.classList.add('playing');
     } else {
-      state.previewAudio.pause(); spBtn.textContent = '▶'; spBtn.classList.remove('playing');
+      ps.previewAudio.pause(); spBtn.textContent = '▶'; spBtn.classList.remove('playing');
     }
     return;
   }
-  if (state.previewBtn) {
-    state.previewAudio.pause();
-    state.previewBtn.textContent = '▶';
-    state.previewBtn.classList.remove('playing');
-    const oldFill = state.previewBtn.closest('.spotify-card')?.querySelector('.play-bar-fill')
-      || state.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+  if (ps.previewBtn) {
+    ps.previewAudio.pause();
+    ps.previewBtn.textContent = '▶';
+    ps.previewBtn.classList.remove('playing');
+    const oldFill = ps.previewBtn.closest('.spotify-card')?.querySelector('.play-bar-fill')
+      || ps.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
     if (oldFill) oldFill.style.width = '0%';
   }
-  state.previewBtn = spBtn;
-  state.previewAudio.src = previewUrl;
-  state.previewAudio.currentTime = 0;
-  state.previewAudio.play().then(() => {
+  ps.previewBtn = spBtn;
+  ps.previewAudio.src = previewUrl;
+  ps.previewAudio.currentTime = 0;
+  ps.previewAudio.play().then(() => {
     spBtn.textContent = '⏸'; spBtn.classList.add('playing');
-  }).catch(() => { spBtn.textContent = '▶'; state.previewBtn = null; });
+  }).catch(() => { spBtn.textContent = '▶'; ps.previewBtn = null; });
 }, true);
 
 // ── Aanbevelingen ─────────────────────────────────────────────────────────
@@ -351,7 +353,7 @@ export async function loadReleases() {
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
       setTimeout(() => {
-        if (state.activeSubTab === 'releases' || state.activeSubTab === null) loadReleases();
+        if (state.activeView === 'ontdek') loadReleases();
       }, 5_000);
       return;
     }
@@ -454,7 +456,7 @@ export async function loadDiscover() {
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
       setTimeout(() => {
-        if (state.activeSubTab === 'discover' || state.activeSubTab === null) loadDiscover();
+        if (state.activeView === 'ontdek') loadDiscover();
       }, 20_000);
       return;
     }
@@ -591,7 +593,7 @@ export function setupSectionToggle(sectionId, sectionKey) {
 // ── Composiet loader: Ontdek ──────────────────────────────────────────────
 export async function loadOntdek() {
   loadCollapsibleState();
-  state.activeSubTab = null;
+  state.activeView = 'bibliotheek';
   hideTidarrUI();
   stopTidarrQueuePolling();
 

@@ -3,7 +3,8 @@
   "version": "3.0.0",
   "private": true,
   "scripts": {
-    "build": "esbuild public/src/main.js --bundle --outdir=public --entry-names=app --chunk-names=chunks/[name]-[hash] --format=esm --splitting --minify --platform=browser",
+    "build:frontend": "rm -f public/chunks/*.js && esbuild public/src/main.js --bundle --outdir=public --entry-names=app --chunk-names=chunks/[name]-[hash] --format=esm --splitting --minify --platform=browser",
+    "build": "npm run build:frontend",
     "dev": "esbuild public/src/main.js --bundle --outdir=public --entry-names=app --chunk-names=chunks/[name]-[hash] --format=esm --splitting --platform=browser --watch",
     "test": "node --test tests/*.test.js",
     "test:watch": "node --test --watch tests/*.test.js"

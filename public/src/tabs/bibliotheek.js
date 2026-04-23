@@ -1168,7 +1168,7 @@ export async function loadGaps() {
       setContent(`<div class="loading"><div class="spinner"></div>
         <div>${esc(d.message)}</div>
         <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-      setTimeout(() => { if (state.activeSubTab === 'gaten') loadGaps(); }, 20_000);
+      setTimeout(() => { if (state.activeView === 'gaps') loadGaps(); }, 20_000);
       return;
     }
     state.lastGaps = d;
