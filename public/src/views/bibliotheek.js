@@ -365,8 +365,15 @@ async function blibRender(container) {
 function blibRenderTabBar() {
   const toolbar = document.getElementById('view-toolbar');
   if (!toolbar) return;
-  const tabBar = document.getElementById('blib-tab-bar');
-  if (!tabBar) return;
+
+  // Vind of maak de tabbar
+  let tabBar = document.getElementById('blib-tab-bar');
+  if (!tabBar) {
+    tabBar = document.createElement('div');
+    tabBar.id = 'blib-tab-bar';
+    tabBar.className = 'blib-tab-bar';
+    toolbar.parentNode.insertBefore(tabBar, toolbar);
+  }
 
   const tabs = ['Albums', 'Artiesten', 'Nummers', 'Genres', 'Playlists'];
   const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists'];
@@ -1585,16 +1592,7 @@ export async function loadBibliotheek() {
   blibDetailItem   = null;
   blibPlaylistKey  = null;
 
-  // Create tab bar above view-toolbar
-  const toolbar = document.getElementById('view-toolbar');
-  if (toolbar && !document.getElementById('blib-tab-bar')) {
-    const tabBar = document.createElement('div');
-    tabBar.id = 'blib-tab-bar';
-    tabBar.className = 'blib-tab-bar';
-    toolbar.parentNode.insertBefore(tabBar, toolbar);
-  }
-
-  // Render tab bar
+  // Render tab bar (creates element if needed)
   blibRenderTabBar();
 
   // Render toolbar in #view-toolbar
