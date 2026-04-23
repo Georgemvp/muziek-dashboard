@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { invalidate } from './cache.js';
 import { p } from './helpers.js';
-import { loadNu, loadRecent, clearDashboardPolling } from './tabs/nu.js';
+import { loadNu, loadRecent, clearDashboardPolling } from './views/nu.js';
 import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { loadPlexStatus } from './api.js';
@@ -14,17 +14,17 @@ let downloadsModulePromise;
 let playerModulePromise;
 
 function loadOntdekModule() {
-  if (!ontdekModulePromise) ontdekModulePromise = import('./tabs/ontdek.js');
+  if (!ontdekModulePromise) ontdekModulePromise = import('./views/ontdek.js');
   return ontdekModulePromise;
 }
 
 function loadBibliotheekModule() {
-  if (!bibliotheekModulePromise) bibliotheekModulePromise = import('./tabs/bibliotheek.js');
+  if (!bibliotheekModulePromise) bibliotheekModulePromise = import('./views/bibliotheek.js');
   return bibliotheekModulePromise;
 }
 
 function loadDownloadsModule() {
-  if (!downloadsModulePromise) downloadsModulePromise = import('./tabs/downloads.js');
+  if (!downloadsModulePromise) downloadsModulePromise = import('./views/downloads.js');
   return downloadsModulePromise;
 }
 function loadPlayerModule() {
