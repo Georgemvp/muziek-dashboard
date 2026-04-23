@@ -116,6 +116,11 @@ export async function playWebStream(streamUrl) {
     await playerState.webPlayerAudio.play();
     playerState.webPlayerActive = true;
   } catch (e) {
+    // Ignore AbortError - happens when user clicks another track while loading
+    if (e.name === 'AbortError') {
+      console.debug('[Web Player] Playback interrupted (user clicked another track)');
+      return;
+    }
     console.error('[Web Player] Afspelen mislukt:', e);
     throw e;
   }
@@ -269,6 +274,11 @@ async function _playTrackAtIndex(index) {
     playerState.isWebPlaying = true;
     renderQueue();
   } catch (e) {
+    // Ignore AbortError - user clicked another track while loading
+    if (e.name === 'AbortError') {
+      console.debug('[Queue] Playback interrupted at index', index);
+      return;
+    }
     console.error('[Queue] Error playing track at index', index, ':', e);
     playerState.isWebPlaying = false;
   }
