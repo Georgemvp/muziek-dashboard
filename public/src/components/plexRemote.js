@@ -146,55 +146,55 @@ export async function playOnZone(ratingKey, type = 'music') {
   }
 
   try {
-    const res  = await fetch('/api/plex/play', {
-      method:  'POST',
+    // Web player: try album first, then fall back to single track
+    if (zone.machineId === '__web__') {
+      try {
+        const albumRes = await fetch(`/api/plex/album/${ratingKey}/tracks`);
+        if (albumRes.ok) {
+          const albumData = await albumRes.json();
+          console.debug('[Plex Remote] Album tracks response:', albumData);
+
+          // If we got tracks, it's an album - play as queue
+          if (albumData.tracks && albumData.tracks.length > 0) {
+            console.info(`[Plex Remote] Found ${albumData.tracks.length} tracks in album`);
+            const queueTracks = albumData.tracks.map(track => ({
+              ratingKey: track.ratingKey,
+              title: track.title || 'Onbekend nummer',
+              artist: track.artist || '',
+              album: track.album || '',
+              duration: track.duration || 0,
+              trackNumber: track.trackNumber || 0,
+              thumb: track.thumb ? `${location.origin}/api/img?url=${encodeURIComponent(track.thumb)}&w=120` : null,
+            }));
+
+            console.debug('[Plex Remote] Queue tracks mapped:', queueTracks.slice(0, 2)); // Log first 2 for inspection
+            await playQueue(queueTracks, 0);
+            _showPlayFeedback(`${zone.name} (Browser) - Album`);
+            return true;
+          } else {
+            console.debug('[Plex Remote] No tracks found in album response');
+          }
+        } else {
+          console.debug('[Plex Remote] Album fetch returned status:', albumRes.status);
+        }
+      } catch (e) {
+        // Not an album or fetch failed - will try single track playback below
+        console.debug('[Plex Remote] Album fetch failed, trying single track:', e.message);
+      }
+    }
+
+    // Single track playback (web or remote)
+    const res = await fetch('/api/plex/play', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ machineId: zone.machineId, ratingKey: String(ratingKey), type }),
+      body: JSON.stringify({ machineId: zone.machineId, ratingKey: String(ratingKey), type }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Afspelen mislukt');
 
-    // Web player playback - gebruik HTML audio element
     if (data.webStream) {
       try {
-        // For web player: check if this is an album by trying to fetch album tracks
-        if (zone.machineId === '__web__') {
-          try {
-            const albumRes = await fetch(`/api/plex/album/${ratingKey}/tracks`);
-            if (albumRes.ok) {
-              const albumData = await albumRes.json();
-              console.debug('[Plex Remote] Album tracks response:', albumData);
-
-              // If we got tracks, it's an album - play as queue
-              if (albumData.tracks && albumData.tracks.length > 0) {
-                console.info(`[Plex Remote] Found ${albumData.tracks.length} tracks in album`);
-                const queueTracks = albumData.tracks.map(track => ({
-                  ratingKey: track.ratingKey,
-                  title: track.title || 'Onbekend nummer',
-                  artist: track.artist || '',
-                  album: track.album || '',
-                  duration: track.duration || 0,
-                  trackNumber: track.trackNumber || 0,
-                  thumb: track.thumb ? `${location.origin}/api/img?url=${encodeURIComponent(track.thumb)}&w=120` : null,
-                }));
-
-                console.debug('[Plex Remote] Queue tracks mapped:', queueTracks.slice(0, 2)); // Log first 2 for inspection
-                await playQueue(queueTracks, 0);
-                _showPlayFeedback(`${zone.name} (Browser) - Album`);
-                return true;
-              } else {
-                console.debug('[Plex Remote] No tracks found in album response');
-              }
-            } else {
-              console.debug('[Plex Remote] Album fetch returned status:', albumRes.status);
-            }
-          } catch (e) {
-            // Not an album or fetch failed - fall through to single track playback
-            console.debug('[Plex Remote] Album fetch failed, treating as single track:', e);
-          }
-        }
-
-        // Single track playback (web or remote)
+        // Single track playback (web player)
         await playWebStream(data.webStream);
 
         // Update player bar UI with track metadata
