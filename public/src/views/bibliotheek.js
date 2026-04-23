@@ -363,34 +363,8 @@ async function blibRender(container) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function blibRenderTabBar() {
-  const toolbar = document.getElementById('view-toolbar');
-  if (!toolbar) return;
-
-  // Vind of maak de tabbar
-  let tabBar = document.getElementById('blib-tab-bar');
-  if (!tabBar) {
-    tabBar = document.createElement('div');
-    tabBar.id = 'blib-tab-bar';
-    tabBar.className = 'blib-tab-bar';
-    toolbar.parentNode.insertBefore(tabBar, toolbar);
-  }
-
-  const tabs = ['Albums', 'Artiesten', 'Nummers', 'Genres', 'Playlists'];
-  const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists'];
-
-  tabBar.innerHTML = tabs.map((name, i) => {
-    const key = keys[i];
-    const active = blibCurrentTab === key ? ' active' : '';
-    return `<button class="blib-tab-btn${active}" data-tab="${key}">${name}</button>`;
-  }).join('');
-
-  tabBar.addEventListener('click', e => {
-    const btn = e.target.closest('.blib-tab-btn');
-    if (btn) {
-      const newTab = btn.dataset.tab;
-      blibSwitchTab(newTab);
-    }
-  });
+  // Tab bar HTML - wordt PREPENDED aan toolbar
+  // Dit wordt gedaan in blibRenderToolbar()
 }
 
 async function blibSwitchTab(tabKey) {
@@ -439,9 +413,23 @@ function blibRenderToolbar() {
   const toolbar = document.getElementById('view-toolbar');
   if (!toolbar) return;
 
+  // Maak tabbar HTML
+  const tabs = ['Albums', 'Artiesten', 'Nummers', 'Genres', 'Playlists'];
+  const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists'];
+  const tabBarHtml = `<div class="blib-tab-bar" id="blib-tab-bar">
+    ${tabs.map((name, i) => {
+      const key = keys[i];
+      const active = blibCurrentTab === key ? ' active' : '';
+      return `<button class="blib-tab-btn${active}" data-tab="${key}">${name}</button>`;
+    }).join('')}
+  </div>`;
+
+  // Maak toolbar content HTML
+  let toolbarContentHtml = '';
+
   // Albums tab toolbar
   if (blibCurrentTab === 'albums') {
-    toolbar.innerHTML = `
+    toolbarContentHtml = `
       <div class="blib-toolbar">
         <input class="blib-search" id="blib-search" type="text"
           placeholder="🔍 Zoek artiest of album…" autocomplete="off"
@@ -480,7 +468,7 @@ function blibRenderToolbar() {
                         blibCurrentTab === 'tracks' ? blibTrackSearchTerm :
                         '';
 
-    toolbar.innerHTML = `
+    toolbarContentHtml = `
       <div class="blib-toolbar">
         <input class="blib-search" id="${searchId}" type="text"
           placeholder="${placeholder}" autocomplete="off"
@@ -488,6 +476,17 @@ function blibRenderToolbar() {
         <button class="tool-btn" id="btn-sync-plex-blib">↻ Sync Plex</button>
       </div>`;
   }
+
+  // Set all HTML at once
+  toolbar.innerHTML = tabBarHtml + toolbarContentHtml;
+
+  // Bind tab bar click handlers
+  document.querySelectorAll('#blib-tab-bar .blib-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newTab = btn.dataset.tab;
+      blibSwitchTab(newTab);
+    });
+  });
 
   blibBindToolbar();
 }
