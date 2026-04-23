@@ -221,30 +221,39 @@ import{a as it,e as C}from"./chunk-HNNUXXVH.js";import{A as M,B as _,E as g,G as
         </div>
       </div>`,()=>wt(i))}catch(i){if(i.name==="AbortError")return;w(i.message)}}function wt(t){if(typeof Chart>"u")return;let i=!window.matchMedia("(prefers-color-scheme: light)").matches,e=i?"#2c2c2c":"#ddd",s=i?"#888":"#777",a=i?"#efefef":"#111";Chart.defaults.color=s,Chart.defaults.borderColor=e;let n=document.getElementById("chart-daily");n&&new Chart(n,{type:"bar",data:{labels:t.dailyScrobbles.map(r=>new Date(r.date+"T12:00:00").toLocaleDateString("nl-NL",{weekday:"short",day:"numeric"})),datasets:[{data:t.dailyScrobbles.map(r=>r.count),backgroundColor:"rgba(213,16,7,0.75)",borderRadius:4}]},options:{responsive:!0,plugins:{legend:{display:!1},tooltip:{callbacks:{label:r=>`${r.raw} scrobbles`}}},scales:{x:{grid:{display:!1},ticks:{color:s}},y:{grid:{color:e},ticks:{color:s},beginAtZero:!0}}}});let o=document.getElementById("chart-top");o&&t.topArtists?.length&&new Chart(o,{type:"bar",data:{labels:t.topArtists.map(r=>r.name),datasets:[{data:t.topArtists.map(r=>r.playcount),backgroundColor:"rgba(229,160,13,0.75)",borderRadius:4}]},options:{indexAxis:"y",responsive:!0,plugins:{legend:{display:!1},tooltip:{callbacks:{label:r=>`${r.raw} plays`}}},scales:{x:{grid:{color:e},ticks:{color:s},beginAtZero:!0},y:{grid:{display:!1},ticks:{color:a,font:{size:11}}}}}});let d=document.getElementById("chart-genres");if(d&&t.genres?.length){let r=["#d51007","#e5a00d","#6c5ce7","#00b894","#fd79a8","#0984e3","#e17055","#a29bfe"];new Chart(d,{type:"doughnut",data:{labels:t.genres.map(c=>c.name),datasets:[{data:t.genres.map(c=>c.count),backgroundColor:r.slice(0,t.genres.length),borderWidth:0}]},options:{responsive:!0,plugins:{legend:{position:"right",labels:{color:s,boxWidth:12,padding:10,font:{size:11}}}}}})}}async function kt(){L("Collectiegaten zoeken...");let t=b.tabAbort?.signal;try{let i=await g("/api/gaps",{signal:t});if(t?.aborted)return;if(i.status==="building"&&(!i.artists||!i.artists.length)){m(`<div class="loading"><div class="spinner"></div>
         <div>${l(i.message)}</div>
-        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`),setTimeout(()=>{b.activeSubTab==="gaten"&&kt()},2e4);return}if(b.lastGaps=i,$t(),i.builtAt&&Date.now()-i.builtAt>864e5){let e=document.createElement("div");e.className="refresh-banner",e.textContent="\u21BB Gaps worden op de achtergrond ververst...";let s=b.sectionContainerEl||document.getElementById("content");s&&s.prepend(e),fetch("/api/gaps/refresh",{method:"POST"}).catch(()=>{})}}catch(i){if(i.name==="AbortError")return;w(i.message)}}function $t(){if(!b.lastGaps)return;let t=[...b.lastGaps.artists||[]];if(!t.length){m('<div class="empty">Geen collectiegaten gevonden \u2014 je hebt alles al! \u{1F389}</div>');let a=document.getElementById("badge-gaps");a&&(a.textContent="0");return}b.gapsSort==="missing"&&t.sort((a,n)=>n.missingAlbums.length-a.missingAlbums.length),b.gapsSort==="name"&&t.sort((a,n)=>a.name.localeCompare(n.name));let i=t.reduce((a,n)=>a+n.missingAlbums.length,0),e=document.getElementById("badge-gaps");e&&(e.textContent=i);let s=`<div class="section-title">${i} ontbrekende albums bij ${t.length} artiesten die je al hebt</div>`;for(let a of t){let n=Math.round(a.ownedCount/a.totalCount*100),o=[V(a.country),a.country,a.startYear].filter(Boolean).join(" \xB7 "),d=S(a.image,56)||a.image,r=d?`<img class="gaps-photo" src="${l(d)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="gaps-photo-ph" style="display:none;background:${f(a.name)}">${y(a.name)}</div>`:`<div class="gaps-photo-ph" style="background:${f(a.name)}">${y(a.name)}</div>`;s+=`
-      <div class="gaps-block">
-        <div class="gaps-header">
-          ${r}
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-              <div class="gaps-artist-name artist-link" data-artist="${l(a.name)}">${l(a.name)}</div>
-              ${J("artist",a.name,"",a.image||"")}
+        <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`),setTimeout(()=>{b.activeSubTab==="gaten"&&kt()},2e4);return}if(b.lastGaps=i,$t(),i.builtAt&&Date.now()-i.builtAt>864e5){let e=document.createElement("div");e.className="refresh-banner",e.textContent="\u21BB Gaps worden op de achtergrond ververst...";let s=b.sectionContainerEl||document.getElementById("content");s&&s.prepend(e),fetch("/api/gaps/refresh",{method:"POST"}).catch(()=>{})}}catch(i){if(i.name==="AbortError")return;w(i.message)}}function At(t){let i=Math.max(0,Number(t.ownedCount)||0),e=Math.max(0,Number(t.missingCount??t.missingAlbums?.length)||0),s=Math.max(i+e,1),a=Math.round(i/s*100),n=S(t.image,64)||t.image,o=n?`<img class="gaps-photo" src="${l(n)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="gaps-photo-ph" style="display:none;background:${f(t.name)}">${y(t.name)}</div>`:`<div class="gaps-photo-ph" style="background:${f(t.name)}">${y(t.name)}</div>`,d=t.missingAlbums||[],r=d.map(c=>{let u=S(c.image,160)||c.image,h=u?`<img class="gaps-album-cover" src="${l(u)}" alt="" loading="lazy" onerror="this.onerror=null;this.remove()">`:'<div class="gaps-album-cover gaps-album-cover-ph">♪</div>';return`<article class="gaps-album-card">
+          <div class="gaps-album-art">${h}</div>
+          <div class="gaps-album-title" title="${l(c.album||'')} ">${l(c.album||'')}</div>
+          <div class="gaps-album-year">${c.year?l(String(c.year)):''}</div>
+          <button class="tool-btn gaps-download-btn download-btn" data-dlartist="${l(t.name)}" data-dlalbum="${l(c.album||'')}" type="button">Download</button>
+        </article>`}).join('');
+return`<details class="gaps-artist-row">
+      <summary class="gaps-row-summary">
+        <div class="gaps-row-left">${o}
+          <div class="gaps-row-main">
+            <div class="gaps-row-title"><span class="gaps-artist-name artist-link" data-artist="${l(t.name)}">${l(t.name)}</span></div>
+            <div class="gaps-row-meta">${i} van ${s} albums</div>
+            <div class="gaps-progress" aria-label="${i} van ${s} albums">
+              <div class="gaps-progress-owned" style="width:${a}%"></div>
             </div>
-            <div class="gaps-artist-meta">${l(o)}</div>
-            ${Y(a.tags,3)}
-            <div style="height:8px"></div>
-            <div class="comp-bar"><div class="comp-fill" style="width:${n}%"></div></div>
-            <div class="comp-text">${a.ownedCount} van ${a.totalCount} albums in Plex
-              &nbsp;\xB7&nbsp; <span style="color:var(--new);font-weight:600">${a.missingAlbums.length} ontbreken</span></div>
           </div>
         </div>
-        <div class="gaps-sub">Ontbrekende albums</div>
-        <div class="gaps-album-grid">`;for(let c of a.missingAlbums)s+=F(c,!1,a.name);s+="</div>",a.allAlbums?.filter(c=>c.inPlex).length>0&&(s+=`<details style="margin-top:12px">
-        <summary style="font-size:11px;color:var(--muted2);cursor:pointer;user-select:none">
-          \u25B8 ${a.ownedCount} albums die je al hebt
-        </summary>
-        <div class="gaps-album-grid" style="margin-top:10px">
-          ${a.allAlbums.filter(c=>c.inPlex).map(c=>F(c,!1,a.name)).join("")}
-        </div>
-      </details>`),s+="</div>"}m(s)}export{rt as a,D as b,Bt as c,et as d,Ft as e,Dt as f,Wt as g,ft as h,Zt as i,Ut as j,qt as k,Nt as l,Vt as m,wt as n,kt as o,$t as p};
+        <button class="tool-btn gaps-download-all" data-artist="${l(t.name)}" type="button">Download alle gaps van ${l(t.name)}</button>
+      </summary>
+      <div class="gaps-row-body">
+        <div class="gaps-album-grid">${r}</div>
+      </div>
+    </details>`}
+function $t(){if(!b.lastGaps)return;let t=[...b.lastGaps.artists||[]],i=(document.getElementById("gaps-search")?.value||"").toLowerCase().trim();i&&(t=t.filter(n=>String(n.name||"").toLowerCase().includes(i))),b.gapsSort==="name"?t.sort((n,o)=>String(n.name||"").localeCompare(String(o.name||""),"nl",{sensitivity:"base"})):t.sort((n,o)=>(o.missingCount??o.missingAlbums?.length??0)-(n.missingCount??n.missingAlbums?.length??0));let e=t.reduce((n,o)=>n+(o.missingCount??o.missingAlbums?.length??0),0),s=document.getElementById("badge-gaps");if(s&&(s.textContent=e),!t.length){m('<div class="empty">Geen collectiegaten gevonden voor deze filter.</div>');return}let a=`<div class="gaps-view-head">
+      <div>
+        <div class="section-title">${e} ontbrekende albums bij ${t.length} artiesten</div>
+      </div>
+      <div class="inline-toolbar gaps-inline-toolbar">
+        <input id="gaps-search" class="gaps-search" type="search" placeholder="Zoek artiest…" value="${l(i)}" />
+        <button class="tool-btn${b.gapsSort==="missing"?" sel-def":""}" data-gsort="missing">Meest ontbrekend</button>
+        <button class="tool-btn${b.gapsSort==="name"?" sel-def":""}" data-gsort="name">A-Z</button>
+        <button class="tool-btn" id="gaps-refresh-btn">↻ Vernieuwen</button>
+      </div>
+    </div>
+    <div class="gaps-list">${t.map(At).join("")}</div>`;m(a);let n=document.getElementById("gaps-search");n&&n.addEventListener("input",()=>{$t()}),document.getElementById("gaps-refresh-btn")?.addEventListener("click",async()=>{b.lastGaps=null;try{await I("/api/gaps/refresh",{method:"POST"})}catch(o){if(o.name!=="AbortError")throw o}await kt()});let o=document.querySelectorAll(".gaps-download-all");o.forEach(d=>{d.addEventListener("click",async r=>{r.preventDefault(),r.stopPropagation();let c=d.dataset.artist||"",u=t.find(H=>H.name===c);if(!u?.missingAlbums?.length)return;d.disabled=!0;let h=d.textContent;d.textContent="⬇ Bezig...";for(let H of u.missingAlbums){let P=document.querySelector(`.gaps-download-btn[data-dlartist="${CSS.escape(c)}"][data-dlalbum="${CSS.escape(H.album||'')}"]`);if(P&&!P.classList.contains("dl-done")){P.textContent="⬇ Bezig...";P.disabled=!0;await j(c,H.album||"",P);P.textContent=P.classList.contains("dl-done")?"✓ Toegevoegd":"Download";P.disabled=!1}}d.textContent="✓ Toegevoegd"})})}}export{rt as a,D as b,Bt as c,et as d,Ft as e,Dt as f,Wt as g,ft as h,Zt as i,Ut as j,qt as k,Nt as l,Vt as m,wt as n,kt as o,$t as p};

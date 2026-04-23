@@ -229,3 +229,24 @@
 .rel-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .rel-deezer-link { font-size: 11px; color: var(--red); text-decoration: none; }
 .rel-deezer-link:hover { text-decoration: underline; }
+
+.gaps-view-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.gaps-inline-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.gaps-search { min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); }
+.gaps-list { display:flex; flex-direction:column; gap:10px; }
+.gaps-artist-row { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.gaps-row-summary { list-style:none; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px; cursor:pointer; }
+.gaps-row-summary::-webkit-details-marker { display:none; }
+.gaps-row-left { display:flex; align-items:center; gap:12px; min-width:0; flex:1; }
+.gaps-row-main { min-width:0; flex:1; }
+.gaps-row-meta { font-size:12px; color:var(--muted2); margin:2px 0 6px; }
+.gaps-progress { height:8px; background:#cfd3da; border-radius:999px; overflow:hidden; }
+.gaps-progress-owned { height:100%; background:#2dbf73; }
+.gaps-row-body { padding:0 12px 12px; }
+.gaps-album-card { border:1px solid var(--border); border-radius:10px; padding:8px; background:var(--surface2); display:flex; flex-direction:column; gap:6px; }
+.gaps-album-art { aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:var(--surface); display:flex; align-items:center; justify-content:center; }
+.gaps-album-cover { width:100%; height:100%; object-fit:cover; }
+.gaps-album-cover-ph { color:var(--muted2); font-size:18px; }
+.gaps-album-title { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gaps-album-year { font-size:11px; color:var(--muted2); }
+.gaps-download-btn.downloaded, .gaps-download-btn.dl-done { color:var(--ok); }
