@@ -47,6 +47,14 @@ async function _loadClients() {
 // ── Zone picker dropdown ──────────────────────────────────────────────────
 
 let _pickerOpen = false;
+let _webAudio   = null;
+
+function _getWebAudio() {
+  if (_webAudio) return _webAudio;
+  _webAudio = new Audio();
+  _webAudio.preload = 'none';
+  return _webAudio;
+}
 
 /** Verberg de zone-dropdown. */
 export function closeZonePicker() {
@@ -142,6 +150,21 @@ export async function playOnZone(ratingKey, type = 'music') {
     await toggleZonePicker();
     return false;
   }
+  if (zone.machineId === '__web__') {
+    try {
+      const audio = _getWebAudio();
+      audio.src = `/api/plex/stream/audio/${encodeURIComponent(String(ratingKey))}`;
+      audio.currentTime = 0;
+      await audio.play();
+      _showPlayFeedback(zone.name);
+      return true;
+    } catch (e) {
+      console.error('[Plex Remote] web play fout:', e);
+      _showError(`Afspelen mislukt: ${e.message}`);
+      return false;
+    }
+  }
+
   try {
     const res  = await fetch('/api/plex/play', {
       method:  'POST',
@@ -163,6 +186,16 @@ export async function playOnZone(ratingKey, type = 'music') {
 export async function pauseZone() {
   const zone = getSelectedZone();
   if (!zone) return;
+  if (zone.machineId === '__web__') {
+    const audio = _getWebAudio();
+    if (!audio.src) return;
+    if (audio.paused) {
+      await audio.play().catch(e => console.warn('[Plex Remote] web resume fout:', e));
+    } else {
+      audio.pause();
+    }
+    return;
+  }
   await fetch('/api/plex/pause', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -174,6 +207,10 @@ export async function pauseZone() {
 export async function skipZone(direction = 'next') {
   const zone = getSelectedZone();
   if (!zone) return;
+  if (zone.machineId === '__web__') {
+    _showError('Volgende/vorige is niet beschikbaar in Web zone vanuit deze lijst.');
+    return;
+  }
   await fetch('/api/plex/skip', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
