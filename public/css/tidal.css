@@ -1,6 +1,21 @@
 /* ── Tidarr / Tidal tab ── */
+.tidal-page { display: flex; flex-direction: column; gap: 10px; }
+.tidal-tabs-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap;
+}
+.seg-tabs { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tidal-tabs-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.badge-inline {
+  display: inline-flex; min-width: 18px; height: 18px; margin-left: 6px;
+  align-items: center; justify-content: center; border-radius: 999px;
+  font-size: 10px; font-weight: 700; padding: 0 5px;
+  background: var(--red); color: #fff;
+}
+.tidal-search-wrap { display: block; }
 .tidal-search {
   flex: 1; min-width: 220px;
+  width: min(560px, 100%);
   padding: 7px 12px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface);
   color: var(--text); font-size: 13px; outline: none;
@@ -95,6 +110,14 @@
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .q-row:hover { border-color: var(--border-hover); box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.q-thumb {
+  width: 48px; height: 48px; border-radius: 6px;
+  object-fit: cover; flex-shrink: 0; background: var(--surface2);
+}
+.q-thumb-ph {
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.85); font-weight: 700; font-size: 14px;
+}
 .q-info { flex: 1; min-width: 0; }
 .q-title  { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-artist { font-size: 12px; color: var(--muted2); margin-top: 1px; cursor: pointer; }
