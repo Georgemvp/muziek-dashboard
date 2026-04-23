@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { prefersReducedMotion, p } from './helpers.js';
-import { loadPlexStatus, loadDownloadHistory } from './api.js';
+import { loadPlexStatus, loadDownloadHistory, loadUser } from './api.js';
+import { loadPlexNP } from './tabs/nu.js';
 import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { loadWishlistState, toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { playPreview } from './components/player.js';
@@ -17,12 +18,14 @@ import './components/search.js';
 const loadBibliotheek = () => import('./tabs/bibliotheek.js');
 const loadOntdek = () => import('./tabs/ontdek.js');
 const loadDownloads = () => import('./tabs/downloads.js');
+const loadNu = () => import('./tabs/nu.js');
 
 const viewTitles = {
   bibliotheek: 'Muziek · Bibliotheek',
   ontdek: 'Muziek · Ontdek',
   gaps: 'Muziek · Gaps',
   downloads: 'Muziek · Downloads',
+  nu: 'Muziek · Nu Bezig',
 };
 
 const views = {
@@ -30,6 +33,7 @@ const views = {
   ontdek: async () => (await loadOntdek()).loadOntdek(),
   gaps: async () => (await loadBibliotheek()).loadGaps(),
   downloads: async () => (await loadDownloads()).loadDownloads(),
+  nu: async () => (await loadNu()).loadNu(),
 };
 
 if (prefersReducedMotion) {
