@@ -283,40 +283,40 @@ require('./routes/misc')(app, deps);
 if (require.main === module) {
   const server = app.listen(PORT, () => {
     logger.info({ port: PORT, address: server.address() }, '✓ Express server listening');
+  });
 
-    // Wacht tot Plex bibliotheek is geladen voordat requests worden geaccepteerd
-    logger.info('🔄 Initializing Plex library...');
+  // Pre-load Plex library bij opstarten (blokkerend)
+  logger.info('🔄 Initializing Plex library...');
+  syncPlexLibrary(true)
+    .then(() => {
+      logger.info({ status: 'ready' }, '✓ Plex library pre-loaded at startup');
+      logger.info('🔄 Initializing discovery services...');
+      initDiscover();
+      initGaps();
+      initReleases();
+      logger.info('✓ All services initialized - app fully operational');
+    })
+    .catch(e => {
+      logger.warn({ err: e, message: e.message }, '⚠ Plex library pre-load failed (will retry on first request)');
+      logger.info('🔄 Initializing discovery services without Plex...');
+      initDiscover();
+      initGaps();
+      initReleases();
+      logger.warn('⚠ App operational but Plex features unavailable');
+    });
+
+  // Automatische Plex achtergrond-sync elke 30 minuten
+  logger.debug('Starting background Plex sync (every 30 minutes)');
+  setInterval(() => {
+    logger.debug('🔄 Running background Plex sync...');
     syncPlexLibrary(true)
       .then(() => {
-        logger.info({ status: 'ready' }, '✓ Plex library loaded and ready');
-        logger.info('🔄 Initializing discovery services...');
-        initDiscover();
-        initGaps();
-        initReleases();
-        logger.info('✓ All services initialized - app fully operational');
+        logger.debug('✓ Background Plex sync completed');
       })
       .catch(e => {
-        logger.warn({ err: e, message: e.message }, '⚠ Plex library initialization failed, continuing without Plex');
-        logger.info('🔄 Initializing discovery services without Plex...');
-        initDiscover();
-        initGaps();
-        initReleases();
-        logger.warn('⚠ App operational but Plex features unavailable');
+        logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed');
       });
-
-    // Automatische Plex achtergrond-sync elke 30 minuten
-    logger.debug('Starting background Plex sync (every 30 minutes)');
-    setInterval(() => {
-      logger.debug('🔄 Running background Plex sync...');
-      syncPlexLibrary(true)
-        .then(() => {
-          logger.debug('✓ Background Plex sync completed');
-        })
-        .catch(e => {
-          logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed');
-        });
-    }, 30 * 60 * 1_000);
-  });
+  }, 30 * 60 * 1_000);
 
   // Graceful shutdown handling
   process.on('SIGTERM', () => {
