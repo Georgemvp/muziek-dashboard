@@ -1,10 +1,17 @@
 // ── Startup validatie ──────────────────────────────────────────────────────
 const logger = require('./logger');
 
+logger.info({
+  nodeEnv: process.env.NODE_ENV || 'development',
+  logLevel: process.env.LOG_LEVEL || 'info',
+  port: process.env.PORT || 80
+}, '═══ LastFM App Starting ═══');
+
 if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
   logger.fatal('LASTFM_API_KEY en LASTFM_USER zijn verplicht. Controleer je .env bestand.');
   process.exit(1);
 }
+logger.info('Required environment variables validated');
 
 const express    = require('express');
 const compression = require('compression');
@@ -17,6 +24,8 @@ const PORT    = process.env.PORT || 80;
 // ── Tidarr UI proxy ────────────────────────────────────────────────────────
 // Alle verzoeken naar /tidarr-ui/ worden doorgestuurd naar de Tidarr container.
 const TIDARR_BASE = (process.env.TIDARR_URL || 'http://tidarr:8484').replace(/\/$/, '');
+logger.info({ tidarrUrl: TIDARR_BASE }, 'Tidarr proxy configured');
+
 app.use('/tidarr-ui', createProxyMiddleware({
   target:       TIDARR_BASE,
   changeOrigin: true,
@@ -29,6 +38,12 @@ app.use('/tidarr-ui', createProxyMiddleware({
       delete proxyRes.headers['x-content-type-options'];
     },
     error: (err, req, res) => {
+      logger.error({
+        err: err.message,
+        code: err.code,
+        target: TIDARR_BASE,
+        path: req.path
+      }, 'Tidarr proxy error');
       res.status(502).send(`
         <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
           <h2>⚠️ Tidarr niet bereikbaar</h2>
@@ -77,33 +92,28 @@ app.use(express.json());
 // ── Request logging middleware ─────────────────────────────────────────────
 // Logt elke inkomende request met method, pad, statuscode en responstijd.
 // Slaat /health en statische bestanden over voor een cleaner logboek.
-app.use((req, res, next) => {
-  const SKIP_PREFIXES = ['/health'];
-  if (SKIP_PREFIXES.some(p => req.path === p || req.path.startsWith('/tidarr-ui'))) {
-    return next();
-  }
-  const t0 = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - t0;
-    const level = res.statusCode >= 500 ? 'error'
-                : res.statusCode >= 400 ? 'warn'
-                : 'info';
-    logger[level]({ method: req.method, path: req.path, status: res.statusCode, ms }, 'request');
-  });
-  next();
-});
+// Ook voegt request IDs toe voor request tracking.
+const { requestLoggingMiddleware } = require('./logger');
+app.use(requestLoggingMiddleware);
 
 // ── Rate limiting ──────────────────────────────────────────────────────────
 
-const rateLimitHandler = (req, res) =>
+const rateLimitHandler = (req, res) => {
+  logger.warn({
+    ip: req.ip,
+    path: req.path,
+    method: req.method
+  }, 'Rate limit exceeded');
   res.status(429).json({
     error:      'Te veel verzoeken, probeer het over een minuut opnieuw',
     retryAfter: 60
   });
+};
 
 // Globale limiter: beschermt alle routes (excl. statische bestanden hierboven)
 // Ruim genoeg voor normale single-user browsing; echte Last.fm-bescherming
 // zit in de outbound throttle in services/lastfm.js.
+logger.info({ window: '60s', maxRequests: 300 }, 'Global rate limiter configured');
 app.use(rateLimit({
   windowMs:      60_000,
   max:           300,
@@ -113,6 +123,7 @@ app.use(rateLimit({
 }));
 
 // API limiter voor /api/*: beschermt tegen extreme burst (bijv. scripts/bots)
+logger.info({ window: '60s', maxRequests: 120 }, 'API rate limiter configured');
 app.use('/api', rateLimit({
   windowMs:      60_000,
   max:           120,
@@ -270,26 +281,68 @@ require('./routes/misc')(app, deps);
 // ── Start ──────────────────────────────────────────────────────────────────
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info({ port: PORT }, 'App gestart');
+  const server = app.listen(PORT, () => {
+    logger.info({ port: PORT, address: server.address() }, '✓ Express server listening');
+
     // Wacht tot Plex bibliotheek is geladen voordat requests worden geaccepteerd
+    logger.info('🔄 Initializing Plex library...');
     syncPlexLibrary(true)
       .then(() => {
-        logger.info('Plex bibliotheek geladen');
+        logger.info({ status: 'ready' }, '✓ Plex library loaded and ready');
+        logger.info('🔄 Initializing discovery services...');
         initDiscover();
         initGaps();
         initReleases();
+        logger.info('✓ All services initialized - app fully operational');
       })
       .catch(e => {
-        logger.warn({ err: e }, 'Plex bibliotheek laden mislukt - app verder zonder Plex');
+        logger.warn({ err: e, message: e.message }, '⚠ Plex library initialization failed, continuing without Plex');
+        logger.info('🔄 Initializing discovery services without Plex...');
         initDiscover();
         initGaps();
         initReleases();
+        logger.warn('⚠ App operational but Plex features unavailable');
       });
+
     // Automatische Plex achtergrond-sync elke 30 minuten
+    logger.debug('Starting background Plex sync (every 30 minutes)');
     setInterval(() => {
-      syncPlexLibrary(true).catch(e => logger.warn({ err: e }, 'Plex achtergrond-sync mislukt'));
+      logger.debug('🔄 Running background Plex sync...');
+      syncPlexLibrary(true)
+        .then(() => {
+          logger.debug('✓ Background Plex sync completed');
+        })
+        .catch(e => {
+          logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed');
+        });
     }, 30 * 60 * 1_000);
+  });
+
+  // Graceful shutdown handling
+  process.on('SIGTERM', () => {
+    logger.warn('SIGTERM received - gracefully shutting down');
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    logger.warn('SIGINT received - gracefully shutting down');
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(0);
+    });
+  });
+
+  // Uncaught exception handler
+  process.on('uncaughtException', (err) => {
+    logger.fatal({ err, message: err.message, stack: err.stack }, '💥 Uncaught exception - crashing');
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error({ reason, promise }, '💥 Unhandled rejection');
   });
 }
 
