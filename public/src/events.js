@@ -50,21 +50,28 @@ export const tabLoaders = {
   tidal:       async () => (await loadDownloadsModule()).loadTidal(),
 };
 
-// ── Hoofd-tab navigatie ────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(btn => {
+// ── Hoofd-navigatie (sidebar nav-items + legacy .tab) ─────────────────────
+function setupNavItem(btn) {
   btn.addEventListener('click', () => {
-    const tab     = btn.dataset.tab;
-    const allTabs = document.querySelectorAll('.tab');
-    const currentTabEl = document.querySelector('.tab.active');
-    const oldIndex = Array.from(allTabs).indexOf(currentTabEl);
-    const newIndex = Array.from(allTabs).indexOf(btn);
+    // Ondersteun zowel data-view (sidebar) als data-tab (legacy)
+    const tab = btn.dataset.view || btn.dataset.tab;
+    if (!tab) return;
+
+    const allNav = document.querySelectorAll('.nav-item, .tab');
+    const currentEl = document.querySelector('.nav-item.active, .tab.active');
+    const oldIndex  = Array.from(allNav).indexOf(currentEl);
+    const newIndex  = Array.from(allNav).indexOf(btn);
     const direction = newIndex > oldIndex ? 'rtl' : 'ltr';
     document.documentElement.style.setProperty('--tab-direction', direction === 'ltr' ? '-1' : '1');
 
-    allTabs.forEach(t => t.classList.remove('active'));
+    allNav.forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     state.activeTab = tab;
     state.sectionContainerEl = null;
+
+    // Wis de view-toolbar bij elke navigatie
+    const viewToolbar = document.getElementById('view-toolbar');
+    if (viewToolbar) viewToolbar.innerHTML = '';
 
     // Abort vorige tab requests
     if (state.tabAbort) state.tabAbort.abort();
@@ -84,6 +91,10 @@ document.querySelectorAll('.tab').forEach(btn => {
     }
     if (tab !== 'nu') clearDashboardPolling();
 
+    // Sync bottom nav badges
+    document.querySelectorAll('.bnav-btn').forEach(b =>
+      b.classList.toggle('active', (b.dataset.view || b.dataset.tab) === tab));
+
     if (document.startViewTransition) {
       document.startViewTransition(async () => {
         try {
@@ -95,16 +106,17 @@ document.querySelectorAll('.tab').forEach(btn => {
         }
       }).finished.catch(() => {});
     } else {
-      try {
-        tabLoaders[tab]?.();
-      } catch (err) {
+      tabLoaders[tab]?.()?.catch?.(err => {
         if (err.name === 'AbortError') return;
         console.error('Tab load error:', err);
         contentEl.innerHTML = `<div class="error-box">⚠️ Laden mislukt: ${err.message}. Druk op R om opnieuw te proberen.</div>`;
-      }
+      });
     }
   });
-});
+}
+
+// Registreer op sidebar nav-items (.nav-item[data-view]) en legacy tabs
+document.querySelectorAll('.nav-item[data-view], .tab[data-tab]').forEach(setupNavItem);
 
 // ── Periode-knoppen ───────────────────────────────────────────────────────
 document.querySelectorAll('[data-period]').forEach(btn => {
@@ -520,20 +532,22 @@ document.addEventListener('keydown', async e => {
   }
 });
 
-// ── Bottom nav ────────────────────────────────────────────────────────────
+// ── Bottom nav (mobiel) ───────────────────────────────────────────────────
 document.querySelectorAll('.bnav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    const desktopTab = document.querySelector(`.tab[data-tab="${tab}"]`);
-    if (desktopTab) desktopTab.click();
+    const tab = btn.dataset.view || btn.dataset.tab;
+    if (!tab) return;
+    // Zoek het bijbehorende sidebar nav-item of legacy tab en klik het
+    const navItem = document.querySelector(
+      `.nav-item[data-view="${tab}"], .tab[data-tab="${tab}"]`
+    );
+    if (navItem) {
+      navItem.click();
+    } else {
+      // Geen bijbehorend nav-item: direct laden
+      setupNavItem(btn);
+      btn.click();
+    }
     document.querySelectorAll('.bnav-btn').forEach(b => b.classList.toggle('active', b === btn));
-  });
-});
-
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.bnav-btn').forEach(b =>
-      b.classList.toggle('active', b.dataset.tab === tab));
   });
 });
