@@ -582,6 +582,7 @@ module.exports = function(app, deps) {
 
   // ── /api/plex/tracks ──────────────────────────────────────────────────────
   // GET nummers uit Plex met optioneel filtering op artiest/album en paginatie.
+  // Cached voor 10 minuten.
   app.get('/api/plex/tracks', async (req, res) => {
     if (!PLEX_TOKEN) {
       res.set('Cache-Control', 'private, max-age=60');
@@ -594,39 +595,36 @@ module.exports = function(app, deps) {
       const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
-      // Ensure library is synced before fetching
-      await syncPlexLibrary(false);
-
-      // Verkrijg muziek section key
-      const sections = await plexGet('/library/sections');
-      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
-      if (!music) {
-        res.set('Cache-Control', 'private, max-age=60');
-        return res.json({ tracks: [], total: 0, limit, offset });
+      // NIEUW: Cache alle tracks voor 10 minuten
+      const cacheKey = 'api:plex:tracks:all';
+      let allTracks = getCache(cacheKey, 600_000);
+      if (!allTracks) {
+        await syncPlexLibrary(false);
+        const sections = await plexGet('/library/sections');
+        const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+        if (!music) {
+          res.set('Cache-Control', 'private, max-age=60');
+          return res.json({ tracks: [], total: 0, limit, offset });
+        }
+        const data = await plexGet(`/library/sections/${music.key}/all?type=10`);
+        const trackMeta = (data?.MediaContainer?.Metadata || []);
+        const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+        allTracks = trackMeta.map(t => ({
+          ratingKey: t.ratingKey,
+          title: t.title || '',
+          artist: t.grandparentTitle || t.originalTitle || '',
+          album: t.parentTitle || '',
+          duration: t.duration || 0,
+          trackNumber: t.index || 0,
+          thumb: t.parentThumb ? `${plexStreamUrl}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+        }));
+        setCache(cacheKey, allTracks);
       }
 
-      // Haal alle nummers op (type=10)
-      const data = await plexGet(`/library/sections/${music.key}/all?type=10`);
-      const trackMeta = (data?.MediaContainer?.Metadata || []);
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-
-      // Filter op artiest en/of album
-      let filtered = trackMeta.map(t => ({
-        ratingKey: t.ratingKey,
-        title: t.title || '',
-        artist: t.grandparentTitle || t.originalTitle || '',
-        album: t.parentTitle || '',
-        duration: t.duration || 0,
-        trackNumber: t.index || 0,
-        thumb: t.parentThumb ? `${plexStreamUrl}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
-      }));
-
-      if (artist) {
-        filtered = filtered.filter(t => t.artist.toLowerCase().includes(artist));
-      }
-      if (album) {
-        filtered = filtered.filter(t => t.album.toLowerCase().includes(album));
-      }
+      // Filter
+      let filtered = allTracks;
+      if (artist) filtered = filtered.filter(t => t.artist.toLowerCase().includes(artist));
+      if (album) filtered = filtered.filter(t => t.album.toLowerCase().includes(album));
 
       const total = filtered.length;
       const slice = filtered.slice(offset, offset + limit);
