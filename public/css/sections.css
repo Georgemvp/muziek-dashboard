@@ -588,7 +588,7 @@
 
 /* ── A-Z Rail ── */
 .blib-az-rail {
-  position:fixed; right: max(12px, calc((100vw - 1120px)/2 - 20px));
+  position:fixed; right: 16px;
   top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:1px;
   z-index:300; background:color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
