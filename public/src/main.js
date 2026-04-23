@@ -78,9 +78,6 @@ loadBibliotheek();
 // anders dubbele aanroepen naar /api/plex/nowplaying.
 setInterval(() => { if (state.activeView !== 'nu') loadPlexNP(); }, 30_000); // update header-pill buiten Nu-tab
 
-import('./tabs/downloads.js').then(({ loadTidarrStatus, startTidarrSSE }) => {
-  loadTidarrStatus();
-  startTidarrSSE();
 async function navigateToView(view) {
   if (!views[view]) return;
 
