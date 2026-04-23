@@ -56,6 +56,11 @@
   --sidebar-collapsed: 64px;
   --art-radius:         6px;
 
+  /* ── Grid tokens ── */
+  --grid-card-min:  180px;
+  --grid-wide-min:  320px;
+  --grid-gap:        20px;
+
   /* ── View Transition richting (behouden voor bestaande tab-animaties) ── */
   --tab-direction: -1;
 }

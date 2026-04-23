@@ -76,7 +76,7 @@
 }
 
 /* ── Artist grid ── */
-.artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+.artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); }
 .ag-card {
   position: relative; background: var(--surface1);
   backdrop-filter: none;
@@ -115,7 +115,7 @@
 .ag-plays { color: var(--text-secondary); font-size: 11px; margin-top: 4px; }
 
 /* ── Recs grid ── */
-.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-wide-min), 1fr)); gap: var(--grid-gap); }
 .rec-card {
   display: flex; align-items: stretch; gap: 0;
   background: var(--surface1);
@@ -166,7 +166,7 @@
 .rec-loading { font-size: 12px; color: var(--muted2); }
 
 /* ── Album grid ── */
-.album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); }
 .album-card {
   background: var(--surface1);
   backdrop-filter: none;
@@ -218,10 +218,10 @@
 .comp-fill { height: 100%; background: var(--plex); border-radius: 3px; }
 .comp-text { font-size: 11px; color: var(--muted2); }
 .gaps-sub { font-size: 10px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
-.gaps-album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.gaps-album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); }
 
 /* ── Aanbevolen Albums ── */
-.albrec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-top: 12px; }
+.albrec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); margin-top: 12px; }
 .albrec-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.2s ease, transform 0.15s ease; }
 .albrec-card:hover { box-shadow: none; transform: none; }
 .albrec-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
@@ -248,7 +248,7 @@
 .trackrec-link:hover { text-decoration: underline; }
 
 /* ── Nieuwe Releases ── */
-.releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 12px; }
+.releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); margin-top: 12px; }
 .rel-card {
   background: var(--surface1);
   backdrop-filter: none;
