@@ -230,13 +230,14 @@ module.exports = function(app, deps) {
       await syncPlexLibrary(false);
       const lib = getPlexLibrary();
       const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-      // Compact array-formaat: [artist, album, ratingKey, thumb] per item
+      // Compact array-formaat: [artist, album, ratingKey, thumb, addedAt] per item
       // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
       const compact = (lib || []).map(x => ([
         x.artist,
         x.album,
         x.ratingKey || '',
-        x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
+        x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : '',
+        x.addedAt || 0  // Unix timestamp
       ]));
       res.set('Cache-Control', 'private, max-age=300');
       res.json({ ok: true, total: compact.length, library: compact });

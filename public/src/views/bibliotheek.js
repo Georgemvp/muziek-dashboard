@@ -76,8 +76,12 @@ async function blibLoad() {
       return [];
     }
     if (!res.library.length) return [];
-    blibData = res.library.map(([artist, album, ratingKey, thumb]) => ({
-      artist: artist || '', album: album || '', ratingKey: ratingKey || '', thumb: thumb || ''
+    blibData = res.library.map(([artist, album, ratingKey, thumb, addedAt]) => ({
+      artist: artist || '',
+      album: album || '',
+      ratingKey: ratingKey || '',
+      thumb: thumb || '',
+      addedAt: addedAt || 0
     }));
     return blibData;
   } catch (e) {
@@ -122,8 +126,8 @@ function blibApplyFilters() {
       b.album.localeCompare(a.album, 'nl', { sensitivity: 'base' })
     );
   } else if (blibSort === 'recent') {
-    // Recent = newest first (Plex default order)
-    // Keep original order
+    // Recent = newest first (by addedAt timestamp)
+    data = [...data].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   } else if (blibSort === 'year-new' || blibSort === 'year-old') {
     // Year sorting would need additional data from Plex
     // For now, keep order as-is
