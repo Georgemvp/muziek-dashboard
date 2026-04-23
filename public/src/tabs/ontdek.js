@@ -194,7 +194,7 @@ export async function loadRecs() {
       html += `
         <div class="rec-card" data-inplex="${r.inPlex}" id="rc-${i}">
           <div class="rec-photo" id="rph-${i}">
-            <div class="rec-photo-ph" style="background:${gradientFor(r.name)}">${initials(r.name)}</div>
+            <div class="rec-photo-ph skeleton" style="background:${gradientFor(r.name)}">${initials(r.name)}</div>
           </div>
           <div class="rec-body">
             <div class="rec-header">
@@ -205,8 +205,8 @@ export async function loadRecs() {
               <span class="rec-match">${pct}%</span>
             </div>
             <div class="rec-reason">Vergelijkbaar met ${esc(r.reason)}</div>
-            <div id="rtags-${i}"></div>
-            <div id="ralb-${i}"><div class="rec-loading">Albums laden…</div></div>
+            <div id="rtags-${i}"><div class="skeleton" style="height:24px;border-radius:4px"></div></div>
+            <div id="ralb-${i}"><div class="skeleton" style="height:80px;border-radius:4px;margin-top:8px"></div></div>
           </div>
         </div>`;
     }
@@ -282,14 +282,31 @@ export async function loadRecs() {
       });
     }
 
-    recs.forEach(async (r, i) => {
-      try {
-        const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
+    // Parallel fetch artist info voor alle recs met Promise.allSettled() (progressive rendering)
+    const artistInfoRequests = recs.map((r, i) =>
+      apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`)
+        .then(info => ({ success: true, i, info }))
+        .catch(e => ({ success: false, i, error: e }))
+    );
+
+    const results = await Promise.allSettled(artistInfoRequests);
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.success) {
+        const { i, info } = result.value;
+        const r = recs[i];
+
+        // Render photo
         const ph = document.getElementById(`rph-${i}`);
-        if (ph && info.image) ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy"
-          onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
+        if (ph && info.image) {
+          ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy"
+            onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
+        }
+
+        // Render tags
         const tagsEl = document.getElementById(`rtags-${i}`);
         if (tagsEl) tagsEl.innerHTML = tagsHtml(info.tags, 3) + `<div style="height:6px"></div>`;
+
+        // Render albums
         const albEl = document.getElementById(`ralb-${i}`);
         if (albEl) {
           const albums = (info.albums || []).slice(0, 4);
@@ -304,8 +321,31 @@ export async function loadRecs() {
             albEl.innerHTML = ah + '</div>';
           } else { albEl.innerHTML = ''; }
         }
-      } catch { const albEl = document.getElementById(`ralb-${i}`); if (albEl) albEl.innerHTML = ''; }
-    });
+      } else if (result.status === 'fulfilled' && !result.value.success) {
+        // Handle failed fetch
+        const { i } = result.value;
+        const albEl = document.getElementById(`ralb-${i}`);
+        if (albEl) albEl.innerHTML = '';
+      }
+    }
+
+    // Parallel fetch preview thumbnails met limitConcurrency (al geoptimaliseerd)
+    const previewEl = document.getElementById('sec-recs-preview');
+    if (previewEl) {
+      const previewItems = recs.slice(0, 8);
+      const previewRequests = previewItems.map((r, i) =>
+        apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`)
+          .then(info => {
+            const el = document.getElementById(`recs-thumb-${i}`);
+            if (el && info.image) {
+              el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
+            }
+            return true;
+          })
+          .catch(() => true)
+      );
+      Promise.allSettled(previewRequests);  // Fire & forget
+    }
   } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 

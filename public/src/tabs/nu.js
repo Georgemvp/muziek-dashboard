@@ -373,8 +373,16 @@ async function dw_aanbeveling() {
 
     const today = Math.floor(Date.now() / 86_400_000);
     const pick = recsCache[today % recsCache.length];
+
+    // Parallel fetch artist info with timeout fallback
     let info = null;
-    try { info = await apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`, { signal }); } catch {}
+    try {
+      const infoRes = await Promise.race([
+        apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`, { signal }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+      ]);
+      info = infoRes;
+    } catch {}
 
     const img  = info?.image ? proxyImg(info.image, 80) || info.image : null;
     const albs = (info?.albums || []).slice(0, 3);

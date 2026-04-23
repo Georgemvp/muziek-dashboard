@@ -978,15 +978,20 @@ export async function loadTopArtists(period) {
         </div></div>`;
     }
     setContent(html + '</div>');
-    await limitConcurrency(artists.map((a, i) => async () => {
-      try {
-        const info = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`);
-        if (info.image) {
-          const el = document.getElementById(`agp-${i}`);
-          if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
-        }
-      } catch {}
-    }), 4);
+
+    // Parallel fetch artist images met Promise.allSettled() (progressive rendering)
+    const artistImageRequests = artists.map((a, i) =>
+      apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`)
+        .then(info => {
+          if (info.image) {
+            const el = document.getElementById(`agp-${i}`);
+            if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
+          }
+          return true;
+        })
+        .catch(() => true)
+    );
+    Promise.allSettled(artistImageRequests);  // Fire & forget
   } catch (e) { if (e.name === 'AbortError') return; showError(e.message); }
 }
 
