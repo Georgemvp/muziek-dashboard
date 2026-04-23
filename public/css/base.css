@@ -69,6 +69,11 @@
   --border:       #2C2C30;
   --border-hover: #3C3C42;
 
+  /* Glasmorfisme */
+  --glass-bg: rgba(20, 20, 20, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-hover-border: rgba(255, 255, 255, 0.12);
+
   /* Tekst */
   --text-primary:   #F2F2F7;
   --text-secondary: #AEAEB2;
@@ -122,6 +127,11 @@
   /* Borders */
   --border:       #E0E0E6;
   --border-hover: #C8C8D0;
+
+  /* Glasmorfisme */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-hover-border: rgba(0, 0, 0, 0.12);
 
   /* Tekst */
   --text-primary:   #1C1C1E;
