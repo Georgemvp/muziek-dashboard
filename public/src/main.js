@@ -346,6 +346,14 @@ document.addEventListener('input', e => {
 
 async function start() {
   initPlayer();
+
+  try {
+    const ontdek = await loadOntdek();
+    await ontdek.checkSpotifyStatus();
+  } catch {
+    // noop
+  }
+
   await loadPlexStatus();
   await navigateToView('bibliotheek');
   try {
