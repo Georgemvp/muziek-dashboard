@@ -104,6 +104,8 @@ document.addEventListener('visibilitychange', () => {
  */
 export async function playWebStream(streamUrl) {
   try {
+    console.debug('[Web Player] Setting stream:', streamUrl);
+
     // Stop vorige track
     if (!playerState.webPlayerAudio.paused) {
       playerState.webPlayerAudio.pause();
@@ -113,7 +115,12 @@ export async function playWebStream(streamUrl) {
     // Speel nieuwe stream
     playerState.webPlayerAudio.src = streamUrl;
     playerState.webPlayerAudio.currentTime = 0;
+
+    console.debug('[Web Player] Audio element src set, attempting play...');
+    console.debug('[Web Player] readyState:', playerState.webPlayerAudio.readyState, 'networkState:', playerState.webPlayerAudio.networkState);
+
     await playerState.webPlayerAudio.play();
+    console.info('[Web Player] Playback started successfully');
     playerState.webPlayerActive = true;
   } catch (e) {
     // Ignore AbortError - happens when user clicks another track while loading
@@ -256,6 +263,7 @@ async function _playTrackAtIndex(index) {
     }
 
     // Start playback
+    console.debug('[Queue] Stream URL:', data.webStream);
     await playWebStream(data.webStream);
 
     // Update player bar UI
