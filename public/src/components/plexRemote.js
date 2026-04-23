@@ -13,6 +13,12 @@ export function getSelectedZone() {
   } catch { return null; }
 }
 
+/** Controleer of de geselecteerde zone de lokale web-player is. */
+export function isLocalWebZone() {
+  const zone = getSelectedZone();
+  return zone?.machineId === '__web__';
+}
+
 /** Sla een zone op in localStorage en werk de header-UI bij. */
 function setSelectedZone(zone) {
   localStorage.setItem(ZONE_KEY, JSON.stringify(zone));
@@ -70,26 +76,30 @@ export async function toggleZonePicker() {
   const clients  = await _loadClients();
   const selected = getSelectedZone();
 
-  if (!clients.length) {
-    dropdown.innerHTML = '<div class="plex-zone-empty">Geen Plex clients gevonden.<br><small>Zorg dat Plexamp of een andere player actief is.</small></div>';
-    return;
-  }
-
+  const webZone = {
+    machineId: '__web__',
+    name:      'Web (deze browser)',
+    product:   'Web',
+  };
   const isPlexWeb = c => (c.product || '').toLowerCase().includes('web');
 
-  dropdown.innerHTML = clients.map(c => `
+  const zones = [webZone, ...clients];
+  dropdown.innerHTML = zones.map(c => {
+    const isLocalWeb = c.machineId === '__web__';
+    return `
     <button class="plex-zone-item${selected?.machineId === c.machineId ? ' active' : ''}${isPlexWeb(c) ? ' plex-web-zone' : ''}"
       data-machine-id="${c.machineId}"
       data-name="${c.name}"
       data-product="${c.product}">
-      <span class="plex-zone-icon">${isPlexWeb(c) ? '🌐' : '🔊'}</span>
+      <span class="plex-zone-icon">${isPlexWeb(c) || isLocalWeb ? '🌐' : '🔊'}</span>
       <span class="plex-zone-label">
         <span class="plex-zone-item-name">${c.name}</span>
-        <small class="plex-zone-item-product">${c.product}${isPlexWeb(c) ? ' · ⚠ beperkt' : ''}</small>
+        <small class="plex-zone-item-product">${isLocalWeb ? 'Speelt af in deze browser' : `${c.product}${isPlexWeb(c) ? ' · ⚠ beperkt' : ''}`}</small>
       </span>
       ${selected?.machineId === c.machineId ? '<span class="plex-zone-check">✓</span>' : ''}
     </button>
-  `).join('') +
+  `;
+  }).join('') +
   (clients.some(isPlexWeb)
     ? `<div class="plex-zone-webwarning">⚠ Plex Web ondersteunt geen afstandsbediening via de API. Gebruik <strong>Plexamp</strong> voor volledige besturing.</div>`
     : '');
@@ -104,7 +114,7 @@ export async function toggleZonePicker() {
       });
       closeZonePicker();
       // Toon extra waarschuwing als Plex Web geselecteerd
-      if (product.toLowerCase().includes('web')) {
+      if (btn.dataset.machineId !== '__web__' && product.toLowerCase().includes('web')) {
         _showError('Plex Web ondersteunt geen afstandsbediening. Gebruik Plexamp voor play/pause/skip.');
       }
     });

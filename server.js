@@ -880,6 +880,21 @@ app.get('/api/plex/album/:key/tracks', async (req, res) => {
   }
 });
 
+app.get('/api/plex/stream/audio/:ratingKey', async (req, res) => {
+  if (!PLEX_TOKEN) return res.status(503).json({ error: 'Geen PLEX_TOKEN geconfigureerd' });
+  try {
+    const { ratingKey } = req.params;
+    const data = await plexGet(`/library/metadata/${ratingKey}`);
+    const partKey = data?.MediaContainer?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key;
+    if (!partKey) return res.status(404).json({ error: 'Track niet gevonden' });
+    const separator = partKey.includes('?') ? '&' : '?';
+    return res.redirect(302, `${PLEX_URL}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`);
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex audio stream ophalen mislukt');
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── API: Plex Playback Control ────────────────────────────────────────────
 
 app.get('/api/plex/clients', async (req, res) => {

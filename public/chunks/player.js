@@ -19,7 +19,7 @@ const ZONE_KEY = 'plexSelectedZone';
 
 /** @type {PlayerState} */
 const playerState = {
-  mode:        'remote', // 'remote' | 'preview'
+  mode:        'remote', // 'remote' | 'preview' | 'web'
   playing:     false,
   paused:      false,
   track:       '',
@@ -80,7 +80,31 @@ export function initPlayer() {
 export async function playTrack(ratingKey, title, artist, album, thumb = null) {
   const zone = _loadZone();
   if (!zone) {
-    _toast('⚠ Selecteer eerst een Plex zone (🔊 in de header)', '#e05a2b');
+    _toast('Selecteer eerst een zone', '#e05a2b');
+    return;
+  }
+
+  if (zone.machineId === '__web__') {
+    _stopPreview();
+    playerState.mode      = 'web';
+    playerState.ratingKey = String(ratingKey);
+    playerState.machineId = '__web__';
+    playerState.duration  = 0;
+    playerState.viewOffset = 0;
+    _applyTrackInfo({ title, artist, album, thumb, playing: true, paused: false });
+
+    try {
+      _audio.src = `/api/plex/stream/audio/${ratingKey}`;
+      _audio.currentTime = 0;
+      await _audio.play();
+      playerState.playing = true;
+      _updatePlayerBarDOM();
+      _notifyListeners();
+    } catch (e) {
+      console.error('[Player] web play fout:', e);
+      _toast(`Afspelen mislukt: ${e.message}`, '#e05a2b');
+      _applyTrackInfo({ playing: false, paused: false });
+    }
     return;
   }
 
@@ -157,7 +181,7 @@ export async function playPlaylist(playlistRatingKey) {
 
 /** Pauzeer of hervat afspelen op de geselecteerde zone. */
 export async function togglePlayPause() {
-  if (playerState.mode === 'preview') {
+  if (playerState.mode === 'web' || playerState.mode === 'preview') {
     _togglePreviewPlayback();
     return;
   }
@@ -177,7 +201,7 @@ export async function togglePlayPause() {
 
 /** Sla over naar de volgende track in de queue. */
 export async function skipNext() {
-  if (playerState.mode === 'preview') {
+  if (playerState.mode === 'web' || playerState.mode === 'preview') {
     _nextInQueue();
     return;
   }
@@ -198,7 +222,7 @@ export async function skipNext() {
 
 /** Sla over naar de vorige track (of herstart als > 3s verstreken). */
 export async function skipPrev() {
-  if (playerState.mode === 'preview') {
+  if (playerState.mode === 'web' || playerState.mode === 'preview') {
     _prevInQueue();
     return;
   }
@@ -317,6 +341,7 @@ function _connectSSE() {
 function _handlePlexUpdate(payload) {
   // payload verwacht: { state, title, artist, album, thumb, duration, viewOffset, ratingKey }
   if (!payload) return;
+  if (playerState.mode === 'web') return;
 
   const wasPlaying = playerState.playing;
 
@@ -520,9 +545,9 @@ function _bindUIEvents() {
     _audio.volume = e.target.value / 100;
   });
 
-  // Progress bar klikken (preview mode: seek)
+  // Progress bar klikken (preview/web mode: seek)
   document.getElementById('player-progress')?.addEventListener('click', e => {
-    if (playerState.mode !== 'preview' || !_audio.duration) return;
+    if ((playerState.mode !== 'preview' && playerState.mode !== 'web') || !_audio.duration) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const pct  = (e.clientX - rect.left) / rect.width;
     _audio.currentTime = pct * _audio.duration;
@@ -537,10 +562,20 @@ function _bindUIEvents() {
     }));
   });
 
-  // Audio events voor preview mode
+  _audio.addEventListener('loadedmetadata', () => {
+    if (playerState.mode === 'web') {
+      playerState.duration = Math.round(_audio.duration * 1000);
+      _updateProgressDOM();
+    }
+  });
+
+  // Audio events voor preview + web mode
   _audio.addEventListener('timeupdate', () => {
-    if (playerState.mode !== 'preview') return;
+    if (playerState.mode !== 'preview' && playerState.mode !== 'web') return;
     playerState.viewOffset = Math.round(_audio.currentTime * 1000);
+    if (playerState.mode === 'web') {
+      playerState.duration = Math.round((_audio.duration || 0) * 1000);
+    }
     _updateProgressDOM();
   });
 
@@ -654,9 +689,11 @@ function _updateProgressDOM() {
   const progressEl= document.getElementById('player-progress');
 
   const offset   = playerState.mode === 'preview'
+    || playerState.mode === 'web'
     ? Math.round((_audio.currentTime ?? 0) * 1000)
     : (playerState.viewOffset ?? 0);
   const duration = playerState.mode === 'preview'
+    || playerState.mode === 'web'
     ? Math.round((_audio.duration  ?? 0) * 1000)
     : (playerState.duration ?? 0);
 
