@@ -122,7 +122,8 @@ function blibApplyFilters() {
       b.album.localeCompare(a.album, 'nl', { sensitivity: 'base' })
     );
   } else if (blibSort === 'recent') {
-    data = [...data].reverse();
+    // Recent = newest first (Plex default order)
+    // Keep original order
   } else if (blibSort === 'year-new' || blibSort === 'year-old') {
     // Year sorting would need additional data from Plex
     // For now, keep order as-is
