@@ -5,12 +5,11 @@ import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { loadWishlistState, toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { playPreview } from './components/player.js';
 import {
-  initPlayer,
-  getPlayerState,
-  playAlbum,
-  getZones,
-  setZone,
-} from '../chunks/player.js';
+  initZonePicker,
+  playOnZone,
+  toggleZonePicker,
+  getSelectedZone,
+} from './components/plexRemote.js';
 
 // Search module behoudt debounce + /api/search gedrag.
 import './components/search.js';
@@ -66,7 +65,6 @@ document.getElementById('download-quality')?.addEventListener('change', e => {
 });
 
 // ── Initialisatie ─────────────────────────────────────────────────────────
-initZonePicker();
 loadPlexStatus();
 loadPlexNP();
 loadUser();
@@ -148,8 +146,6 @@ async function syncNowPlayingToPlayerBar() {
   try {
     const np = await fetch('/api/plex/nowplaying').then(r => r.json());
     if (!np?.playing) return;
-    const current = getPlayerState();
-    if (current?.playing) return;
 
     const titleEl = document.getElementById('player-title');
     const artistEl = document.getElementById('player-artist');
@@ -160,42 +156,8 @@ async function syncNowPlayingToPlayerBar() {
   }
 }
 
-async function openZonePicker() {
-  const dropdown = document.getElementById('plex-zone-dropdown');
-  const button = document.getElementById('plex-zone-btn');
-  if (!dropdown || !button) return;
-
-  const expanded = button.getAttribute('aria-expanded') === 'true';
-  if (expanded) {
-    dropdown.style.display = 'none';
-    button.setAttribute('aria-expanded', 'false');
-    return;
-  }
-
-  const zones = await getZones();
-  dropdown.innerHTML = zones.map(z => (
-    `<button class="zone-item" data-zone-id="${z.machineId}" data-zone-name="${z.name}">${z.name}</button>`
-  )).join('');
-
-  dropdown.style.display = '';
-  button.setAttribute('aria-expanded', 'true');
-}
-
-document.getElementById('plex-zone-btn')?.addEventListener('click', openZonePicker);
-
 document.addEventListener('click', async e => {
   if ((await loadBibliotheek()).handlePlexLibraryClick(e)) return;
-
-  const zoneBtn = e.target.closest('.zone-item[data-zone-id]');
-  if (zoneBtn) {
-    setZone(zoneBtn.dataset.zoneId, zoneBtn.dataset.zoneName);
-    const name = document.getElementById('plex-zone-name');
-    if (name) name.textContent = zoneBtn.dataset.zoneName || '—';
-    const dropdown = document.getElementById('plex-zone-dropdown');
-    if (dropdown) dropdown.style.display = 'none';
-    document.getElementById('plex-zone-btn')?.setAttribute('aria-expanded', 'false');
-    return;
-  }
 
   const playlistItem = e.target.closest('.sidebar-playlist-item[data-playlist-key]');
   if (playlistItem) {
@@ -358,7 +320,7 @@ document.addEventListener('input', e => {
 });
 
 async function start() {
-  initPlayer();
+  initZonePicker();
   await loadPlexStatus();
   await navigateToView('bibliotheek');
   try {
@@ -384,6 +346,6 @@ start();
 document.addEventListener('click', e => {
   const albumPlay = e.target.closest('[data-play-album]');
   if (albumPlay?.dataset.playAlbum) {
-    playAlbum(albumPlay.dataset.playAlbum);
+    playOnZone(albumPlay.dataset.playAlbum);
   }
 });
