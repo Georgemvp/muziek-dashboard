@@ -51,7 +51,7 @@
 .panel-albums { display: flex; flex-direction: column; gap: 6px; }
 .panel-album-row {
   display: grid;
-  grid-template-columns: 42px 1fr auto;
+  grid-template-columns: 42px minmax(0, 1fr) repeat(3, max-content);
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
