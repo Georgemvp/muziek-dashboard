@@ -136,3 +136,196 @@ export function stopWebPlayer() {
   playerState.webPlayerAudio.currentTime = 0;
   playerState.webPlayerActive = false;
 }
+
+// ── Player Bar Controller ──────────────────────────────────────────────────
+/**
+ * Initialiseer de player bar controls en SSE stream listener.
+ * Roep aan vanuit main.js tijdens app-startup.
+ */
+export function initPlayer() {
+  const playBtn = document.getElementById('player-play');
+  const prevBtn = document.getElementById('player-prev');
+  const nextBtn = document.getElementById('player-next');
+  const volumeSlider = document.getElementById('player-volume');
+  const progressBar = document.getElementById('player-progress');
+  const progressFill = document.getElementById('player-progress-fill');
+  const timeCurrent = document.getElementById('player-time-current');
+  const timeTotal = document.getElementById('player-time-total');
+  const titleEl = document.getElementById('player-title');
+  const artistEl = document.getElementById('player-artist');
+
+  if (!playBtn) {
+    console.warn('[Player] Player bar elementen niet gevonden');
+    return;
+  }
+
+  // ── Play/Pause button ──────────────────────────────────────────
+  playBtn?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/plex/playback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'playpause' }),
+      });
+      if (!res.ok) console.warn('[Player] Play/pause failed');
+    } catch (e) {
+      console.error('[Player] Play/pause error:', e);
+    }
+  });
+
+  // ── Next/Prev buttons ──────────────────────────────────────────
+  nextBtn?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/plex/playback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'skip', direction: 'next' }),
+      });
+      if (!res.ok) console.warn('[Player] Skip next failed');
+    } catch (e) {
+      console.error('[Player] Skip next error:', e);
+    }
+  });
+
+  prevBtn?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/plex/playback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'skip', direction: 'prev' }),
+      });
+      if (!res.ok) console.warn('[Player] Skip prev failed');
+    } catch (e) {
+      console.error('[Player] Skip prev error:', e);
+    }
+  });
+
+  // ── Volume control ────────────────────────────────────────────
+  volumeSlider?.addEventListener('input', async (e) => {
+    const volume = parseInt(e.target.value);
+    try {
+      await fetch('/api/plex/playback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setVolume', volume }),
+      });
+    } catch (e) {
+      console.error('[Player] Volume error:', e);
+    }
+  });
+
+  // ── Progress bar seeking ───────────────────────────────────────
+  progressBar?.addEventListener('click', async (e) => {
+    if (!playerState.totalDuration) return;
+    const rect = progressBar.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const seconds = percent * playerState.totalDuration;
+    try {
+      await fetch('/api/plex/playback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'seek', offset: Math.floor(seconds * 1000) }),
+      });
+    } catch (e) {
+      console.error('[Player] Seek error:', e);
+    }
+  });
+
+  // ── SSE Stream listener ────────────────────────────────────────
+  playerState.sseEventSource = new EventSource('/api/plex/stream');
+
+  playerState.sseEventSource.addEventListener('nowplaying', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (titleEl) titleEl.textContent = data.track || 'Niet aan het afspelen';
+      if (artistEl) artistEl.textContent = data.artist || '';
+      if (data.duration) playerState.totalDuration = data.duration / 1000; // ms to seconds
+      // Update play button visual state
+      if (playBtn) {
+        playBtn.textContent = data.playing ? '⏸' : '▶';
+      }
+    } catch (e) {
+      console.error('[Player] SSE parse error:', e);
+    }
+  });
+
+  playerState.sseEventSource.addEventListener('progress', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const offset = data.offset / 1000; // ms to seconds
+      playerState.currentTime = offset;
+
+      if (progressFill && playerState.totalDuration) {
+        const percent = (offset / playerState.totalDuration * 100).toFixed(1);
+        progressFill.style.width = percent + '%';
+      }
+
+      if (timeCurrent) {
+        timeCurrent.textContent = _formatTime(offset);
+      }
+      if (timeTotal && playerState.totalDuration) {
+        timeTotal.textContent = _formatTime(playerState.totalDuration);
+      }
+
+      // Update progress bar aria-valuenow
+      if (progressBar && playerState.totalDuration) {
+        progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
+      }
+    } catch (e) {
+      console.error('[Player] Progress parse error:', e);
+    }
+  });
+
+  playerState.sseEventSource.addEventListener('error', (event) => {
+    console.error('[Player] SSE connection error:', event);
+    // Optioneel: automatic reconnect logic hier
+  });
+
+  // ── Progress ticker (polling fallback) ──────────────────────
+  setInterval(async () => {
+    try {
+      const np = await fetch('/api/plex/nowplaying').then(r => r.json());
+      if (!np) return;
+
+      if (titleEl) titleEl.textContent = np.track || 'Niet aan het afspelen';
+      if (artistEl) artistEl.textContent = np.artist || '';
+      if (np.duration) playerState.totalDuration = np.duration / 1000;
+
+      if (playBtn) {
+        playBtn.textContent = np.playing ? '⏸' : '▶';
+      }
+
+      const offset = (np.offset || 0) / 1000;
+      playerState.currentTime = offset;
+
+      if (progressFill && playerState.totalDuration) {
+        const percent = (offset / playerState.totalDuration * 100).toFixed(1);
+        progressFill.style.width = percent + '%';
+      }
+
+      if (timeCurrent) timeCurrent.textContent = _formatTime(offset);
+      if (timeTotal && playerState.totalDuration) timeTotal.textContent = _formatTime(playerState.totalDuration);
+
+      if (progressBar && playerState.totalDuration) {
+        progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
+      }
+    } catch (e) {
+      // noop - SSE zal dit afhandelen
+    }
+  }, 1000);
+
+  console.log('[Player] Initialized');
+}
+
+/** Format seconds to mm:ss */
+function _formatTime(seconds) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Voeg state properties toe voor SSE
+playerState.totalDuration = 0;
+playerState.currentTime = 0;
+playerState.sseEventSource = null;

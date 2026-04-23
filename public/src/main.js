@@ -4,7 +4,7 @@ import { loadPlexStatus, loadDownloadHistory, loadUser } from './api.js';
 import { loadPlexNP } from './tabs/nu.js';
 import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { loadWishlistState, toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
-import { playPreview } from './components/player.js';
+import { playPreview, initPlayer } from './components/player.js';
 import {
   initZonePicker,
   playOnZone,
@@ -342,6 +342,9 @@ async function start() {
 
   setInterval(syncNowPlayingToPlayerBar, 30_000);
   syncNowPlayingToPlayerBar();
+
+  // ── Initialize player bar controls & SSE listener
+  initPlayer();
 }
 
 start();
