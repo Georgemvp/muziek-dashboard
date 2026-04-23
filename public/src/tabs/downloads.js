@@ -195,7 +195,7 @@ export async function renderTidalHistory() {
         const artHtml = art
           ? `<img class="q-thumb" src="${esc(art)}" alt="" loading="lazy">`
           : `<div class="q-thumb q-thumb-ph" style="background:${gradientFor(it.title || it.artist || '?')}">${initials(it.title || it.artist || '?')}</div>`;
-        return `<div class="q-row">
+        return `<div class="q-row q-row-has-thumb">
           ${artHtml}
           <div class="q-info">
             <div class="q-title">${esc(it.title)}</div>
