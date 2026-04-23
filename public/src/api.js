@@ -85,19 +85,24 @@ export async function loadDownloadHistory() {
 export async function loadPlexStatus() {
   try {
     const d = await fetch('/api/plex/status').then(r => r.json());
-    const pill = document.getElementById('plex-pill');
-    const text = document.getElementById('plex-pill-text');
+    const dot = document.getElementById('plex-dot');
+    const text = document.getElementById('plex-status-text');
+
     if (d.connected) {
       state.plexOk = true;
-      pill.className = 'plex-pill on';
-      const albumPart = d.albums ? ` · ${fmt(d.albums)} albums` : '';
-      text.textContent = `Plex · ${fmt(d.artists)} artiesten${albumPart}`;
+      if (dot) dot.classList.toggle('connected', true);
+      if (text) {
+        const albumPart = d.albums ? ` · ${fmt(d.albums)} albums` : '';
+        text.textContent = `Plex · ${fmt(d.artists)} artiesten${albumPart}`;
+      }
     } else {
-      pill.className = 'plex-pill off';
-      text.textContent = 'Plex offline';
+      if (dot) dot.classList.toggle('connected', false);
+      if (text) text.textContent = 'Plex offline';
     }
-  } catch {
-    document.getElementById('plex-pill-text').textContent = 'Plex offline';
+  } catch (err) {
+    state.plexOk = false;
+    const text = document.getElementById('plex-status-text');
+    if (text) text.textContent = 'Plex offline';
   }
 }
 
@@ -117,10 +122,15 @@ export async function loadUser() {
       ? `<img class="user-avatar" src="${src}" alt="">`
       : `<div class="user-avatar-ph">${(u.name || 'U')[0].toUpperCase()}</div>`;
     const year = new Date(parseInt(u.registered?.unixtime) * 1000).getFullYear();
-    document.getElementById('user-wrap').innerHTML = `
-      <div class="user-card">${av}
-        <div><div class="user-name">${esc(u.realname || u.name)}</div>
-        <div class="user-sub">${fmt(u.playcount)} scrobbles · lid sinds ${year}</div></div>
-      </div>`;
+
+    // user-wrap element bestaat mogelijk niet meer in layout - voeg null-check toe
+    const userWrap = document.getElementById('user-wrap');
+    if (userWrap) {
+      userWrap.innerHTML = `
+        <div class="user-card">${av}
+          <div><div class="user-name">${esc(u.realname || u.name)}</div>
+          <div class="user-sub">${fmt(u.playcount)} scrobbles · lid sinds ${year}</div></div>
+        </div>`;
+    }
   } catch {}
 }

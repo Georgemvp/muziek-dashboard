@@ -171,9 +171,10 @@ export async function loadRecs() {
     state.plexOk = d.plexConnected || state.plexOk;
     state.lastRecs = d;  // Bewaar in state voor persistentie
     if (d.plexConnected && d.plexArtistCount) {
-      document.getElementById('plex-pill').className = 'plex-pill on';
-      document.getElementById('plex-pill-text').textContent =
-        `Plex · ${fmt(d.plexArtistCount)} artiesten`;
+      const dot = document.getElementById('plex-dot');
+      const text = document.getElementById('plex-status-text');
+      if (dot) dot.classList.toggle('connected', true);
+      if (text) text.textContent = `Plex · ${fmt(d.plexArtistCount)} artiesten`;
     }
     if (!recs.length) { setContent('<div class="empty">Geen aanbevelingen gevonden.</div>'); return; }
 
