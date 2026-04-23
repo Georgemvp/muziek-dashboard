@@ -265,8 +265,8 @@
 .gaps-row-left { display:flex; align-items:center; gap:12px; min-width:0; flex:1; }
 .gaps-row-main { min-width:0; flex:1; }
 .gaps-row-meta { font-size:12px; color:var(--muted2); margin:2px 0 6px; }
-.gaps-progress { height:8px; background:#cfd3da; border-radius:999px; overflow:hidden; }
-.gaps-progress-owned { height:100%; background:#2dbf73; }
+.gaps-progress { height:8px; background:var(--border); border-radius:999px; overflow:hidden; }
+.gaps-progress-owned { height:100%; background:var(--green); }
 .gaps-row-body { padding:0 12px 12px; }
 .gaps-album-card { border:1px solid var(--border); border-radius:10px; padding:8px; background:var(--surface2); display:flex; flex-direction:column; gap:6px; }
 .gaps-album-art { aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:var(--surface); display:flex; align-items:center; justify-content:center; }
@@ -274,4 +274,4 @@
 .gaps-album-cover-ph { color:var(--muted2); font-size:18px; }
 .gaps-album-title { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gaps-album-year { font-size:11px; color:var(--muted2); }
-.gaps-download-btn.downloaded, .gaps-download-btn.dl-done { color:var(--ok); }
+.gaps-download-btn.downloaded, .gaps-download-btn.dl-done { color:var(--green); }

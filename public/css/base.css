@@ -268,6 +268,11 @@ a {
   to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 @keyframes pulseGlow {
   0%, 100% {
     box-shadow: 0 0 0   0   var(--accent-glow),
