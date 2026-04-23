@@ -104,6 +104,7 @@ COPY --from=app_builder /app/node_modules ./node_modules
 COPY --from=app_builder /app/public/      ./public/
 
 COPY server.js db.js logger.js ./
+COPY routes/         ./routes/
 COPY services/       ./services/
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
