@@ -8,6 +8,10 @@ export const playerState = {
   previewBtn: null,
   webPlayerAudio: new Audio(),  // Voor Plex web playback
   webPlayerActive: false,
+  // Queue properties for web player
+  queue: [],            // Array of {ratingKey, title, artist, album, thumb, duration}
+  queueIndex: -1,       // Current position in queue
+  isWebPlaying: false,
 };
 state.playerState = playerState;
 
@@ -138,6 +142,66 @@ export function stopWebPlayer() {
   playerState.webPlayerActive = false;
 }
 
+/**
+ * Play a queue of tracks on the web player.
+ * @param {Array} tracks - Array of track objects: {ratingKey, title, artist, album, thumb, duration}
+ * @param {number} startIndex - Starting index in the queue (default 0)
+ */
+export async function playQueue(tracks, startIndex = 0) {
+  playerState.queue = tracks;
+  playerState.queueIndex = startIndex;
+  await _playTrackAtIndex(startIndex);
+}
+
+/**
+ * Internal function: Play track at given queue index.
+ * @param {number} index - Index in playerState.queue
+ * @private
+ */
+async function _playTrackAtIndex(index) {
+  // Bounds check
+  if (index < 0 || index >= playerState.queue.length) {
+    stopWebPlayer();
+    playerState.isWebPlaying = false;
+    return;
+  }
+
+  playerState.queueIndex = index;
+  const track = playerState.queue[index];
+
+  try {
+    // Request playback stream from server
+    const data = await apiFetch('/api/plex/play', {
+      method: 'POST',
+      body: JSON.stringify({
+        machineId: '__web__',
+        ratingKey: track.ratingKey,
+      }),
+    });
+
+    // Start playback
+    await playWebStream(data.webStream);
+
+    // Update player bar UI
+    const titleEl = document.getElementById('player-title');
+    const artistEl = document.getElementById('player-artist');
+    const artEl = document.getElementById('player-art');
+    const playBtn = document.getElementById('player-play');
+
+    if (titleEl) titleEl.textContent = track.title;
+    if (artistEl) artistEl.textContent = track.artist;
+    if (artEl && (track.thumb || data.thumb)) {
+      artEl.src = track.thumb || data.thumb;
+    }
+    if (playBtn) playBtn.textContent = '⏸';
+
+    playerState.isWebPlaying = true;
+  } catch (e) {
+    console.error('[Queue] Error playing track at index', index, ':', e);
+    playerState.isWebPlaying = false;
+  }
+}
+
 // ── Player Bar Controller ──────────────────────────────────────────────────
 /**
  * Initialiseer de player bar controls en SSE stream listener.
@@ -188,9 +252,11 @@ export function initPlayer() {
     const zone = getSelectedZone();
     if (!zone) return;
 
-    // Web player: skip not yet implemented
+    // Web player: play next track in queue
     if (zone.machineId === '__web__') {
-      // TODO: Implement web queue/skip when queue management is added
+      if (playerState.queue.length > 0) {
+        await _playTrackAtIndex(playerState.queueIndex + 1);
+      }
       return;
     }
 
@@ -202,9 +268,17 @@ export function initPlayer() {
     const zone = getSelectedZone();
     if (!zone) return;
 
-    // Web player: skip not yet implemented
+    // Web player: restart current or play previous track
     if (zone.machineId === '__web__') {
-      // TODO: Implement web queue/skip when queue management is added
+      if (playerState.queue.length > 0) {
+        // If more than 3 seconds into track, restart it
+        if (playerState.webPlayerAudio.currentTime > 3) {
+          playerState.webPlayerAudio.currentTime = 0;
+        } else {
+          // Otherwise play previous track
+          await _playTrackAtIndex(playerState.queueIndex - 1);
+        }
+      }
       return;
     }
 
@@ -333,15 +407,21 @@ export function initPlayer() {
     }
   });
 
-  playerState.webPlayerAudio.addEventListener('ended', () => {
-    // Reset progress
-    if (progressFill) progressFill.style.width = '0%';
-    if (timeCurrent) timeCurrent.textContent = '0:00';
-    if (timeTotal) timeTotal.textContent = '0:00';
-    if (progressBar) progressBar.setAttribute('aria-valuenow', 0);
+  playerState.webPlayerAudio.addEventListener('ended', async () => {
+    // Auto-play next track in queue if available
+    if (playerState.queue.length > 0 && playerState.queueIndex < playerState.queue.length - 1) {
+      await _playTrackAtIndex(playerState.queueIndex + 1);
+    } else {
+      // Queue finished or no queue - reset player
+      if (progressFill) progressFill.style.width = '0%';
+      if (timeCurrent) timeCurrent.textContent = '0:00';
+      if (timeTotal) timeTotal.textContent = '0:00';
+      if (progressBar) progressBar.setAttribute('aria-valuenow', 0);
 
-    // Reset play button
-    if (playBtn) playBtn.textContent = '▶';
+      // Reset play button
+      if (playBtn) playBtn.textContent = '▶';
+      playerState.isWebPlaying = false;
+    }
   });
 
   // ── Progress ticker (polling fallback) ──────────────────────
