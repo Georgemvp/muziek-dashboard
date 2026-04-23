@@ -1,5 +1,6 @@
 // ── Plex Remote Control ───────────────────────────────────────────────────
 // Zone picker (client/player selectie) en playback-commando's voor Plex.
+import { playWebStream, pauseWebPlayer } from './player.js';
 
 const ZONE_KEY = 'plexSelectedZone'; // localStorage key
 
@@ -143,12 +144,6 @@ export async function playOnZone(ratingKey, type = 'music') {
     return false;
   }
 
-  // Web player kan niet op afstand bestuurd worden
-  if (zone.machineId === '__web__') {
-    _showError('Web player kan niet op afstand bestuurd worden. Selecteer een ander apparaat (Plexamp, Plex Media Player, etc.)');
-    return false;
-  }
-
   try {
     const res  = await fetch('/api/plex/play', {
       method:  'POST',
@@ -157,7 +152,21 @@ export async function playOnZone(ratingKey, type = 'music') {
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Afspelen mislukt');
-    _showPlayFeedback(zone.name);
+
+    // Web player playback - gebruik HTML audio element
+    if (data.webStream) {
+      try {
+        await playWebStream(data.webStream);
+        _showPlayFeedback(`${zone.name} (Browser)`);
+      } catch (e) {
+        console.error('[Plex Remote] web stream fout:', e);
+        _showError(`Afspelen in browser mislukt: ${e.message}`);
+        return false;
+      }
+    } else {
+      // Normale remote playback
+      _showPlayFeedback(zone.name);
+    }
     return true;
   } catch (e) {
     console.error('[Plex Remote] play fout:', e);
@@ -170,7 +179,13 @@ export async function playOnZone(ratingKey, type = 'music') {
 export async function pauseZone() {
   const zone = getSelectedZone();
   if (!zone) return;
-  if (zone.machineId === '__web__') return; // Web player kan niet op afstand bestuurd worden
+
+  // Web player pauzeren
+  if (zone.machineId === '__web__') {
+    pauseWebPlayer();
+    return;
+  }
+
   await fetch('/api/plex/pause', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },

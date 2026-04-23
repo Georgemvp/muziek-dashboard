@@ -5,6 +5,8 @@ import { apiFetch } from '../api.js';
 export const playerState = {
   previewAudio: new Audio(),
   previewBtn: null,
+  webPlayerAudio: new Audio(),  // Voor Plex web playback
+  webPlayerActive: false,
 };
 state.playerState = playerState;
 
@@ -87,3 +89,50 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
+
+// ── Plex Web Player (lokale browser playback) ──────────────────────────────
+/**
+ * Speel een stream af in de lokale web browser.
+ * Gebruikt voor '__web__' client playback.
+ * @param {string} streamUrl - URL van de audio stream
+ * @returns {Promise<void>}
+ */
+export async function playWebStream(streamUrl) {
+  try {
+    // Stop vorige track
+    if (!playerState.webPlayerAudio.paused) {
+      playerState.webPlayerAudio.pause();
+      playerState.webPlayerAudio.currentTime = 0;
+    }
+
+    // Speel nieuwe stream
+    playerState.webPlayerAudio.src = streamUrl;
+    playerState.webPlayerAudio.currentTime = 0;
+    await playerState.webPlayerAudio.play();
+    playerState.webPlayerActive = true;
+  } catch (e) {
+    console.error('[Web Player] Afspelen mislukt:', e);
+    throw e;
+  }
+}
+
+/**
+ * Pauzeer/hervat web player.
+ */
+export function pauseWebPlayer() {
+  if (!playerState.webPlayerActive) return;
+  if (playerState.webPlayerAudio.paused) {
+    playerState.webPlayerAudio.play();
+  } else {
+    playerState.webPlayerAudio.pause();
+  }
+}
+
+/**
+ * Stop web player.
+ */
+export function stopWebPlayer() {
+  playerState.webPlayerAudio.pause();
+  playerState.webPlayerAudio.currentTime = 0;
+  playerState.webPlayerActive = false;
+}

@@ -944,6 +944,13 @@ app.post('/api/plex/play', async (req, res) => {
   const { machineId, ratingKey, type = 'music' } = req.body || {};
   if (!machineId || !ratingKey) return res.status(400).json({ error: 'machineId en ratingKey zijn vereist' });
   try {
+    // '__web__' = lokale web browser player
+    if (machineId === '__web__') {
+      // Return stream URL voor web playback
+      const streamUrl = `${PLEX_URL}/library/metadata/${ratingKey}/part?download=0&X-Plex-Token=${PLEX_TOKEN}`;
+      return res.json({ ok: true, webStream: streamUrl });
+    }
+
     await playOnClient(machineId, String(ratingKey), type);
     res.json({ ok: true });
   } catch (e) {
