@@ -78,10 +78,9 @@ function setupNavItem(btn) {
     state.tabAbort = new AbortController();
 
     ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
-     'tb-gaps','tb-plexlib','tb-tidarr-ui'].forEach(id =>
+     'tb-gaps','tb-plexlib'].forEach(id =>
       document.getElementById(id)?.classList.remove('visible'));
     document.getElementById('tb-gaps')?.classList.toggle('visible', tab === 'gaps');
-    document.getElementById('tb-tidal')?.classList.toggle('visible', tab === 'downloads');
 
     if (tab !== 'downloads') {
       loadDownloadsModule().then(m => {
@@ -228,7 +227,8 @@ document.getElementById('plex-refresh-btn')?.addEventListener('click', async () 
 });
 
 // ── Tidal zoekbalk ────────────────────────────────────────────────────────
-document.getElementById('tidal-search')?.addEventListener('input', e => {
+document.addEventListener('input', e => {
+  if (e.target?.id !== 'tidal-search') return;
   clearTimeout(state.tidalSearchTimeout);
   const q = e.target.value.trim();
   state.tidalSearchTimeout = setTimeout(() => {
@@ -484,16 +484,13 @@ document.addEventListener('click', async e => {
   const tvBtn = e.target.closest('[data-tidal-view]');
   if (tvBtn) {
     const view = tvBtn.dataset.tidalView;
-    if (view === 'tidarr') {
-      document.getElementById('tb-tidal')?.classList.remove('visible');
-      document.getElementById('tb-tidarr-ui')?.classList.add('visible');
-      (await loadDownloadsModule()).loadTidarrUI();
-    } else {
-      (await loadDownloadsModule()).hideTidarrUI();
-      document.getElementById('tb-tidal')?.classList.add('visible');
-      document.getElementById('tb-tidarr-ui')?.classList.remove('visible');
-      (await loadDownloadsModule()).setTidalView(view);
-    }
+    (await loadDownloadsModule()).hideTidarrUI();
+    (await loadDownloadsModule()).setTidalView(view);
+    return;
+  }
+
+  if (e.target.closest('#btn-open-tidarr')) {
+    (await loadDownloadsModule()).loadTidarrUI();
     return;
   }
 

@@ -191,7 +191,12 @@ export async function renderTidalHistory() {
         const date = it.queued_at
           ? new Date(it.queued_at).toLocaleDateString('nl-NL', { day:'numeric', month:'short', year:'numeric' }) : '';
         const ql = qualityLabel[it.quality] || it.quality || '';
+        const art = it.image || it.cover || it.album_art || '';
+        const artHtml = art
+          ? `<img class="q-thumb" src="${esc(art)}" alt="" loading="lazy">`
+          : `<div class="q-thumb q-thumb-ph" style="background:${gradientFor(it.title || it.artist || '?')}">${initials(it.title || it.artist || '?')}</div>`;
         return `<div class="q-row">
+          ${artHtml}
           <div class="q-info">
             <div class="q-title">${esc(it.title)}</div>
             ${it.artist ? `<div class="q-artist artist-link" data-artist="${esc(it.artist)}">${esc(it.artist)}</div>` : ''}
@@ -217,8 +222,13 @@ export async function renderTidalHistory() {
 // ── View wisselen ──────────────────────────────────────────────────────────
 export function setTidalView(view) {
   state.tidalView = view;
-  document.querySelectorAll('[data-tidal-view]').forEach(b =>
-    b.classList.toggle('sel-def', b.dataset.tidalView === view));
+  document.querySelectorAll('[data-tidal-view]').forEach(b => {
+    const active = b.dataset.tidalView === view;
+    b.classList.toggle('sel-def', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const sw = document.getElementById('tidal-search-wrap');
+  if (sw) sw.style.display = view === 'search' ? '' : 'none';
   if (view === 'search')
     renderTidalSearch(document.getElementById('tidal-search')?.value || '');
   else if (view === 'queue')   renderTidalQueue();
@@ -501,7 +511,25 @@ export async function triggerTidarrDownload(artist, album, btn) {
 
 // ── Tidal tab loader ──────────────────────────────────────────────────────
 export async function loadTidal() {
-  setContent(`<div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>`);
+  setContent(`
+    <div class="tidal-page">
+      <div class="tidal-tabs-row">
+        <div class="seg-tabs" role="tablist" aria-label="Downloads secties">
+          <button class="tool-btn sel-def" data-tidal-view="search" role="tab" aria-selected="true">Zoeken</button>
+          <button class="tool-btn" data-tidal-view="queue" role="tab" aria-selected="false">Queue <span class="badge-inline" id="badge-tidarr-queue-inline" style="display:none">0</span></button>
+          <button class="tool-btn" data-tidal-view="history" role="tab" aria-selected="false">Geschiedenis</button>
+        </div>
+        <div class="tidal-tabs-actions">
+          <span class="tidarr-status-pill off" id="tidarr-status-pill"><span class="tidarr-dot"></span><span id="tidarr-status-text">Tidarr status…</span></span>
+          <button class="tool-btn" id="btn-open-tidarr" type="button">Open Tidarr</button>
+        </div>
+      </div>
+      <div class="tidal-search-wrap" id="tidal-search-wrap">
+        <input id="tidal-search" class="tidal-search" type="search" placeholder="Zoek albums of tracks op Tidal…" autocomplete="off">
+      </div>
+      <div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>
+    </div>
+  `);
   await loadTidarrStatus();
   await refreshTidarrQueueBadge();
   setTidalView(state.tidalView);
@@ -511,7 +539,6 @@ export async function loadTidal() {
 export function loadDownloads() {
   state.activeSubTab = 'tidal';
   hideTidarrUI();
-  document.getElementById('tb-tidal')?.classList.add('visible');
   loadTidal();
 }
 
