@@ -116,12 +116,56 @@ export async function playWebStream(streamUrl) {
     playerState.webPlayerAudio.src = streamUrl;
     playerState.webPlayerAudio.currentTime = 0;
 
-    console.debug('[Web Player] Audio element src set, attempting play...');
-    console.debug('[Web Player] readyState:', playerState.webPlayerAudio.readyState, 'networkState:', playerState.webPlayerAudio.networkState);
+    console.debug('[Web Player] Audio element src set, waiting for data to load...');
 
-    await playerState.webPlayerAudio.play();
-    console.info('[Web Player] Playback started successfully');
-    playerState.webPlayerActive = true;
+    // Wacht tot het audio element data begint te laden
+    return new Promise((resolve, reject) => {
+      const onCanPlay = async () => {
+        try {
+          cleanup();
+          console.debug('[Web Player] Audio loaded, starting playback...');
+          await playerState.webPlayerAudio.play();
+          console.info('[Web Player] Playback started successfully');
+          playerState.webPlayerActive = true;
+          resolve();
+        } catch (e) {
+          if (e.name !== 'AbortError') {
+            console.error('[Web Player] Play failed after load:', e);
+            reject(e);
+          } else {
+            resolve(); // AbortError is expected when switching tracks
+          }
+        }
+      };
+
+      const onError = (e) => {
+        cleanup();
+        console.error('[Web Player] Audio load error:', e);
+        reject(new Error(`Audio load error: ${playerState.webPlayerAudio.error?.message || 'Unknown'}`));
+      };
+
+      const cleanup = () => {
+        playerState.webPlayerAudio.removeEventListener('canplay', onCanPlay);
+        playerState.webPlayerAudio.removeEventListener('error', onError);
+      };
+
+      // Timeout na 10 seconden
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Audio load timeout'));
+      }, 10000);
+
+      const originalResolve = resolve;
+      resolve = (...args) => {
+        clearTimeout(timeout);
+        originalResolve(...args);
+      };
+
+      playerState.webPlayerAudio.addEventListener('canplay', onCanPlay, { once: true });
+      playerState.webPlayerAudio.addEventListener('error', onError, { once: true });
+
+      console.debug('[Web Player] Waiting for canplay event...');
+    });
   } catch (e) {
     // Ignore AbortError - happens when user clicks another track while loading
     if (e.name === 'AbortError') {
