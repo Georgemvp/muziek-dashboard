@@ -50,7 +50,7 @@ export async function loadWishlist() {
     let html = `<div class="section-title">${items.length} opgeslagen</div><div class="wishlist-grid">`;
     for (const item of items) {
       const imgHtml = item.image
-        ? `<img src="${esc(item.image)}" alt="" loading="lazy"
+        ? `<img src="${esc(item.image)}" alt="${esc(item.name)}${item.artist ? ' by '+esc(item.artist) : ''}" loading="lazy"
             onerror="this.onerror=null;this.style.display='none'">`
         : '';
       html += `

@@ -52,7 +52,7 @@ export async function refreshTidarrQueueBadge() {
 // ── Tidal zoekresultaat card ──────────────────────────────────────────────
 export function tidalResultCard(item) {
   const imgEl = item.image
-    ? `<img class="tidal-img" src="${esc(item.image)}" alt="" loading="lazy"
+    ? `<img class="tidal-img" src="${esc(item.image)}" alt="${esc(item.title)} by ${esc(item.artist)}" loading="lazy"
          onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="tidal-ph" style="display:none;background:${gradientFor(item.title)}">${initials(item.title)}</div>`
     : `<div class="tidal-ph" style="background:${gradientFor(item.title)}">${initials(item.title)}</div>`;
@@ -193,7 +193,7 @@ export async function renderTidalHistory() {
         const ql = qualityLabel[it.quality] || it.quality || '';
         const art = it.image || it.cover || it.album_art || '';
         const artHtml = art
-          ? `<img class="q-thumb" src="${esc(art)}" alt="" loading="lazy">`
+          ? `<img class="q-thumb" src="${esc(art)}" alt="${esc(it.title)} by ${esc(it.artist)}" loading="lazy">`
           : `<div class="q-thumb q-thumb-ph" style="background:${gradientFor(it.title || it.artist || '?')}">${initials(it.title || it.artist || '?')}</div>`;
         return `<div class="q-row">
           ${artHtml}

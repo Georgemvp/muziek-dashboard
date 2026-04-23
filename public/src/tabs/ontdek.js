@@ -25,7 +25,7 @@ export async function checkSpotifyStatus() {
 
 export function spotifyCard(t, idx) {
   const imgEl = t.image
-    ? `<img src="${esc(t.image)}" alt="" loading="lazy"
+    ? `<img src="${esc(t.image)}" alt="${esc(t.name)} by ${esc(t.artist)}" loading="lazy"
          onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="spotify-cover-ph" style="display:none">♪</div>`
     : `<div class="spotify-cover-ph">♪</div>`;
@@ -218,7 +218,7 @@ export async function loadRecs() {
       for (const a of albumRecs) {
         const albrecImgSrc = proxyImg(a.image, 80) || a.image;
         const imgEl = albrecImgSrc
-          ? `<img class="albrec-img" src="${esc(albrecImgSrc)}" alt="" loading="lazy"
+          ? `<img class="albrec-img" src="${esc(albrecImgSrc)}" alt="${esc(a.album)} by ${esc(a.artist)}" loading="lazy"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
              <div class="albrec-ph" style="display:none;background:${gradientFor(a.album)}">${initials(a.album)}</div>`
           : `<div class="albrec-ph" style="background:${gradientFor(a.album)}">${initials(a.album)}</div>`;
@@ -277,7 +277,7 @@ export async function loadRecs() {
         try {
           const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
           const el = document.getElementById(`recs-thumb-${i}`);
-          if (el && info.image) el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
+          if (el && info.image) el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="${esc(r.name)}" loading="lazy" onerror="this.remove()">`;
         } catch {}
       });
     }
@@ -298,7 +298,7 @@ export async function loadRecs() {
         // Render photo
         const ph = document.getElementById(`rph-${i}`);
         if (ph && info.image) {
-          ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy"
+          ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="${esc(r.name)}" loading="lazy"
             onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
         }
 
@@ -314,7 +314,7 @@ export async function loadRecs() {
             let ah = '<div class="rec-albums-label">Bekende albums</div><div class="rec-albums-list">';
             for (const a of albums) {
               const imgEl = a.image
-                ? `<img class="rec-album-img" src="${proxyImg(a.image, 48) || a.image}" alt="" loading="lazy">` : `<div class="rec-album-ph">♪</div>`;
+                ? `<img class="rec-album-img" src="${proxyImg(a.image, 48) || a.image}" alt="${esc(a.name)}" loading="lazy">` : `<div class="rec-album-ph">♪</div>`;
               const plexMark = state.plexOk && a.inPlex ? `<span class="rec-album-plex">▶</span>` : '';
               ah += `<div class="rec-album-row">${imgEl}<span class="rec-album-name">${esc(a.name)}</span>${plexMark}${downloadBtn(r.name, a.name, a.inPlex)}</div>`;
             }
@@ -338,7 +338,7 @@ export async function loadRecs() {
           .then(info => {
             const el = document.getElementById(`recs-thumb-${i}`);
             if (el && info.image) {
-              el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="" loading="lazy" onerror="this.remove()">`;
+              el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="${esc(r.name)}" loading="lazy" onerror="this.remove()">`;
             }
             return true;
           })
@@ -437,7 +437,7 @@ export function renderReleases() {
   for (const r of filtered) {
     const isNew = state.newReleaseIds.has(`${r.artist}::${r.album}`);
     const imgEl = r.image
-      ? `<img class="rel-img" src="${esc(r.image)}" alt="" loading="lazy"
+      ? `<img class="rel-img" src="${esc(r.image)}" alt="${esc(r.album)} by ${esc(r.artist)}" loading="lazy"
            onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="rel-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</div>`
       : `<div class="rel-ph" style="background:${gradientFor(r.album)}">${initials(r.album)}</div>`;
@@ -472,7 +472,7 @@ export function renderReleases() {
     const previewItems = filtered.slice(0, 8);
     previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
       if (r.image) return `<div class="collapsed-thumb">
-          <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <img src="${esc(r.image)}" alt="${esc(r.album)} by ${esc(r.artist)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
           <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
         </div>`;
       return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
@@ -533,7 +533,7 @@ export function renderDiscover() {
     ].filter(Boolean).join(' · ');
     const discImgSrc = proxyImg(a.image, 120) || a.image;
     const photo = discImgSrc
-      ? `<img class="discover-photo" src="${esc(discImgSrc)}" alt="" loading="lazy"
+      ? `<img class="discover-photo" src="${esc(discImgSrc)}" alt="${esc(a.name)}" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
       : `<div class="discover-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
@@ -564,7 +564,7 @@ export function renderDiscover() {
           ${a.albums?.length ? `<div class="discover-preview-row">${a.albums.slice(0, 5).map(alb => {
             const bg = gradientFor(alb.title || '');
             return alb.coverUrl
-              ? `<img class="discover-preview-thumb" src="${esc(alb.coverUrl)}" alt="${esc(alb.title)}" loading="lazy"
+              ? `<img class="discover-preview-thumb" src="${esc(alb.coverUrl)}" alt="${esc(alb.title)}${alb.year ? ' ('+alb.year+')' : ''}" loading="lazy"
                    title="${esc(alb.title)}${alb.year ? ' ('+alb.year+')' : ''}"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                  <div class="discover-preview-ph" style="display:none;background:${bg}">${initials(alb.title || '?')}</div>`
@@ -773,7 +773,7 @@ export async function loadOntdek() {
         const previewItems = filtered.slice(0, 8);
         previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(r => {
           if (r.image) return `<div class="collapsed-thumb">
-              <img src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <img src="${esc(r.image)}" alt="${esc(r.album)} by ${esc(r.artist)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
               <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(r.album)}">${initials(r.album)}</span>
             </div>`;
           return `<div class="collapsed-thumb" style="background:${gradientFor(r.album)}"><span class="collapsed-thumb-ph">${initials(r.album)}</span></div>`;
@@ -810,7 +810,7 @@ export async function loadOntdek() {
         const previewItems = filtered.slice(0, 8);
         previewEl.innerHTML = `<div class="collapsed-thumbs">${previewItems.map(a => {
           if (a.image) return `<div class="collapsed-thumb collapsed-thumb-round">
-              <img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <img src="${esc(a.image)}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
               <span class="collapsed-thumb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</span>
             </div>`;
           return `<div class="collapsed-thumb collapsed-thumb-round" style="background:${gradientFor(a.name)}"><span class="collapsed-thumb-ph">${initials(a.name)}</span></div>`;

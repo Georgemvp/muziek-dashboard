@@ -119,7 +119,7 @@ export async function loadUser() {
     const u = d.user;
     const src = getImg(u.image, 'large');
     const av = src
-      ? `<img class="user-avatar" src="${src}" alt="">`
+      ? `<img class="user-avatar" src="${src}" alt="${esc(u.realname || u.name)}" loading="lazy">`
       : `<div class="user-avatar-ph">${(u.name || 'U')[0].toUpperCase()}</div>`;
     const year = new Date(parseInt(u.registered?.unixtime) * 1000).getFullYear();
 

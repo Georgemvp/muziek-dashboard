@@ -34,7 +34,7 @@ export function openArtistPanel(name) {
 
     const panelImgSrc = proxyImg(info.image, 400) || info.image;
     const photoHtml = panelImgSrc
-      ? `<img src="${esc(panelImgSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
+      ? `<img src="${esc(panelImgSrc)}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;display:block"
            onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="panel-photo-ph" style="background:${gradientFor(name)};display:none">${initials(name)}</div>`
       : `<div class="panel-photo-ph" style="background:${gradientFor(name)}">${initials(name)}</div>`;
@@ -52,7 +52,7 @@ export function openArtistPanel(name) {
       for (const a of info.albums) {
         const panelAlbImgSrc = proxyImg(a.image, 48) || a.image;
         const imgEl = panelAlbImgSrc
-          ? `<img class="panel-album-img" src="${esc(panelAlbImgSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.remove()">`
+          ? `<img class="panel-album-img" src="${esc(panelAlbImgSrc)}" alt="${esc(a.name)}" loading="lazy" onerror="this.onerror=null;this.remove()">`
           : `<div class="panel-album-ph">♪</div>`;
         const plexMark = state.plexOk && a.inPlex
           ? `<span class="badge plex" style="font-size:9px">▶</span>` : '';

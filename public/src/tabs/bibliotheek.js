@@ -110,7 +110,7 @@ function blibGroupByLetter(data) {
 function blibAlbumCard(item) {
   const src = item.thumb ? proxyImg(item.thumb, 240) : null;
   const img = src
-    ? `<img src="${esc(src)}" alt="" loading="lazy"
+    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy"
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="blib-cover-ph" style="display:none;background:${gradientFor(item.album)}">${initials(item.album)}</div>`
     : `<div class="blib-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`;
@@ -471,7 +471,7 @@ async function blibShowDetail(item) {
 
   const src = item.thumb ? proxyImg(item.thumb, 320) : null;
   const coverHtml = src
-    ? `<img src="${esc(src)}" alt="${esc(item.album)}"
+    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="blib-detail-cover-ph" style="display:none;background:${gradientFor(item.album)}">${initials(item.album)}</div>`
     : `<div class="blib-detail-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`;
@@ -966,7 +966,7 @@ export async function loadTopArtists(period) {
       const lfmImg   = getImg(a.image, 'large') || getImg(a.image);
       const agImgSrc = proxyImg(lfmImg, 120) || lfmImg;
       const photoHtml = agImgSrc
-        ? `<img src="${agImgSrc}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        ? `<img src="${agImgSrc}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
            <div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
         : `<div class="ag-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
       html += `<div class="ag-card">
@@ -985,7 +985,7 @@ export async function loadTopArtists(period) {
         .then(info => {
           if (info.image) {
             const el = document.getElementById(`agp-${i}`);
-            if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="" loading="lazy" onerror="this.style.display='none'">`;
+            if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none'">`;
           }
           return true;
         })
