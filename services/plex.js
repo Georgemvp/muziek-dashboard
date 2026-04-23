@@ -5,13 +5,14 @@ const logger = require('../logger');
 const PLEX_URL   = (process.env.PLEX_URL || 'http://localhost:32400').replace(/\/$/, '');
 const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
 
-let plexArtists    = new Set();
-let plexArtistMap  = new Map(); // lowercase → originele naam
-let plexAlbums     = new Set();
-let plexAlbumsNorm = new Set();
-let plexLastSync   = 0;
-let plexSyncOk     = false;
-let plexLibrary    = []; // [{artist, album}] originele casing, gesorteerd op artiest
+let plexArtists       = new Set();
+let plexArtistMap     = new Map(); // lowercase → originele naam
+let plexAlbums        = new Set();
+let plexAlbumsNorm    = new Set();
+let plexAlbumsByArtist = new Map(); // normArtist → Set van normAlbum strings (lookup voor snelle albumInPlex checks)
+let plexLastSync      = 0;
+let plexSyncOk        = false;
+let plexLibrary       = []; // [{artist, album}] originele casing, gesorteerd op artiest
 
 // ── Herstel vanuit SQLite bij opstarten ────────────────────────────────────
 const cached = getCache('plex', 3_600_000);
@@ -20,6 +21,11 @@ if (cached) {
   plexArtistMap  = new Map(Object.entries(cached.artistMap || {}));
   plexAlbums     = new Set(cached.albums     || []);
   plexAlbumsNorm = new Set(cached.albumsNorm || []);
+  if (cached.albumsByArtist) {
+    plexAlbumsByArtist = new Map(
+      Object.entries(cached.albumsByArtist).map(([k, v]) => [k, new Set(v)])
+    );
+  }
   plexLibrary    = cached.library  || [];
   plexLastSync   = cached.lastSync || 0;
   plexSyncOk     = cached.syncOk   || false;
@@ -162,6 +168,19 @@ async function syncPlexLibrary(force = false) {
       .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null, thumb: a.thumb || null }))
       .filter(x => x.artist && x.album)
       .sort((a, b) => a.artist.localeCompare(b.artist, 'nl', { sensitivity: 'base' }));
+
+    // Bouw lookup map voor snelle albumInPlex checks
+    plexAlbumsByArtist = new Map();
+    for (const entry of plexAlbumsNorm) {
+      const sepIdx = entry.indexOf('||');
+      const artist = entry.substring(0, sepIdx);
+      const album = entry.substring(sepIdx + 2);
+      if (!plexAlbumsByArtist.has(artist)) {
+        plexAlbumsByArtist.set(artist, new Set());
+      }
+      plexAlbumsByArtist.get(artist).add(album);
+    }
+
     plexLastSync   = Date.now();
     plexSyncOk     = true;
 
@@ -170,6 +189,9 @@ async function syncPlexLibrary(force = false) {
       artistMap:  Object.fromEntries(plexArtistMap),
       albums:     [...plexAlbums],
       albumsNorm: [...plexAlbumsNorm],
+      albumsByArtist: Object.fromEntries(
+        [...plexAlbumsByArtist].map(([k, v]) => [k, [...v]])
+      ),
       library:    plexLibrary,
       lastSync:   plexLastSync,
       syncOk:     plexSyncOk
@@ -198,20 +220,20 @@ function albumInPlex(artist, album) {
   const normArtist = normalizeTitle(artist);
   const normAlbum = normalizeTitle(album);
 
-  for (let entry of plexAlbumsNorm) {
-    const [plexArtNorm, plexAlbNorm] = entry.split('||');
+  // Zoek alle artiesten die matchen (exact of substring)
+  for (const [plexArtist, albums] of plexAlbumsByArtist) {
+    const artistMatches = normArtist === plexArtist ||
+                         plexArtist.includes(normArtist) ||
+                         normArtist.includes(plexArtist);
+    if (!artistMatches) continue;
 
-    // Artist moet matchen (exact of substring)
-    const artistMatches = normArtist === plexArtNorm ||
-                         plexArtNorm.includes(normArtist) ||
-                         normArtist.includes(plexArtNorm);
-
-    // Album moet matchen (exact of substring)
-    const albumMatches = normAlbum === plexAlbNorm ||
-                        plexAlbNorm.includes(normAlbum) ||
-                        normAlbum.includes(plexAlbNorm);
-
-    if (artistMatches && albumMatches) return true;
+    // Check albums van deze artiest
+    for (const plexAlbum of albums) {
+      const albumMatches = normAlbum === plexAlbum ||
+                          plexAlbum.includes(normAlbum) ||
+                          normAlbum.includes(plexAlbum);
+      if (albumMatches) return true;
+    }
   }
 
   return false;
