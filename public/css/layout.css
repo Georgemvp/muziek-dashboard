@@ -1,0 +1,602 @@
+/* ════════════════════════════════════════════════════════════════════
+   layout.css — App shell, sidebar, topbar, content-area, player-bar
+   Sidebar-gebaseerde 2-koloms layout (desktop) + mobiel overlay.
+   Alle waarden verwijzen naar tokens uit base.css.
+   ════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════
+   APP SHELL — CSS Grid root
+   ══════════════════════════════════════════════════════════════════ */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   SIDEBAR
+   ══════════════════════════════════════════════════════════════════ */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--surface1);
+  border-right: 1px solid var(--border);
+  transition: width var(--transition-normal), left var(--transition-normal),
+              transform var(--transition-normal);
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Brand / logo balk */
+.sidebar-brand {
+  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.sidebar-brand-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* Navigatiecontainer */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+/* Enkelvoudig nav-item (button) */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.nav-item:hover {
+  background: var(--surface2);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--surface3);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.nav-item svg,
+.nav-item .nav-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+}
+
+.nav-item.active svg,
+.nav-item.active .nav-icon {
+  opacity: 1;
+}
+
+/* Badge (aantal / notificatie) */
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* Scheidingslijn */
+.sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 16px;
+  flex-shrink: 0;
+}
+
+/* Sectie-titel (uppercase label) */
+.sidebar-section-title {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  flex-shrink: 0;
+}
+
+/* Footer (onderaan sidebar, pushed by margin-top: auto) */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Status-rij in footer */
+.sidebar-status {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Status-dot: rood = off, groen = on */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.status-dot.online,
+.status-dot[data-status="on"] {
+  background: var(--green);
+}
+
+.status-dot.offline,
+.status-dot[data-status="off"] {
+  background: var(--red);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   SIDEBAR OVERLAY — mobiel achtergrond dim
+   ══════════════════════════════════════════════════════════════════ */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.sidebar-overlay.visible {
+  opacity: 1;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   MAIN AREA — rechter kolom
+   ══════════════════════════════════════════════════════════════════ */
+.main-area {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  min-width: 0; /* voorkom overflow buiten grid */
+}
+
+
+/* ── Topbar ──────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+/* Hamburgermenu (verborgen op desktop, zichtbaar op mobiel) */
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.sidebar-toggle:hover {
+  background: var(--surface2);
+  color: var(--text-primary);
+}
+
+/* Zoekbalk wrapper */
+.search-wrap {
+  flex: 1;
+  max-width: 480px;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 36px 8px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color var(--transition-fast),
+              background var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  background: var(--surface3);
+}
+
+.search-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Zoekresultaten dropdown */
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 300;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.search-results:empty {
+  display: none;
+}
+
+/* Overige topbar acties */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+
+/* ── View toolbar (filters, sorteerknoppen) ──────────────────────── */
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  min-height: 0;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.view-toolbar:empty {
+  display: none;
+}
+
+.view-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ── Content area ────────────────────────────────────────────────── */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface3) transparent;
+}
+
+.content-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-area::-webkit-scrollbar-thumb {
+  background: var(--surface3);
+  border-radius: 3px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   PLAYER BAR — sticky onderaan main-area
+   ══════════════════════════════════════════════════════════════════ */
+.player-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 2fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  height: var(--player-height);
+  background: var(--surface1);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* Albumhoes */
+.player-art {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--art-radius);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface3);
+}
+
+/* Track-info kolom links */
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.player-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.player-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-artist {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Knoppen-rij (midden) */
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.player-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.player-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface2);
+}
+
+.player-btn-main {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.player-btn-main:hover {
+  background: var(--accent-hover);
+  transform: scale(1.06);
+}
+
+.player-btn-main:active {
+  transform: scale(0.96);
+}
+
+/* Progress sectie */
+.player-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  min-width: 80px;
+}
+
+.player-progress:hover .player-progress-fill::after {
+  opacity: 1;
+}
+
+.player-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 100ms linear;
+  position: relative;
+}
+
+.player-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.player-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 35px;
+  flex-shrink: 0;
+}
+
+.player-time-end {
+  text-align: right;
+}
+
+/* Volume en extra rechterkant */
+.player-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.player-volume {
+  accent-color: var(--accent);
+  width: 80px;
+  cursor: pointer;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   RESPONSIVE — max-width: 768px
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* App shell wordt 1 kolom */
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* Sidebar off-canvas links */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    transform: translateX(-100%);
+    z-index: 200;
+    box-shadow: none;
+    width: var(--sidebar-width) !important;
+  }
+
+  .sidebar[data-open="true"] {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Overlay zichtbaar op mobiel (JS toggled) */
+  .sidebar-overlay {
+    display: block;
+  }
+
+  /* Hamburger zichtbaar op mobiel */
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  /* Player bar: toon alleen info + controls */
+  .player-bar {
+    grid-template-columns: 1fr auto;
+  }
+
+  /* Progress-wrap en extra (volume) verbergen */
+  .player-progress-wrap,
+  .player-extra {
+    display: none;
+  }
+
+  /* Meer ademruimte in content */
+  .content-area {
+    padding: 16px;
+  }
+
+  .topbar {
+    padding: 10px 16px;
+  }
+}
