@@ -891,11 +891,64 @@ app.get('/api/plex/stream/audio/:ratingKey', async (req, res) => {
     const data = await plexGet(`/library/metadata/${ratingKey}`);
     const partKey = data?.MediaContainer?.Metadata?.[0]?.Media?.[0]?.Part?.[0]?.key;
     if (!partKey) return res.status(404).json({ error: 'Track niet gevonden' });
+
+    // Construct the full Plex URL with token
     const separator = partKey.includes('?') ? '&' : '?';
-    return res.redirect(302, `${PLEX_URL}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`);
+    const plexStreamUrl = `${PLEX_URL}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
+
+    // Build headers for the fetch request
+    const fetchHeaders = {};
+    if (req.headers.range) {
+      fetchHeaders['Range'] = req.headers.range;
+    }
+
+    // Fetch the audio stream from Plex
+    const plexRes = await fetch(plexStreamUrl, { headers: fetchHeaders });
+
+    // Handle non-2xx responses
+    if (!plexRes.ok) {
+      logger.warn({ status: plexRes.status, statusText: plexRes.statusText }, 'Plex audio stream fout');
+      return res.status(502).json({ error: `Plex returned ${plexRes.status}: ${plexRes.statusText}` });
+    }
+
+    // Handle 206 Partial Content (Range request)
+    if (plexRes.status === 206) {
+      res.status(206);
+      const contentRange = plexRes.headers.get('Content-Range');
+      if (contentRange) {
+        res.setHeader('Content-Range', contentRange);
+      }
+    }
+
+    // Copy Content-Type header
+    const contentType = plexRes.headers.get('Content-Type');
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+
+    // Copy Content-Length header if present
+    const contentLength = plexRes.headers.get('Content-Length');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    // Set caching and seek support headers
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    // Pipe the Plex response body to res
+    const readable = require('stream').Readable.from(plexRes.body);
+    readable.pipe(res).on('error', (err) => {
+      logger.warn({ err }, 'Plex audio stream pipe fout');
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Stream fout' });
+      }
+    });
   } catch (e) {
     logger.warn({ err: e }, 'Plex audio stream ophalen mislukt');
-    res.status(500).json({ error: e.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: e.message });
+    }
   }
 });
 
@@ -953,18 +1006,15 @@ app.post('/api/plex/play', async (req, res) => {
       // Get track metadata to extract the actual audio Part key
       const data = await plexGet(`/library/metadata/${ratingKey}`);
       const meta = data?.MediaContainer?.Metadata?.[0];
-      const partKey = meta?.Media?.[0]?.Part?.[0]?.key;
 
-      if (!partKey) return res.status(404).json({ error: 'Track niet gevonden of geen audio beschikbaar' });
+      if (!meta) return res.status(404).json({ error: 'Track niet gevonden of geen audio beschikbaar' });
 
-      // Build the real stream URL with proper separator
-      // Use PLEX_URL_EXTERNAL for browser playback if set, otherwise use PLEX_URL
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-      const separator = partKey.includes('?') ? '&' : '?';
-      const webStream = `${plexStreamUrl}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
+      // Use local proxy endpoint instead of direct Plex URL (keeps token server-side)
+      const webStream = `/api/plex/stream/audio/${ratingKey}`;
 
       // Extract track metadata
-      // Use external URL for browser-facing responses (thumbs, streams)
+      // Use external URL for browser-facing responses (thumbs)
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
       const track = meta?.title || null;
       const artist = meta?.grandparentTitle || meta?.originalTitle || null;
       const album = meta?.parentTitle || null;
