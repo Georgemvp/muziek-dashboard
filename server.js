@@ -272,10 +272,20 @@ require('./routes/misc')(app, deps);
 if (require.main === module) {
   app.listen(PORT, () => {
     logger.info({ port: PORT }, 'App gestart');
-    syncPlexLibrary(true).catch(() => {});
-    initDiscover();
-    initGaps();
-    initReleases();
+    // Wacht tot Plex bibliotheek is geladen voordat requests worden geaccepteerd
+    syncPlexLibrary(true)
+      .then(() => {
+        logger.info('Plex bibliotheek geladen');
+        initDiscover();
+        initGaps();
+        initReleases();
+      })
+      .catch(e => {
+        logger.warn({ err: e }, 'Plex bibliotheek laden mislukt - app verder zonder Plex');
+        initDiscover();
+        initGaps();
+        initReleases();
+      });
     // Automatische Plex achtergrond-sync elke 30 minuten
     setInterval(() => {
       syncPlexLibrary(true).catch(e => logger.warn({ err: e }, 'Plex achtergrond-sync mislukt'));

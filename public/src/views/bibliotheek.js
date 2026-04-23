@@ -64,12 +64,18 @@ function blibGetCols() {
 
 async function blibLoad() {
   if (blibData) return blibData;
-  const res = await apiFetch('/api/plex/library/all');
-  if (!res.ok || !res.library?.length) return [];
-  blibData = res.library.map(([artist, album, ratingKey, thumb]) => ({
-    artist, album, ratingKey, thumb
-  }));
-  return blibData;
+  try {
+    const res = await apiFetch('/api/plex/library/all');
+    if (!res || !res.library) return [];
+    if (!res.library.length) return [];
+    blibData = res.library.map(([artist, album, ratingKey, thumb]) => ({
+      artist, album, ratingKey, thumb
+    }));
+    return blibData;
+  } catch (e) {
+    console.error('Fout bij laden bibliotheek:', e);
+    return [];
+  }
 }
 
 // ── Filter + sort ────────────────────────────────────────────────────────
