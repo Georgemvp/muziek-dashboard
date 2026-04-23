@@ -518,7 +518,10 @@
 
 /* ── Album grid ── */
 .blib-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, 180px); gap: 20px; padding-bottom: 8px; justify-content: start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+  padding-bottom: 8px;
 }
 
 .blib-album { cursor: pointer; position: relative; transition: transform var(--transition-fast); }
