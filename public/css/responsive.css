@@ -7,6 +7,10 @@
   .artist-grid    { grid-template-columns: repeat(2, 1fr); }
   .album-grid     { grid-template-columns: repeat(3, 1fr); }
   .gaps-album-grid { grid-template-columns: repeat(3, 1fr); }
+
+  .gaps-view-head { flex-direction: column; align-items: stretch; }
+  .gaps-inline-toolbar { width: 100%; }
+  .gaps-search { width: 100%; min-width: 0; }
   .rec-grid       { grid-template-columns: 1fr; }
   .stats-grid     { grid-template-columns: 1fr; }
   .wishlist-grid  { grid-template-columns: repeat(2, 1fr); }
