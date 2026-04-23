@@ -646,7 +646,7 @@ async function blibShowArtistFilter(artist) {
 // Plex playlists in sidebar
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function blibLoadSidebarPlaylists() {
+export async function loadSidebarPlaylists() {
   const sidebarEl = document.getElementById('sidebar-playlists');
   if (!sidebarEl) return;
 
@@ -689,7 +689,7 @@ async function blibLoadSidebarPlaylists() {
       // Highlight
       sidebarEl.querySelectorAll('.sidebar-playlist-item').forEach(b =>
         b.classList.toggle('active', b === btn));
-      blibShowPlaylistTracks(btn.dataset.playlistKey, btn.dataset.playlistTitle);
+      openSidebarPlaylist(btn.dataset.playlistKey, btn.dataset.playlistTitle);
     });
 
   } catch (e) {
@@ -703,7 +703,7 @@ async function blibLoadSidebarPlaylists() {
 // Playlist tracklist view
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function blibShowPlaylistTracks(key, title) {
+export async function openSidebarPlaylist(key, title) {
   blibCurrentView = 'playlist';
   blibPlaylistKey = key;
 
@@ -904,7 +904,7 @@ export async function loadBibliotheek() {
   blibRenderToolbar();
 
   // Laad playlists in sidebar
-  blibLoadSidebarPlaylists().catch(() => {});
+  loadSidebarPlaylists().catch(() => {});
 
   // Toon laad-staat in content
   const container = blibContentEl();
