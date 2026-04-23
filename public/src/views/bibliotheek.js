@@ -1358,7 +1358,7 @@ async function blibShowArtistDetail(ratingKey) {
                   </div>
                   <div class="blib-track-title">${esc(t.title || 'Onbekend')}</div>
                   <div class="blib-track-album">${esc(t.album || '—')}</div>
-                  <div class="blib-track-duration">${dur ? \`\${min}:\${sec}\` : ''}</div>
+                  <div class="blib-track-duration">${dur ? min + ':' + sec : ''}</div>
                 </div>`;
               }).join('')}
             </div>
