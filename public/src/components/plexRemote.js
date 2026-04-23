@@ -1,6 +1,6 @@
 // ── Plex Remote Control ───────────────────────────────────────────────────
 // Zone picker (client/player selectie) en playback-commando's voor Plex.
-import { playWebStream, pauseWebPlayer } from './player.js';
+import { playWebStream, pauseWebPlayer, playQueue } from './player.js';
 
 const ZONE_KEY = 'plexSelectedZone'; // localStorage key
 
@@ -133,6 +133,7 @@ export function isWebZone() {
 /**
  * Speel een item af op de geselecteerde zone.
  * Als er geen zone geselecteerd is, open dan de zone picker.
+ * Voor web player: ondersteunt album-afspelen via queue.
  * @param {string|number} ratingKey - Plex ratingKey van het album/track
  * @param {string} [type]           - mediatype ('music')
  * @returns {Promise<boolean>} true als afspelen gestart is
@@ -156,6 +157,37 @@ export async function playOnZone(ratingKey, type = 'music') {
     // Web player playback - gebruik HTML audio element
     if (data.webStream) {
       try {
+        // For web player: check if this is an album by trying to fetch album tracks
+        if (zone.machineId === '__web__') {
+          try {
+            const albumRes = await fetch(`/api/plex/album/${ratingKey}/tracks`);
+            if (albumRes.ok) {
+              const albumData = await albumRes.json();
+
+              // If we got tracks, it's an album - play as queue
+              if (albumData.tracks && albumData.tracks.length > 0) {
+                const queueTracks = albumData.tracks.map(track => ({
+                  ratingKey: track.ratingKey,
+                  title: track.title || 'Onbekend nummer',
+                  artist: track.artist || '',
+                  album: track.album || '',
+                  duration: track.duration || 0,
+                  trackNumber: track.trackNumber || 0,
+                  thumb: track.thumb ? `${location.origin}/api/img?url=${encodeURIComponent(track.thumb)}&w=120` : null,
+                }));
+
+                await playQueue(queueTracks, 0);
+                _showPlayFeedback(`${zone.name} (Browser) - Album`);
+                return true;
+              }
+            }
+          } catch (e) {
+            // Not an album or fetch failed - fall through to single track playback
+            console.debug('[Plex Remote] Album fetch failed, treating as single track:', e);
+          }
+        }
+
+        // Single track playback (web or remote)
         await playWebStream(data.webStream);
 
         // Update player bar UI with track metadata
