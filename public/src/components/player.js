@@ -3,6 +3,10 @@ import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { getSelectedZone, pauseZone, skipZone } from './plexRemote.js';
 
+// ── SVG Icon Strings (Feather/Lucide style) ────────────────────────────────
+const PLAY_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+const PAUSE_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
 export const playerState = {
   previewAudio: new Audio(),
   previewBtn: null,
@@ -20,11 +24,11 @@ export async function playPreview(btn, artist, track) {
   if (playerState.previewBtn === btn) {
     if (playerState.previewAudio.paused) {
       await playerState.previewAudio.play();
-      btn.textContent = '⏸';
+      btn.innerHTML = PAUSE_SVG;
       btn.classList.add('playing');
     } else {
       playerState.previewAudio.pause();
-      btn.textContent = '▶';
+      btn.innerHTML = PLAY_SVG;
       btn.classList.remove('playing');
     }
     return;
@@ -33,7 +37,7 @@ export async function playPreview(btn, artist, track) {
   // Stop vorige track
   if (playerState.previewBtn) {
     playerState.previewAudio.pause();
-    playerState.previewBtn.textContent = '▶';
+    playerState.previewBtn.innerHTML = PLAY_SVG;
     playerState.previewBtn.classList.remove('playing');
     const oldFill = playerState.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
     if (oldFill) oldFill.style.width = '0%';
@@ -49,18 +53,18 @@ export async function playPreview(btn, artist, track) {
     if (!data.preview) {
       btn.textContent = '—';
       btn.disabled = false;
-      setTimeout(() => { if (btn.textContent === '—') btn.textContent = '▶'; }, 1800);
+      setTimeout(() => { if (btn.textContent === '—') btn.innerHTML = PLAY_SVG; }, 1800);
       playerState.previewBtn = null;
       return;
     }
     playerState.previewAudio.src = data.preview;
     playerState.previewAudio.currentTime = 0;
     await playerState.previewAudio.play();
-    btn.textContent = '⏸';
+    btn.innerHTML = PAUSE_SVG;
     btn.disabled = false;
     btn.classList.add('playing');
   } catch {
-    btn.textContent = '▶';
+    btn.innerHTML = PLAY_SVG;
     btn.disabled = false;
     playerState.previewBtn = null;
   }
@@ -77,7 +81,7 @@ playerState.previewAudio.addEventListener('timeupdate', () => {
 
 playerState.previewAudio.addEventListener('ended', () => {
   if (playerState.previewBtn) {
-    playerState.previewBtn.textContent = '▶';
+    playerState.previewBtn.innerHTML = PLAY_SVG;
     playerState.previewBtn.classList.remove('playing');
     const fill = playerState.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
     if (fill) fill.style.width = '0%';
@@ -89,7 +93,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && !playerState.previewAudio.paused) {
     playerState.previewAudio.pause();
     if (playerState.previewBtn) {
-      playerState.previewBtn.textContent = '▶';
+      playerState.previewBtn.innerHTML = PLAY_SVG;
       playerState.previewBtn.classList.remove('playing');
     }
   }
@@ -321,7 +325,7 @@ async function _playTrackAtIndex(index) {
     if (artEl && (track.thumb || data.thumb)) {
       artEl.src = track.thumb || data.thumb;
     }
-    if (playBtn) playBtn.textContent = '⏸';
+    if (playBtn) playBtn.innerHTML = PAUSE_SVG;
 
     playerState.isWebPlaying = true;
     renderQueue();
@@ -369,11 +373,11 @@ export function initPlayer() {
     // Web player
     if (zone.machineId === '__web__') {
       pauseWebPlayer();
-      // Toggle button text
-      if (playBtn.textContent === '▶') {
-        playBtn.textContent = '⏸';
+      // Toggle button SVG
+      if (playBtn.innerHTML.includes('polygon')) {
+        playBtn.innerHTML = PAUSE_SVG;
       } else {
-        playBtn.textContent = '▶';
+        playBtn.innerHTML = PLAY_SVG;
       }
     } else {
       // Remote Plex client
@@ -497,11 +501,11 @@ export function initPlayer() {
       // Update play button visual state
       if (playBtn) {
         if (data.state === 'paused') {
-          playBtn.textContent = '▶';
+          playBtn.innerHTML = PLAY_SVG;
         } else if (data.playing) {
-          playBtn.textContent = '⏸';
+          playBtn.innerHTML = PAUSE_SVG;
         } else if (data.stopped) {
-          playBtn.textContent = '▶';
+          playBtn.innerHTML = PLAY_SVG;
         }
       }
 
@@ -580,7 +584,7 @@ export function initPlayer() {
       if (progressBar) progressBar.setAttribute('aria-valuenow', 0);
 
       // Reset play button
-      if (playBtn) playBtn.textContent = '▶';
+      if (playBtn) playBtn.innerHTML = PLAY_SVG;
       playerState.isWebPlaying = false;
       renderQueue();
     }
@@ -603,7 +607,7 @@ export function initPlayer() {
       if (np.duration) playerState.totalDuration = np.duration / 1000;
 
       if (playBtn) {
-        playBtn.textContent = np.playing ? '⏸' : '▶';
+        playBtn.innerHTML = np.playing ? PAUSE_SVG : PLAY_SVG;
       }
 
       const offset = (np.viewOffset || 0) / 1000;

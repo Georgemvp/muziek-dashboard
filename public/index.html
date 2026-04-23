@@ -182,9 +182,23 @@
       </div>
 
       <div class="player-controls" role="group" aria-label="Afspeelopties">
-        <button class="player-btn" id="player-prev" title="Vorige track" aria-label="Vorige track">⏮</button>
-        <button class="player-btn player-btn-main" id="player-play" title="Play of pauzeer" aria-label="Play of pauzeer">▶</button>
-        <button class="player-btn" id="player-next" title="Volgende track" aria-label="Volgende track">⏭</button>
+        <button class="player-btn" id="player-prev" title="Vorige track" aria-label="Vorige track">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6"/>
+            <line x1="19" y1="5" x2="19" y2="19"/>
+          </svg>
+        </button>
+        <button class="player-btn player-btn-main" id="player-play" title="Play of pauzeer" aria-label="Play of pauzeer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </button>
+        <button class="player-btn" id="player-next" title="Volgende track" aria-label="Volgende track">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 18l6-6-6-6"/>
+            <line x1="5" y1="5" x2="5" y2="19"/>
+          </svg>
+        </button>
       </div>
 
       <div class="player-progress-wrap" aria-label="Afspeelvoortgang">
@@ -201,7 +215,16 @@
       </div>
 
       <div class="player-extra" role="group" aria-label="Extra speleropties">
-        <button class="player-btn" id="player-queue-btn" title="Bekijk afspeelwachtrij" aria-label="Bekijk afspeelwachtrij">☰</button>
+        <button class="player-btn" id="player-queue-btn" title="Bekijk afspeelwachtrij" aria-label="Bekijk afspeelwachtrij">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
         <input type="range" class="player-volume" id="player-volume"
                min="0" max="100" value="80"
                aria-label="Volume"
