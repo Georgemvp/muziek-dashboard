@@ -296,6 +296,16 @@ async function getPlexClients(force = false) {
  * op http://{host}:{port}/player/... als fallback.
  */
 async function _playerCmd(machineId, command, extraParams = {}) {
+  // ── Speciale behandeling voor web-browser ──────────────────────────────
+  // '__web__' is een speciale machineId voor de lokale browser. Dit kan niet
+  // extern bestuurd worden via de Plex API. De frontend moet dit afhandelen.
+  if (machineId === '__web__') {
+    throw new Error(
+      `Plex web player kan niet op afstand bestuurd worden. ` +
+      `Selecteer een ander apparaat (Plexamp, Plex Media Player, etc.).`
+    );
+  }
+
   const cmdId  = String(++_commandId);
   const params = new URLSearchParams({ commandID: cmdId, ...extraParams });
 

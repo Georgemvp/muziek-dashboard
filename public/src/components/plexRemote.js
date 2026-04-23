@@ -142,6 +142,13 @@ export async function playOnZone(ratingKey, type = 'music') {
     await toggleZonePicker();
     return false;
   }
+
+  // Web player kan niet op afstand bestuurd worden
+  if (zone.machineId === '__web__') {
+    _showError('Web player kan niet op afstand bestuurd worden. Selecteer een ander apparaat (Plexamp, Plex Media Player, etc.)');
+    return false;
+  }
+
   try {
     const res  = await fetch('/api/plex/play', {
       method:  'POST',
@@ -163,6 +170,7 @@ export async function playOnZone(ratingKey, type = 'music') {
 export async function pauseZone() {
   const zone = getSelectedZone();
   if (!zone) return;
+  if (zone.machineId === '__web__') return; // Web player kan niet op afstand bestuurd worden
   await fetch('/api/plex/pause', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -174,6 +182,7 @@ export async function pauseZone() {
 export async function skipZone(direction = 'next') {
   const zone = getSelectedZone();
   if (!zone) return;
+  if (zone.machineId === '__web__') return; // Web player kan niet op afstand bestuurd worden
   await fetch('/api/plex/skip', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
