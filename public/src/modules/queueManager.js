@@ -37,7 +37,7 @@ export class QueueManager {
     return this.shuffleEnabled;
   }
 
-  private _fisherYatesShuffle(array) {
+  _fisherYatesShuffle(array) {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -193,7 +193,7 @@ export class QueueManager {
     this._notifyListeners('recent-changed');
   }
 
-  private loadRecent() {
+  loadRecent() {
     try {
       const data = localStorage.getItem(RECENT_KEY);
       return data ? JSON.parse(data) : [];
@@ -215,14 +215,14 @@ export class QueueManager {
     this.listeners.add({ event: 'recent-changed', listener });
   }
 
-  private _notifyListeners(event) {
+  _notifyListeners(event) {
     this.listeners.forEach(({ event: e, listener }) => {
       if (e === event) listener();
     });
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
-  private loadShuffle() {
+  loadShuffle() {
     try {
       const data = localStorage.getItem(SHUFFLE_KEY);
       return data ? JSON.parse(data) : false;
