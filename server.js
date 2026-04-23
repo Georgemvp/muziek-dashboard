@@ -954,8 +954,10 @@ app.post('/api/plex/play', async (req, res) => {
       if (!partKey) return res.status(404).json({ error: 'Track niet gevonden of geen audio beschikbaar' });
 
       // Build the real stream URL with proper separator
+      // Use PLEX_URL_EXTERNAL for browser playback if set, otherwise use PLEX_URL
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
       const separator = partKey.includes('?') ? '&' : '?';
-      const webStream = `${PLEX_URL}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
+      const webStream = `${plexStreamUrl}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
 
       // Extract track metadata
       const track = meta?.title || null;
