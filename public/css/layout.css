@@ -144,11 +144,12 @@
 
 /* Sectie-titel (uppercase label) */
 .sidebar-section-title {
-  font-size: var(--text-xs);
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   color: var(--text-muted);
-  padding: 8px 16px;
+  padding: 12px 16px 8px;
   flex-shrink: 0;
 }
 
