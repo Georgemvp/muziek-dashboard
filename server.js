@@ -946,9 +946,35 @@ app.post('/api/plex/play', async (req, res) => {
   try {
     // '__web__' = lokale web browser player
     if (machineId === '__web__') {
-      // Return stream URL voor web playback
-      const streamUrl = `${PLEX_URL}/library/metadata/${ratingKey}/part?download=0&X-Plex-Token=${PLEX_TOKEN}`;
-      return res.json({ ok: true, webStream: streamUrl });
+      // Get track metadata to extract the actual audio Part key
+      const data = await plexGet(`/library/metadata/${ratingKey}`);
+      const meta = data?.MediaContainer?.Metadata?.[0];
+      const partKey = meta?.Media?.[0]?.Part?.[0]?.key;
+
+      if (!partKey) return res.status(404).json({ error: 'Track niet gevonden of geen audio beschikbaar' });
+
+      // Build the real stream URL with proper separator
+      const separator = partKey.includes('?') ? '&' : '?';
+      const webStream = `${PLEX_URL}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
+
+      // Extract track metadata
+      const track = meta?.title || null;
+      const artist = meta?.grandparentTitle || meta?.originalTitle || null;
+      const album = meta?.parentTitle || null;
+      const thumb = meta?.parentThumb
+        ? `${PLEX_URL}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
+        : null;
+      const duration = meta?.duration || null;
+
+      return res.json({
+        ok: true,
+        webStream,
+        track,
+        artist,
+        album,
+        thumb,
+        duration
+      });
     }
 
     await playOnClient(machineId, String(ratingKey), type);
