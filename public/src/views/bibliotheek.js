@@ -35,6 +35,9 @@ let blibPlaylistsData = null;    // cache voor playlists
 let blibTrackSearchTerm = '';    // search term voor tracks tab
 let blibArtistSearchTerm = '';   // search term voor artists tab
 
+// ── Navigation stack ──
+let blibNavigationStack = [];    // stack van navigatie-states { view, data }
+
 // Row dimensions for virtual scroller
 const BLIB_GRID_ROW_H = 210;
 const BLIB_LIST_ROW_H = 62;
@@ -1140,9 +1143,294 @@ async function blibShowGenresTab(container) {
     const card = e.target.closest('.blib-genre-card');
     if (card) {
       const genre = card.dataset.genre;
-      showError('Genre filtering is niet geïmplementeerd. Genre: ' + genre);
+      blibShowGenreDetail(genre, genres);
     }
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Genre Detail View
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function blibShowGenreDetail(genre, allGenres) {
+  if (blibScroller) { blibScroller.destroy(); blibScroller = null; }
+
+  const container = blibContentEl();
+  if (!container) return;
+
+  // Push to navigation stack
+  blibNavigationStack.push({ view: 'genres', data: {} });
+
+  container.scrollTop = 0;
+
+  // Vind genre data
+  const genreData = allGenres.find(g => g.genre === genre);
+  if (!genreData) {
+    container.innerHTML = `<div class="blib-empty">
+      <div class="blib-empty-icon">🎼</div>
+      <h3>Genre niet gevonden</h3>
+    </div>`;
+    return;
+  }
+
+  const artists = genreData.artists || [];
+
+  container.innerHTML = `
+    <div class="blib-detail-view">
+      <div class="blib-detail-topbar">
+        <button class="blib-back-btn" id="blib-genre-back">← Genres</button>
+      </div>
+      <div class="blib-genre-detail-header">
+        <div class="blib-genre-detail-title">${esc(genre)}</div>
+        <div class="blib-genre-detail-count">${artists.length} artiest${artists.length !== 1 ? 'en' : ''}</div>
+      </div>
+      <div class="blib-genre-artists-grid">
+        ${artists.map(a => {
+          const src = a.thumb ? proxyImg(a.thumb, 200) : null;
+          const img = src
+            ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+            : '';
+          const ph = `<div class="blib-artist-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
+          return `<div class="blib-genre-artist-card" data-artist-rating-key="${esc(a.ratingKey)}">
+            <div class="blib-artist-photo">
+              ${img}
+              ${ph}
+            </div>
+            <div class="blib-artist-name">${esc(a.title)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  document.getElementById('blib-genre-back')?.addEventListener('click', () => {
+    blibNavigationStack.pop();
+    blibShowGenresTab(container);
+  });
+
+  container.addEventListener('click', e => {
+    const card = e.target.closest('.blib-genre-artist-card');
+    if (card) {
+      const ratingKey = card.dataset.artistRatingKey;
+      if (ratingKey) blibShowArtistDetail(ratingKey);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Artiest Detail View
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function blibShowArtistDetail(ratingKey) {
+  if (blibScroller) { blibScroller.destroy(); blibScroller = null; }
+
+  const container = blibContentEl();
+  if (!container) return;
+
+  // Push to navigation stack
+  blibNavigationStack.push({ view: 'artist-detail', data: { ratingKey } });
+
+  container.scrollTop = 0;
+  container.innerHTML = `<div class="blib-detail-view">
+    <div class="loading"><div class="spinner"></div>Artiest laden…</div>
+  </div>`;
+
+  try {
+    const data = await apiFetch(`/api/plex/artists/${encodeURIComponent(ratingKey)}`);
+    if (!data.artist) {
+      container.innerHTML = `<div class="blib-empty"><p>Artiest niet gevonden.</p></div>`;
+      return;
+    }
+
+    const artist = data.artist;
+    const zone = getSelectedZone();
+
+    // Haal populaire nummers op
+    let popularTracks = [];
+    try {
+      const tracksData = await apiFetch(`/api/plex/tracks?limit=500`);
+      if (tracksData.tracks) {
+        popularTracks = tracksData.tracks
+          .filter(t => t.artist && t.artist.toLowerCase() === artist.title.toLowerCase())
+          .slice(0, 10);
+      }
+    } catch (e) {
+      // Ignore track loading errors
+    }
+
+    const coverSrc = artist.thumb ? proxyImg(artist.thumb, 320) : null;
+    const coverHtml = coverSrc
+      ? `<img src="${esc(coverSrc)}" alt="${esc(artist.title)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="blib-artist-detail-ph" style="background:${gradientFor(artist.title)};display:none;width:200px;height:200px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px">${initials(artist.title)}</div>`
+      : `<div class="blib-artist-detail-ph" style="background:${gradientFor(artist.title)};width:200px;height:200px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px">${initials(artist.title)}</div>`;
+
+    const backView = blibNavigationStack.length > 1 ? blibNavigationStack[blibNavigationStack.length - 2] : null;
+    const backLabel = backView?.view === 'genre' ? '← Genres' : '← Artiesten';
+
+    container.innerHTML = `
+      <div class="blib-detail-view">
+        <div class="blib-detail-topbar">
+          <button class="blib-back-btn" id="blib-artist-detail-back">${backLabel}</button>
+        </div>
+
+        <div class="blib-artist-detail-hero">
+          <div class="blib-artist-detail-photo">${coverHtml}</div>
+          <div class="blib-detail-info">
+            <div class="blib-detail-label">Artiest</div>
+            <h1 class="blib-detail-title">${esc(artist.title)}</h1>
+            ${artist.genres.length > 0 ? `<div class="blib-detail-genres">
+              ${artist.genres.map(g => `<span class="blib-genre-tag">${esc(g)}</span>`).join('')}
+            </div>` : ''}
+            <div class="blib-artist-stats">
+              <div class="blib-stat-item">
+                <span class="blib-stat-label">Albums</span>
+                <span class="blib-stat-value">${fmt(artist.albums.length)}</span>
+              </div>
+              <div class="blib-stat-item">
+                <span class="blib-stat-label">Nummers</span>
+                <span class="blib-stat-value">${fmt(artist.totalTracks)}</span>
+              </div>
+            </div>
+            <div class="blib-detail-actions">
+              <button class="blib-action-btn blib-action-primary" id="blib-artist-play-all">
+                ▶ Speel alles af
+              </button>
+              ${zone ? `<button class="blib-action-btn" id="blib-artist-play-plex" title="Speel op Plex: ${esc(zone)}">
+                🔊 Speel op Plex
+              </button>` : ''}
+              <button class="blib-action-btn" id="blib-artist-shuffle">
+                🔀 Shuffle
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="blib-artist-sections">
+          ${artist.albums.length > 0 ? `
+            <div class="blib-section">
+              <h2 class="blib-section-title">Albums (${fmt(artist.albums.length)})</h2>
+              <div class="blib-albums-grid">
+                ${artist.albums.map(a => {
+                  const src = a.thumb ? proxyImg(a.thumb, 200) : null;
+                  const img = src
+                    ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+                    : '';
+                  const ph = `<div class="blib-cover-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
+                  return `<div class="blib-album-detail-card" data-album-rating-key="${esc(a.ratingKey)}">
+                    <div class="blib-album-detail-cover">
+                      ${img}
+                      ${ph}
+                    </div>
+                    <div class="blib-album-detail-info">
+                      <div class="blib-album-detail-title" title="${esc(a.title)}">${esc(a.title)}</div>
+                      ${a.year ? `<div class="blib-album-detail-year">${a.year}</div>` : ''}
+                      <div class="blib-album-detail-count">${a.trackCount} nummer${a.trackCount !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${popularTracks.length > 0 ? `
+            <div class="blib-section">
+              <h2 class="blib-section-title">Populaire nummers</h2>
+              <div class="blib-track-header">
+                <span class="blib-track-col-num">#</span>
+                <span class="blib-track-col-title">Titel</span>
+                <span class="blib-track-col-album">Album</span>
+                <span class="blib-track-col-dur">Duur</span>
+              </div>
+              ${popularTracks.map((t, i) => {
+                const dur = t.duration ? Math.floor(t.duration / 1000) : 0;
+                const min = Math.floor(dur / 60);
+                const sec = String(dur % 60).padStart(2, '0');
+                return `<div class="blib-track-row" data-track-key="${esc(t.ratingKey || '')}">
+                  <div class="blib-track-num">
+                    <span class="blib-track-num-text">${i + 1}</span>
+                    <button class="blib-track-play-btn" aria-label="Speel ${esc(t.title || '')} af">▶</button>
+                  </div>
+                  <div class="blib-track-title">${esc(t.title || 'Onbekend')}</div>
+                  <div class="blib-track-album">${esc(t.album || '—')}</div>
+                  <div class="blib-track-duration">${dur ? \`\${min}:\${sec}\` : ''}</div>
+                </div>`;
+              }).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>`;
+
+    // Back button
+    document.getElementById('blib-artist-detail-back')?.addEventListener('click', () => {
+      blibNavigationStack.pop();
+      const prevState = blibNavigationStack[blibNavigationStack.length - 1];
+      if (prevState?.view === 'genre') {
+        blibShowGenreDetail(prevState.data.genre, blibGenresData);
+      } else {
+        blibShowArtistsTab(container);
+      }
+    });
+
+    // Play all
+    document.getElementById('blib-artist-play-all')?.addEventListener('click', () => {
+      if (artist.albums[0]?.ratingKey) {
+        playOnZone(artist.albums[0].ratingKey, 'music');
+      }
+    });
+
+    // Play on Plex
+    document.getElementById('blib-artist-play-plex')?.addEventListener('click', async () => {
+      if (artist.albums[0]?.ratingKey) {
+        try {
+          await p('/api/plex/play', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ratingKey: artist.albums[0].ratingKey })
+          });
+        } catch (e) {
+          if (e.name !== 'AbortError') showError('Afspelen mislukt: ' + e.message);
+        }
+      }
+    });
+
+    // Shuffle
+    document.getElementById('blib-artist-shuffle')?.addEventListener('click', () => {
+      if (artist.albums.length > 0) {
+        const randomAlbum = artist.albums[Math.floor(Math.random() * artist.albums.length)];
+        playOnZone(randomAlbum.ratingKey, 'music');
+      }
+    });
+
+    // Album card clicks
+    container.addEventListener('click', e => {
+      const albumCard = e.target.closest('.blib-album-detail-card');
+      if (albumCard) {
+        const ratingKey = albumCard.dataset.albumRatingKey;
+        if (ratingKey) {
+          blibShowDetail({ ratingKey, album: '', artist: artist.title, thumb: '' });
+        }
+      }
+
+      const trackPlayBtn = e.target.closest('.blib-track-play-btn');
+      if (trackPlayBtn) {
+        e.stopPropagation();
+        const row = trackPlayBtn.closest('.blib-track-row');
+        if (row?.dataset.trackKey) {
+          playOnZone(row.dataset.trackKey, 'music');
+        }
+      }
+
+      const trackRow = e.target.closest('.blib-track-row');
+      if (trackRow?.dataset.trackKey && !e.target.closest('.blib-track-play-btn')) {
+        playOnZone(trackRow.dataset.trackKey, 'music');
+      }
+    });
+
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      container.innerHTML = `<div class="blib-empty"><p>Laden mislukt: ${esc(e.message)}</p></div>`;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
