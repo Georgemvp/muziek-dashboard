@@ -212,6 +212,8 @@ export function stopWebPlayer() {
 export async function playQueue(tracks, startIndex = 0) {
   playerState.queue = tracks;
   playerState.queueIndex = startIndex;
+  // Also update queueManager to keep them in sync
+  queueManager.setQueue(tracks, startIndex);
   await _playTrackAtIndex(startIndex);
   renderQueue();
 }
@@ -248,8 +250,9 @@ export function renderQueue() {
   }
 
   // Render tracks
+  const currentIndex = queueManager.getCurrentIndex();
   playerState.queue.forEach((track, index) => {
-    const isActive = index === playerState.queueIndex;
+    const isActive = index === currentIndex;
     const li = document.createElement('li');
     li.className = `pq-track${isActive ? ' active' : ''}`;
     li.role = 'listitem';
@@ -342,15 +345,16 @@ export function renderQueue() {
  * @private
  */
 async function _playTrackAtIndex(index) {
-  // Bounds check
-  if (index < 0 || index >= playerState.queue.length) {
+  // Bounds check - use queueManager as source of truth
+  const queue = queueManager.getQueue();
+  if (index < 0 || index >= queue.length) {
     stopWebPlayer();
     playerState.isWebPlaying = false;
     return;
   }
 
   playerState.queueIndex = index;
-  const track = playerState.queue[index];
+  const track = queue[index];
 
   try {
     console.debug('[Queue] Playing track at index', index, ':', {
@@ -467,7 +471,8 @@ export function initPlayer() {
 
     // Web player: play next track in queue (respecting shuffle)
     if (zone.machineId === '__web__') {
-      if (playerState.queue.length > 0) {
+      const queue = queueManager.getQueue();
+      if (queue.length > 0) {
         const nextIdx = queueManager.getNextIndex();
         if (nextIdx >= 0) {
           await _playTrackAtIndex(nextIdx);
@@ -487,7 +492,8 @@ export function initPlayer() {
 
     // Web player: restart current or play previous track (respecting shuffle)
     if (zone.machineId === '__web__') {
-      if (playerState.queue.length > 0) {
+      const queue = queueManager.getQueue();
+      if (queue.length > 0) {
         // If more than 3 seconds into track, restart it
         if (playerState.webPlayerAudio.currentTime > 3) {
           playerState.webPlayerAudio.currentTime = 0;
@@ -691,10 +697,30 @@ export function initPlayer() {
 
   playerState.webPlayerAudio.addEventListener('ended', async () => {
     // Auto-play next track in queue if available
-    if (playerState.queue.length > 0 && playerState.queueIndex < playerState.queue.length - 1) {
-      await _playTrackAtIndex(playerState.queueIndex + 1);
+    const queue = queueManager.getQueue();
+    if (queue.length > 0) {
+      const nextIdx = queueManager.getNextIndex();
+      if (nextIdx >= 0) {
+        await _playTrackAtIndex(nextIdx);
+        queueManager.setCurrentIndex(nextIdx);
+      } else {
+        // Queue finished - reset player
+        if (progressFill) progressFill.style.width = '0%';
+        if (timeCurrent) timeCurrent.textContent = '0:00';
+        if (timeTotal) timeTotal.textContent = '0:00';
+        if (progressBar) progressBar.setAttribute('aria-valuenow', 0);
+
+        // Reset play button
+        if (playBtn) playBtn.innerHTML = PLAY_SVG;
+        playerState.isWebPlaying = false;
+
+        // Remove ambient background when playback ends
+        setAmbientBackground(null);
+
+        renderQueue();
+      }
     } else {
-      // Queue finished or no queue - reset player
+      // No queue - reset player
       if (progressFill) progressFill.style.width = '0%';
       if (timeCurrent) timeCurrent.textContent = '0:00';
       if (timeTotal) timeTotal.textContent = '0:00';
