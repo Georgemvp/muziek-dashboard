@@ -178,7 +178,7 @@
 
 /* Section blocks */
 .section-block {
-  margin-bottom: 32px;
+  margin-bottom: 48px;
 }
 
 .section-hdr {
@@ -470,7 +470,7 @@
 
 /* ── Toolbar ── */
 .blib-toolbar {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 28px;
   flex-wrap: wrap; position: sticky; top: 52px; z-index: 200;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(16px) saturate(140%);
@@ -522,7 +522,7 @@
 
 .blib-cover {
   width: 100%; aspect-ratio: 1; border-radius: 6px; overflow: hidden;
-  position: relative; margin-bottom: 8px; background: var(--surface2);
+  position: relative; margin-bottom: 12px; background: var(--surface2);
   box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: transform 0.2s, box-shadow 0.25s;
 }
 
