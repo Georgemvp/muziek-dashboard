@@ -1,241 +1,153 @@
 // ============================================================
-// Muziek Dashboard — Service Worker (PWA v2)
-// Verbeterde caching strategie voor Progressive Web App
+// Muziek — Service Worker (PWA)
+// Caching strategie:
+// - API: Network First
+// - Statische assets + afbeeldingen: Cache First
 // ============================================================
 
-const CACHE_VERSION = 'v2';
-const CACHE_STATIC = `muziek-dashboard-static-${CACHE_VERSION}`;
-const CACHE_API = `muziek-dashboard-api-${CACHE_VERSION}`;
-const CACHE_IMAGES = `muziek-dashboard-images-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v3';
+const CACHE_STATIC = `muziek-static-${CACHE_VERSION}`;
+const CACHE_API = `muziek-api-${CACHE_VERSION}`;
+const CACHE_IMAGES = `muziek-images-${CACHE_VERSION}`;
 
-// Bestanden die direct bij installatie worden gecached (statische assets)
 const PRECACHE_URLS = [
+  '/',
   '/index.html',
   '/manifest.json',
   '/style.css',
   '/app.js',
   '/icon-192.png',
   '/icon-512.png',
+  '/chunks/bibliotheek-5BFDVPGD.js',
+  '/chunks/bibliotheek-P56AV6J2.js',
+  '/chunks/bibliotheek-SQWBF5BI.js',
+  '/chunks/bibliotheek-SV5UJHPJ.js',
+  '/chunks/bibliotheek-VONXGZIA.js',
+  '/chunks/chunk-4E6U7I7I.js',
+  '/chunks/chunk-5VRNHLFG.js',
+  '/chunks/chunk-ANAONK2Y.js',
+  '/chunks/chunk-H7SZLMAB.js',
+  '/chunks/chunk-HNNUXXVH.js',
+  '/chunks/chunk-MC7OSVHJ.js',
+  '/chunks/chunk-P2NR46FN.js',
+  '/chunks/chunk-RRZ2Q5W2.js',
+  '/chunks/chunk-ZCOZCGLD.js',
+  '/chunks/downloads-AGCGBRV5.js',
+  '/chunks/downloads-P6AJSGC5.js',
+  '/chunks/downloads-VJS5IKKD.js',
+  '/chunks/ontdek-AYAQP6LC.js',
+  '/chunks/ontdek-PUNTF7RD.js',
+  '/chunks/ontdek-XA67VTVU.js',
+  '/chunks/player.js',
+  '/chunks/plexRemote-5WHTXVL3.js',
+  '/chunks/plexRemote-WRO7SQ43.js',
 ];
 
-// ── Helpers ──────────────────────────────────────────────────
-
-function isStaticAsset(url) {
-  return url.pathname.match(/\.(css|js|woff2?|ttf|ico|png|svg|webp|jpg|jpeg|gif)$/) !== null
-    && !url.hostname.includes('deezer')
-    && !url.hostname.includes('cdns-images')
-    && !url.hostname.includes('cdnjs.cloudflare.com');
+function isApiRequest(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith('/api/');
 }
 
-function isApiEndpoint(pathname) {
-  return pathname.startsWith('/api/');
+function isImageRequest(request, url) {
+  return request.destination === 'image'
+    || /\.(png|jpg|jpeg|gif|webp|svg|ico)$/i.test(url.pathname);
 }
 
-function isFastChangingApi(pathname) {
-  return pathname === '/api/recent' || pathname === '/api/plex/nowplaying';
+function isStaticRequest(request, url) {
+  if (url.origin !== self.location.origin) return false;
+  return request.destination === 'style'
+    || request.destination === 'script'
+    || request.destination === 'font'
+    || request.destination === 'document'
+    || url.pathname.startsWith('/chunks/')
+    || /\.(css|js|woff2?|ttf)$/i.test(url.pathname);
 }
 
-function isDeezerImage(url) {
-  return url.hostname.includes('deezer') || url.hostname.includes('cdns-images');
-}
-
-// Fetch met timeout — gooit een error als de server te traag is
-function fetchWithTimeout(request, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Network timeout')), timeoutMs);
-    fetch(request).then(
-      (response) => { clearTimeout(timer); resolve(response); },
-      (err)      => { clearTimeout(timer); reject(err); }
-    );
-  });
-}
-
-// Sla een response op in de cache (clone verplicht — body mag maar 1x gelezen worden)
-async function cacheResponse(cacheName, request, response) {
-  if (!response || !response.ok) return response;
-  const cache = await caches.open(cacheName);
-  cache.put(request, response.clone());
-  return response;
-}
-
-// ── Installatie: precache static assets ──────────────────────
-
-self.addEventListener('install', (event) => {
-  console.log('[SW] Installeren... cache versie:', CACHE_VERSION);
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_STATIC).then((cache) => {
-      return cache.addAll(PRECACHE_URLS);
-    })
+    caches.open(CACHE_STATIC).then(cache => cache.addAll(PRECACHE_URLS)),
   );
-  // Activeer meteen zonder te wachten op oude clients
   self.skipWaiting();
 });
 
-// ── Activatie: oude caches opruimen ──────────────────────────
-
-self.addEventListener('activate', (event) => {
-  console.log('[SW] Activeren... opruimen oude caches');
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys
-          .filter((key) => {
-            // Verwijder oude versies
-            const isOldVersion =
-              key.includes('muziek-dashboard') &&
-              !key.includes(CACHE_VERSION);
-            return isOldVersion;
-          })
-          .map((key) => {
-            console.log('[SW] Oude cache verwijderd:', key);
-            return caches.delete(key);
-          })
-      );
-    })
+    caches.keys().then(keys => Promise.all(
+      keys
+        .filter(key => key.startsWith('muziek-') && !key.endsWith(CACHE_VERSION))
+        .map(key => caches.delete(key)),
+    )),
   );
   self.clients.claim();
 });
 
-// ── Fetch: routing per strategie ─────────────────────────────
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Alleen GET requests cachen
+self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
-  // ── Strategie 1: Deezer CDN afbeeldingen — Cache First, 7 dagen TTL ──
-  if (isDeezerImage(url)) {
-    event.respondWith(
-      caches.open(CACHE_IMAGES).then(async (cache) => {
+  const url = new URL(event.request.url);
+
+  // API: network-first met fallback naar cache
+  if (isApiRequest(url)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_API);
+      try {
+        const response = await fetch(event.request);
+        if (response.ok) {
+          cache.put(event.request, response.clone());
+        }
+        return response;
+      } catch {
         const cached = await cache.match(event.request);
-        if (cached) {
-          // Controleer leeftijd via Date header
-          const dateHeader = cached.headers.get('sw-cached-at');
-          if (dateHeader) {
-            const age = Date.now() - parseInt(dateHeader, 10);
-            const sevenDays = 7 * 24 * 60 * 60 * 1000;
-            if (age < sevenDays) return cached;
-          } else {
-            return cached; // geen timestamp → accepteer
-          }
-        }
-        // Niet in cache of verlopen: ophalen en opslaan met timestamp
-        try {
-          const response = await fetch(event.request);
-          if (response.ok) {
-            const headers = new Headers(response.headers);
-            headers.set('sw-cached-at', Date.now().toString());
-            const timestampedResponse = new Response(await response.blob(), {
-              status: response.status,
-              statusText: response.statusText,
-              headers,
-            });
-            cache.put(event.request, timestampedResponse.clone());
-            return timestampedResponse;
-          }
-          return response;
-        } catch {
-          return cached || new Response('Afbeelding niet beschikbaar', { status: 503 });
-        }
-      })
-    );
+        if (cached) return cached;
+        return new Response(JSON.stringify({ error: 'Offline' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    })());
     return;
   }
 
-  // ── Strategie 2: Static assets — Cache First ──
-  // Alle CSS, JS, fonts, PNG's, SVG's uit /public worden gecached
-  if (isStaticAsset(url)) {
-    event.respondWith(
-      caches.open(CACHE_STATIC).then(async (cache) => {
-        const cached = await cache.match(event.request);
-        if (cached) {
-          return cached;
-        }
-        // Niet in cache: haal op en sla op
-        try {
-          const response = await fetch(event.request);
-          if (response.ok) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
-        } catch (err) {
-          console.warn('[SW] Offline - kan statische asset niet laden:', event.request.url);
-          return new Response('Offline - asset niet beschikbaar', { status: 503 });
-        }
-      })
-    );
+  // Afbeeldingen: cache-first
+  if (isImageRequest(event.request, url)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_IMAGES);
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+
+      const response = await fetch(event.request);
+      if (response.ok) cache.put(event.request, response.clone());
+      return response;
+    })());
     return;
   }
 
-  // ── Strategie 3: Snel veranderende API — Network First, 3s timeout ──
-  if (isApiEndpoint(url.pathname) && isFastChangingApi(url.pathname)) {
-    event.respondWith(
-      caches.open(CACHE_API).then(async (cache) => {
-        try {
-          const response = await fetchWithTimeout(event.request, 3000);
-          if (response.ok) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
-        } catch (err) {
-          console.warn('[SW] Network timeout of offline - terugvallen op cache:', event.request.url);
-          const cached = await cache.match(event.request);
-          return cached || new Response(JSON.stringify({ error: 'Offline', cached: false }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      })
-    );
-    return;
-  }
+  // Statische assets: cache-first
+  if (isStaticRequest(event.request, url)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_STATIC);
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
 
-  // ── Strategie 4: Stabiele API endpoints — Network First met cache fallback ──
-  if (isApiEndpoint(url.pathname)) {
-    event.respondWith(
-      caches.open(CACHE_API).then(async (cache) => {
-        try {
-          const response = await fetch(event.request);
-          if (response.ok) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
-        } catch (err) {
-          console.warn('[SW] Network error - terugvallen op cache:', event.request.url);
-          const cached = await cache.match(event.request);
-          return cached || new Response(JSON.stringify({ error: 'Offline', cached: true }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      })
-    );
-    return;
-  }
-
-  // ── Standaard: gewoon netwerk (geen caching) ──────────────
-  // (navigatie requests, overige third-party calls)
-});
-
-// ── Message handler: cache invalidatie ───────────────────────
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
-    event.waitUntil(
-      Promise.all([
-        caches.delete(CACHE_STATIC),
-        caches.delete(CACHE_API),
-        caches.delete(CACHE_IMAGES),
-      ]).then(() => {
-        console.log('[SW] Alle caches gewist');
-        // Bevestig aan de afzender
-        if (event.source) {
-          event.source.postMessage({ type: 'CACHE_CLEARED', caches: [CACHE_STATIC, CACHE_API, CACHE_IMAGES] });
-        }
-      })
-    );
+      const response = await fetch(event.request);
+      if (response.ok) cache.put(event.request, response.clone());
+      return response;
+    })());
   }
 });
 
-console.log('[SW] Service Worker geladen, versie:', CACHE_VERSION);
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'CLEAR_CACHE') return;
+
+  event.waitUntil(
+    Promise.all([
+      caches.delete(CACHE_STATIC),
+      caches.delete(CACHE_API),
+      caches.delete(CACHE_IMAGES),
+    ]).then(() => {
+      event.source?.postMessage({
+        type: 'CACHE_CLEARED',
+        caches: [CACHE_STATIC, CACHE_API, CACHE_IMAGES],
+      });
+    }),
+  );
+});

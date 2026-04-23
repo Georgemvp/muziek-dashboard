@@ -1,12 +1,12 @@
 {
-  "name": "Muziek Dashboard",
+  "name": "Muziek",
   "short_name": "Muziek",
-  "description": "Progressive Web App voor Last.fm aanbevelingen, Plex integratie en Tidal downloads",
+  "description": "Persoonlijke muziekspeler en collectiebeheer",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
   "orientation": "portrait-primary",
   "categories": ["music", "entertainment"],
   "screenshots": [

@@ -643,6 +643,27 @@ function _applyTrackInfo({ title, artist, album, thumb, playing, paused } = {}) 
   _notifyListeners();
 }
 
+
+function _syncMediaSession() {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: playerState.track || 'Muziek',
+    artist: playerState.artist || '',
+    album: playerState.album || '',
+    artwork: playerState.thumb ? [{ src: playerState.thumb, sizes: '512x512' }] : [],
+  });
+
+  navigator.mediaSession.playbackState = (playerState.playing && !playerState.paused)
+    ? 'playing'
+    : 'paused';
+
+  navigator.mediaSession.setActionHandler('play', togglePlayPause);
+  navigator.mediaSession.setActionHandler('pause', togglePlayPause);
+  navigator.mediaSession.setActionHandler('previoustrack', skipPrev);
+  navigator.mediaSession.setActionHandler('nexttrack', skipNext);
+}
+
 /** Werk de volledige player bar DOM bij op basis van playerState. */
 function _updatePlayerBarDOM() {
   const bar     = document.getElementById('player-bar');
@@ -678,6 +699,7 @@ function _updatePlayerBarDOM() {
       ? 'Pauzeer' : 'Afspelen');
   }
 
+  _syncMediaSession();
   _updateProgressDOM();
 }
 
