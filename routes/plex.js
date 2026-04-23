@@ -220,22 +220,31 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/plex/library/all ─────────────────────────────────────────────────
-  app.get('/api/plex/library/all', (req, res) => {
+  app.get('/api/plex/library/all', async (req, res) => {
     if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=300');
       return res.json({ ok: false, library: [] });
     }
-    const lib = getPlexLibrary();
-    const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-    // Compact array-formaat: [artist, album, ratingKey, thumb] per item
-    // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
-    const compact = lib.map(x => ([
-      x.artist,
-      x.album,
-      x.ratingKey || '',
-      x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
-    ]));
-    res.set('Cache-Control', 'private, max-age=300');
-    res.json({ ok: true, total: compact.length, library: compact });
+    try {
+      // Ensure library is synced before returning
+      await syncPlexLibrary(false);
+      const lib = getPlexLibrary();
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+      // Compact array-formaat: [artist, album, ratingKey, thumb] per item
+      // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
+      const compact = (lib || []).map(x => ([
+        x.artist,
+        x.album,
+        x.ratingKey || '',
+        x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
+      ]));
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json({ ok: true, total: compact.length, library: compact });
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex library/all ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=300');
+      res.status(500).json({ ok: false, error: e.message, library: [] });
+    }
   });
 
   // ── /api/plex/playlists ──────────────────────────────────────────────────
@@ -533,6 +542,9 @@ module.exports = function(app, deps) {
         return res.json(cached);
       }
 
+      // Ensure library is synced before fetching
+      await syncPlexLibrary(false);
+
       // Verkrijg muziek section key
       const sections = await plexGet('/library/sections');
       const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
@@ -543,17 +555,17 @@ module.exports = function(app, deps) {
 
       // Haal alle artiesten op (type=8)
       const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
-      const artistMeta = data?.MediaContainer?.Metadata || [];
+      const artistMeta = (data?.MediaContainer?.Metadata || []);
       const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
 
       // Map artiesten naar vereist formaat en sorteer op naam
       const artists = artistMeta
         .map(a => ({
           ratingKey: a.ratingKey,
-          title: a.title,
+          title: a.title || '',
           thumb: a.thumb ? `${plexStreamUrl}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
           albumCount: a.leafCount || 0,
-          genre: (a.Genre && Array.isArray(a.Genre) ? a.Genre.map(g => g.tag).join(', ') : a.Genre?.tag || '')
+          genre: (a.Genre && Array.isArray(a.Genre) ? a.Genre.map(g => g.tag).join(', ') : (a.Genre?.tag || ''))
         }))
         .sort((a, b) => a.title.localeCompare(b.title, 'nl', { sensitivity: 'base' }));
 
@@ -582,6 +594,9 @@ module.exports = function(app, deps) {
       const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
+      // Ensure library is synced before fetching
+      await syncPlexLibrary(false);
+
       // Verkrijg muziek section key
       const sections = await plexGet('/library/sections');
       const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
@@ -592,13 +607,13 @@ module.exports = function(app, deps) {
 
       // Haal alle nummers op (type=10)
       const data = await plexGet(`/library/sections/${music.key}/all?type=10`);
-      const trackMeta = data?.MediaContainer?.Metadata || [];
+      const trackMeta = (data?.MediaContainer?.Metadata || []);
       const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
 
       // Filter op artiest en/of album
       let filtered = trackMeta.map(t => ({
         ratingKey: t.ratingKey,
-        title: t.title,
+        title: t.title || '',
         artist: t.grandparentTitle || t.originalTitle || '',
         album: t.parentTitle || '',
         duration: t.duration || 0,
@@ -642,6 +657,9 @@ module.exports = function(app, deps) {
         return res.json(cached);
       }
 
+      // Ensure library is synced before fetching
+      await syncPlexLibrary(false);
+
       // Verkrijg muziek section key
       const sections = await plexGet('/library/sections');
       const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
@@ -652,24 +670,26 @@ module.exports = function(app, deps) {
 
       // Haal alle artiesten op om genres te extraheren
       const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
-      const artistMeta = data?.MediaContainer?.Metadata || [];
+      const artistMeta = (data?.MediaContainer?.Metadata || []);
       const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
 
       // Groepeer artiesten per genre
       const genreMap = new Map();
       for (const artist of artistMeta) {
         const genres = (artist.Genre && Array.isArray(artist.Genre)) ? artist.Genre : (artist.Genre ? [artist.Genre] : []);
-        const genreList = genres.map(g => (typeof g === 'string' ? g : g.tag));
+        const genreList = genres.map(g => (typeof g === 'string' ? g : (g?.tag || '')));
 
         for (const genre of genreList) {
-          if (!genreMap.has(genre)) {
+          if (genre && !genreMap.has(genre)) {
             genreMap.set(genre, []);
           }
-          genreMap.get(genre).push({
-            title: artist.title,
-            thumb: artist.thumb ? `${plexStreamUrl}${artist.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
-            ratingKey: artist.ratingKey
-          });
+          if (genre) {
+            genreMap.get(genre).push({
+              title: artist.title || '',
+              thumb: artist.thumb ? `${plexStreamUrl}${artist.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+              ratingKey: artist.ratingKey
+            });
+          }
         }
       }
 

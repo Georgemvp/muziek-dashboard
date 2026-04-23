@@ -66,10 +66,17 @@ async function blibLoad() {
   if (blibData) return blibData;
   try {
     const res = await apiFetch('/api/plex/library/all');
-    if (!res || !res.library) return [];
+    if (!res || !res.library) {
+      console.warn('Bibliotheek response is null/undefined:', res);
+      return [];
+    }
+    if (!Array.isArray(res.library)) {
+      console.warn('Bibliotheek is niet een array:', res.library);
+      return [];
+    }
     if (!res.library.length) return [];
     blibData = res.library.map(([artist, album, ratingKey, thumb]) => ({
-      artist, album, ratingKey, thumb
+      artist: artist || '', album: album || '', ratingKey: ratingKey || '', thumb: thumb || ''
     }));
     return blibData;
   } catch (e) {
@@ -947,7 +954,11 @@ async function blibLoadArtists() {
   if (blibArtistsData) return blibArtistsData;
   try {
     const res = await apiFetch('/api/plex/artists');
-    blibArtistsData = res.artists || [];
+    if (!res) {
+      console.warn('Artists response is null/undefined');
+      return [];
+    }
+    blibArtistsData = Array.isArray(res.artists) ? res.artists : [];
     return blibArtistsData;
   } catch (e) {
     if (e.name !== 'AbortError') showError('Artiesten laden mislukt: ' + e.message);
@@ -1021,7 +1032,11 @@ async function blibLoadTracks() {
   if (blibTracksData) return blibTracksData;
   try {
     const res = await apiFetch('/api/plex/tracks?limit=100');
-    blibTracksData = res.tracks || [];
+    if (!res) {
+      console.warn('Tracks response is null/undefined');
+      return [];
+    }
+    blibTracksData = Array.isArray(res.tracks) ? res.tracks : [];
     return blibTracksData;
   } catch (e) {
     if (e.name !== 'AbortError') showError('Nummers laden mislukt: ' + e.message);
@@ -1116,7 +1131,11 @@ async function blibLoadGenres() {
   if (blibGenresData) return blibGenresData;
   try {
     const res = await apiFetch('/api/plex/genres');
-    blibGenresData = res.genres || [];
+    if (!res) {
+      console.warn('Genres response is null/undefined');
+      return [];
+    }
+    blibGenresData = Array.isArray(res.genres) ? res.genres : [];
     return blibGenresData;
   } catch (e) {
     if (e.name !== 'AbortError') showError('Genres laden mislukt: ' + e.message);
