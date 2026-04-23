@@ -363,8 +363,8 @@ async function blibRender(container) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function blibRenderTabBar() {
-  // Tab bar HTML - wordt PREPENDED aan toolbar
-  // Dit wordt gedaan in blibRenderToolbar()
+  // Tab bar is now part of blibRenderToolbar()
+  blibRenderToolbar();
 }
 
 async function blibSwitchTab(tabKey) {
