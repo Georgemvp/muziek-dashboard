@@ -5,13 +5,13 @@ import { p } from './helpers.js';
 import { loadNu, loadRecent, clearDashboardPolling } from './tabs/nu.js';
 import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
-import { playPreview } from './components/player.js';
 import { loadPlexStatus } from './api.js';
 import { contentEl, runWithSection } from './helpers.js';
 
 let ontdekModulePromise;
 let bibliotheekModulePromise;
 let downloadsModulePromise;
+let playerModulePromise;
 
 function loadOntdekModule() {
   if (!ontdekModulePromise) ontdekModulePromise = import('./tabs/ontdek.js');
@@ -26,6 +26,10 @@ function loadBibliotheekModule() {
 function loadDownloadsModule() {
   if (!downloadsModulePromise) downloadsModulePromise = import('./tabs/downloads.js');
   return downloadsModulePromise;
+}
+function loadPlayerModule() {
+  if (!playerModulePromise) playerModulePromise = import('./components/player.js');
+  return playerModulePromise;
 }
 
 // ── Tab loaders map ────────────────────────────────────────────────────────
@@ -66,7 +70,7 @@ function setupNavItem(btn) {
 
     allNav.forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    state.activeTab = tab;
+    state.activeView = tab;
     state.sectionContainerEl = null;
 
     // Wis de view-toolbar bij elke navigatie
@@ -76,11 +80,6 @@ function setupNavItem(btn) {
     // Abort vorige tab requests
     if (state.tabAbort) state.tabAbort.abort();
     state.tabAbort = new AbortController();
-
-    ['tb-period','tb-recs','tb-mood','tb-releases','tb-discover',
-     'tb-gaps','tb-plexlib'].forEach(id =>
-      document.getElementById(id)?.classList.remove('visible'));
-    document.getElementById('tb-gaps')?.classList.toggle('visible', tab === 'gaps');
 
     if (tab !== 'downloads') {
       loadDownloadsModule().then(m => {
@@ -123,7 +122,7 @@ document.querySelectorAll('[data-period]').forEach(btn => {
     document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('sel-def'));
     btn.classList.add('sel-def');
     state.currentPeriod = btn.dataset.period;
-    tabLoaders[state.activeTab]?.();
+    tabLoaders[state.activeView]?.();
   });
 });
 
@@ -196,7 +195,7 @@ document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () 
 
 // ── Plex lib zoeken (externe toolbar) ────────────────────────────────────
 document.getElementById('plib-search')?.addEventListener('input', e => {
-  if (!state.plexLibData || state.activeSubTab !== 'collectie') return;
+  if (!state.plexLibData || state.activeView !== 'bibliotheek') return;
   loadBibliotheekModule().then(m => {
     contentEl.innerHTML = m.buildPlexLibraryHtml(state.plexLibData, e.target.value);
   });
@@ -210,7 +209,7 @@ document.getElementById('btn-sync-plex')?.addEventListener('click', async () => 
     try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await loadPlexStatus();
     state.plexLibData = null;
-    if (state.activeSubTab === 'collectie') await (await loadBibliotheekModule()).loadPlexLibrary();
+    if (state.activeView === 'bibliotheek') await (await loadBibliotheekModule()).loadPlexLibrary();
   } catch {}
   finally { btn.disabled = false; btn.textContent = orig; }
 });
@@ -232,7 +231,7 @@ document.addEventListener('input', e => {
   clearTimeout(state.tidalSearchTimeout);
   const q = e.target.value.trim();
   state.tidalSearchTimeout = setTimeout(() => {
-    if (state.activeSubTab === 'tidal' && state.tidalView === 'search')
+    if (state.activeView === 'downloads' && state.tidalView === 'search')
       loadDownloadsModule().then(m => m.renderTidalSearch(q));
   }, 400);
 });
@@ -249,7 +248,7 @@ document.addEventListener('click', async e => {
   const playBtn = e.target.closest('.play-btn');
   if (playBtn) {
     e.stopPropagation();
-    playPreview(playBtn, playBtn.dataset.artist, playBtn.dataset.track);
+    (await loadPlayerModule()).playPreview(playBtn, playBtn.dataset.artist, playBtn.dataset.track);
     return;
   }
 
@@ -397,7 +396,7 @@ document.addEventListener('click', async e => {
     state.releasesFilter = inlineRtype.dataset.rtype;
     inlineRtype.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.activeTab === 'ontdek') {
+    if (secRel && state.activeView === 'ontdek') {
       state.sectionContainerEl = secRel;
       (await loadOntdekModule()).renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
@@ -412,7 +411,7 @@ document.addEventListener('click', async e => {
     state.releasesSort = inlineRsort.dataset.rsort;
     inlineRsort.classList.add('sel-def');
     const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.activeTab === 'ontdek') {
+    if (secRel && state.activeView === 'ontdek') {
       state.sectionContainerEl = secRel;
       (await loadOntdekModule()).renderReleases();
       if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
@@ -427,7 +426,7 @@ document.addEventListener('click', async e => {
     state.discFilter = inlineDfilter.dataset.dfilter;
     inlineDfilter.classList.add(state.discFilter==='all'?'sel-def':state.discFilter==='new'?'sel-new':'sel-miss');
     const secDisc = document.getElementById('sec-discover-content');
-    if (secDisc && state.activeTab === 'ontdek') {
+    if (secDisc && state.activeView === 'ontdek') {
       state.sectionContainerEl = secDisc;
       (await loadOntdekModule()).renderDiscover();
       if (state.sectionContainerEl === secDisc) state.sectionContainerEl = null;
@@ -441,7 +440,7 @@ document.addEventListener('click', async e => {
     document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
     state.gapsSort = inlineGsort.dataset.gsort;
     inlineGsort.classList.add('sel-def');
-    if (state.activeTab === 'gaps') {
+    if (state.activeView === 'gaps') {
       (await loadBibliotheekModule()).renderGaps();
     } else {
       (await loadBibliotheekModule()).renderGaps();
@@ -515,10 +514,10 @@ document.addEventListener('keydown', async e => {
     return;
   }
   if (e.key === 'r' && !inInput) {
-    if (state.activeTab === 'ontdek')           (await loadOntdekModule()).loadOntdek();
-    else if (state.activeTab === 'bibliotheek') (await loadBibliotheekModule()).loadBibliotheek();
-    else if (state.activeTab === 'gaps')        (await loadBibliotheekModule()).loadGaps();
-    else await tabLoaders[state.activeTab]?.();
+    if (state.activeView === 'ontdek')           (await loadOntdekModule()).loadOntdek();
+    else if (state.activeView === 'bibliotheek') (await loadBibliotheekModule()).loadBibliotheek();
+    else if (state.activeView === 'gaps')        (await loadBibliotheekModule()).loadGaps();
+    else await tabLoaders[state.activeView]?.();
     return;
   }
   if (!inInput && /^[1-5]$/.test(e.key)) {

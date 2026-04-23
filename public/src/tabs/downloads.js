@@ -256,10 +256,10 @@ export function startTidarrSSE() {
       else                    { b.style.display = 'none'; }
     }
     updateQueueFab(state.tidarrQueueItems);
-    if (state.activeSubTab === 'tidal' && state.tidalView === 'queue') renderTidalQueue();
+    if (state.activeView === 'downloads' && state.tidalView === 'queue') renderTidalQueue();
     if (document.getElementById('queue-popover')?.classList.contains('open')) renderQueuePopover();
     // Dashboard download-widget auto-refresh
-    if (state.activeTab === 'nu') {
+    if (state.activeView === 'nu') {
       const dwEl = document.getElementById('wbody-download-voortgang');
       if (dwEl) renderDashboardQueue(dwEl, active);
     }
@@ -537,7 +537,7 @@ export async function loadTidal() {
 }
 
 export function loadDownloads() {
-  state.activeSubTab = 'tidal';
+  state.activeView = 'downloads';
   hideTidarrUI();
   loadTidal();
 }

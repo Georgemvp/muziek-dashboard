@@ -2,15 +2,21 @@
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 
+export const playerState = {
+  previewAudio: new Audio(),
+  previewBtn: null,
+};
+state.playerState = playerState;
+
 export async function playPreview(btn, artist, track) {
   // Zelfde knop → toggle play/pauze
-  if (state.previewBtn === btn) {
-    if (state.previewAudio.paused) {
-      await state.previewAudio.play();
+  if (playerState.previewBtn === btn) {
+    if (playerState.previewAudio.paused) {
+      await playerState.previewAudio.play();
       btn.textContent = '⏸';
       btn.classList.add('playing');
     } else {
-      state.previewAudio.pause();
+      playerState.previewAudio.pause();
       btn.textContent = '▶';
       btn.classList.remove('playing');
     }
@@ -18,15 +24,15 @@ export async function playPreview(btn, artist, track) {
   }
 
   // Stop vorige track
-  if (state.previewBtn) {
-    state.previewAudio.pause();
-    state.previewBtn.textContent = '▶';
-    state.previewBtn.classList.remove('playing');
-    const oldFill = state.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+  if (playerState.previewBtn) {
+    playerState.previewAudio.pause();
+    playerState.previewBtn.textContent = '▶';
+    playerState.previewBtn.classList.remove('playing');
+    const oldFill = playerState.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
     if (oldFill) oldFill.style.width = '0%';
   }
 
-  state.previewBtn = btn;
+  playerState.previewBtn = btn;
   btn.textContent = '…';
   btn.disabled = true;
 
@@ -37,47 +43,47 @@ export async function playPreview(btn, artist, track) {
       btn.textContent = '—';
       btn.disabled = false;
       setTimeout(() => { if (btn.textContent === '—') btn.textContent = '▶'; }, 1800);
-      state.previewBtn = null;
+      playerState.previewBtn = null;
       return;
     }
-    state.previewAudio.src = data.preview;
-    state.previewAudio.currentTime = 0;
-    await state.previewAudio.play();
+    playerState.previewAudio.src = data.preview;
+    playerState.previewAudio.currentTime = 0;
+    await playerState.previewAudio.play();
     btn.textContent = '⏸';
     btn.disabled = false;
     btn.classList.add('playing');
   } catch {
     btn.textContent = '▶';
     btn.disabled = false;
-    state.previewBtn = null;
+    playerState.previewBtn = null;
   }
 }
 
 // ── Audio event listeners ──────────────────────────────────────────────────
-state.previewAudio.addEventListener('timeupdate', () => {
-  if (!state.previewBtn || !state.previewAudio.duration) return;
-  const fill = state.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+playerState.previewAudio.addEventListener('timeupdate', () => {
+  if (!playerState.previewBtn || !playerState.previewAudio.duration) return;
+  const fill = playerState.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
   if (fill)
     fill.style.width =
-      `${(state.previewAudio.currentTime / state.previewAudio.duration * 100).toFixed(1)}%`;
+      `${(playerState.previewAudio.currentTime / playerState.previewAudio.duration * 100).toFixed(1)}%`;
 });
 
-state.previewAudio.addEventListener('ended', () => {
-  if (state.previewBtn) {
-    state.previewBtn.textContent = '▶';
-    state.previewBtn.classList.remove('playing');
-    const fill = state.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
+playerState.previewAudio.addEventListener('ended', () => {
+  if (playerState.previewBtn) {
+    playerState.previewBtn.textContent = '▶';
+    playerState.previewBtn.classList.remove('playing');
+    const fill = playerState.previewBtn.closest('.card')?.querySelector('.play-bar-fill');
     if (fill) fill.style.width = '0%';
-    state.previewBtn = null;
+    playerState.previewBtn = null;
   }
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && !state.previewAudio.paused) {
-    state.previewAudio.pause();
-    if (state.previewBtn) {
-      state.previewBtn.textContent = '▶';
-      state.previewBtn.classList.remove('playing');
+  if (document.hidden && !playerState.previewAudio.paused) {
+    playerState.previewAudio.pause();
+    if (playerState.previewBtn) {
+      playerState.previewBtn.textContent = '▶';
+      playerState.previewBtn.classList.remove('playing');
     }
   }
 });

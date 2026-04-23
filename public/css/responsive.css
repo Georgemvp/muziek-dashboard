@@ -1,25 +1,20 @@
 /* ════════════════════════════════════════════════════
-   RESPONSIVE — alle @media queries gebundeld
+   RESPONSIVE — nieuwe sidebar layout
    ════════════════════════════════════════════════════ */
 
-/* ── Tablet / klein scherm ── */
-@media (max-width: 800px) {
-  .artist-grid    { grid-template-columns: repeat(2, 1fr); }
-  .album-grid     { grid-template-columns: repeat(3, 1fr); }
-  .gaps-album-grid { grid-template-columns: repeat(3, 1fr); }
+/* ── Tablet ── */
+@media (max-width: 1024px) {
+  .album-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
 
-  .gaps-view-head { flex-direction: column; align-items: stretch; }
-  .gaps-inline-toolbar { width: 100%; }
-  .gaps-search { width: 100%; min-width: 0; }
-  .rec-grid       { grid-template-columns: 1fr; }
-  .stats-grid     { grid-template-columns: 1fr; }
-  .wishlist-grid  { grid-template-columns: repeat(2, 1fr); }
-  .albrec-grid    { grid-template-columns: repeat(3, 1fr); }
-  .releases-grid  { grid-template-columns: repeat(3, 1fr); }
-  .skeleton-grid  { grid-template-columns: repeat(2, 1fr); }
+  .artist-header-img {
+    width: 120px;
+    height: 120px;
+  }
 }
 
-/* ── Mobiel: toon bottom nav, hide desktop tabs ── */
+/* ── Mobiel ── */
 @media (max-width: 768px) {
 
   /* Artiest panel als bottom sheet */
@@ -43,34 +38,129 @@
   .filter-btn { padding: 4px 9px; font-size: 11px; }
   .section-block { padding: 0 12px 18px; }
   .discover-grid { grid-template-columns: 1fr; }
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    height: 100dvh;
+    transform: translateX(-100%);
+    z-index: 200;
+  }
+
+  .sidebar[data-open="true"] {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.active {
+    display: block;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  .topbar {
+    padding: 8px 16px;
+  }
+
+  .content-area {
+    padding: 16px;
+  }
+
+  .album-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+
+  .player-bar {
+    grid-template-columns: 1fr auto;
+    height: 64px;
+  }
+
+  .player-progress-wrap,
+  .player-extra {
+    display: none;
+  }
+
+  .player-art {
+    width: 40px;
+    height: 40px;
+  }
+
+  .artist-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .artist-header-img {
+    width: 100px;
+    height: 100px;
+  }
+
+  .tracklist .track-row {
+    grid-template-columns: 24px 1fr auto;
+  }
+
+  .tracklist .track-row .track-actions {
+    display: none;
+  }
 }
 
 /* ── Klein mobiel ── */
-@media (max-width: 560px) {
-  .app { padding: 1rem 0.75rem 70px; }
-  .album-grid     { grid-template-columns: repeat(2, 1fr); }
-  .gaps-album-grid { grid-template-columns: repeat(2, 1fr); }
-  .discover-grid  { grid-template-columns: 1fr; }
-  .wishlist-grid  { grid-template-columns: repeat(2, 1fr); }
-  .releases-grid  { grid-template-columns: repeat(2, 1fr); }
-  .skeleton-grid  { grid-template-columns: repeat(2, 1fr); }
-  .skeleton-two   { grid-template-columns: 1fr; }
-  .tidal-grid     { grid-template-columns: 1fr; }
+@media (max-width: 480px) {
+  .album-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+  }
+
+  .album-card-title {
+    font-size: 12px;
+  }
+
+  .search-wrap {
+    flex: 1;
+  }
+
+  .topbar-right {
+    gap: 4px;
+  }
+
+  .quality-select {
+    display: none;
+  }
 }
 
-/* ── Prefers reduced motion ── */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+/* ── Touch / geen hover ── */
+@media (hover: none) {
+  .album-card-art .play-overlay {
+    opacity: 1;
+    transform: scale(0.9);
+    background: rgba(0, 0, 0, 0.35);
   }
-  /* Essentiële hover-transitions versneld maar actief houden */
-  .card:hover,
-  .rec-card:hover,
-  .ag-card:hover,
-  .rel-card:hover,
-  .discover-card:hover {
-    transition: box-shadow 0.01ms var(--ease), transform 0.01ms var(--ease), border-color 0.01ms;
+
+  .track-row .track-actions {
+    opacity: 1;
+  }
+}
+
+/* ── Print ── */
+@media print {
+  .sidebar,
+  .player-bar {
+    display: none !important;
+  }
+
+  .content-area {
+    display: block;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    margin: 0;
   }
 }
