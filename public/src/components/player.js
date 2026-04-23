@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { getSelectedZone, pauseZone, skipZone } from './plexRemote.js';
 import { setAmbientBackground, initAmbient } from './ambient.js';
+import { queueManager } from '../modules/queueManager.js';
 
 // ── SVG Icon Strings (Feather/Lucide style) ────────────────────────────────
 const PLAY_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
@@ -218,17 +219,31 @@ export async function playQueue(tracks, startIndex = 0) {
 /**
  * Render the play queue panel with current queue tracks.
  * Highlights active track and allows clicking to jump to any track.
+ * Supports drag-and-drop reordering.
  */
 export function renderQueue() {
   const listEl = document.getElementById('pq-list');
+  const queueBtn = document.getElementById('player-queue-btn');
+  const queueBadge = document.getElementById('queue-badge');
+
   if (!listEl) return;
+
+  // Update queue badge
+  if (queueBadge) {
+    if (playerState.queue.length > 0) {
+      queueBadge.textContent = playerState.queue.length;
+      queueBadge.style.display = '';
+    } else {
+      queueBadge.style.display = 'none';
+    }
+  }
 
   // Clear existing items
   listEl.innerHTML = '';
 
   // Empty queue
   if (playerState.queue.length === 0) {
-    listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Wachtrij is leeg</div>';
+    listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Voeg nummers toe aan je wachtrij</div>';
     return;
   }
 
@@ -238,6 +253,8 @@ export function renderQueue() {
     const li = document.createElement('li');
     li.className = `pq-track${isActive ? ' active' : ''}`;
     li.role = 'listitem';
+    li.draggable = true;
+    li.dataset.queueIndex = index;
 
     const trackNum = document.createElement('div');
     trackNum.className = 'pq-track-num';
@@ -259,12 +276,60 @@ export function renderQueue() {
     trackInfo.appendChild(trackTitle);
     trackInfo.appendChild(trackArtist);
 
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'pq-remove-btn';
+    removeBtn.setAttribute('aria-label', `Verwijder ${track.title}`);
+    removeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      playerState.queue.splice(index, 1);
+      if (playerState.queueIndex >= index && playerState.queueIndex > 0) {
+        playerState.queueIndex--;
+      }
+      renderQueue();
+    });
+
     li.appendChild(trackNum);
     li.appendChild(trackInfo);
+    li.appendChild(removeBtn);
 
     // Click to play track
     li.addEventListener('click', async () => {
       await _playTrackAtIndex(index);
+    });
+
+    // Drag and drop
+    li.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', index);
+      li.classList.add('dragging');
+    });
+
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+    });
+
+    li.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      li.classList.add('drag-over');
+    });
+
+    li.addEventListener('dragleave', () => {
+      li.classList.remove('drag-over');
+    });
+
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+      const toIndex = index;
+      if (fromIndex !== toIndex) {
+        const [track] = playerState.queue.splice(fromIndex, 1);
+        playerState.queue.splice(toIndex, 0, track);
+        renderQueue();
+      }
     });
 
     listEl.appendChild(li);
@@ -330,6 +395,9 @@ async function _playTrackAtIndex(index) {
       await setAmbientBackground(artUrl);
     }
     if (playBtn) playBtn.innerHTML = PAUSE_SVG;
+
+    // Add to recently played
+    queueManager.addToRecent(track);
 
     playerState.isWebPlaying = true;
     renderQueue();
@@ -397,10 +465,14 @@ export function initPlayer() {
     const zone = getSelectedZone();
     if (!zone) return;
 
-    // Web player: play next track in queue
+    // Web player: play next track in queue (respecting shuffle)
     if (zone.machineId === '__web__') {
       if (playerState.queue.length > 0) {
-        await _playTrackAtIndex(playerState.queueIndex + 1);
+        const nextIdx = queueManager.getNextIndex();
+        if (nextIdx >= 0) {
+          await _playTrackAtIndex(nextIdx);
+          queueManager.setCurrentIndex(nextIdx);
+        }
       }
       return;
     }
@@ -413,7 +485,7 @@ export function initPlayer() {
     const zone = getSelectedZone();
     if (!zone) return;
 
-    // Web player: restart current or play previous track
+    // Web player: restart current or play previous track (respecting shuffle)
     if (zone.machineId === '__web__') {
       if (playerState.queue.length > 0) {
         // If more than 3 seconds into track, restart it
@@ -421,7 +493,11 @@ export function initPlayer() {
           playerState.webPlayerAudio.currentTime = 0;
         } else {
           // Otherwise play previous track
-          await _playTrackAtIndex(playerState.queueIndex - 1);
+          const prevIdx = queueManager.getPrevIndex();
+          if (prevIdx >= 0) {
+            await _playTrackAtIndex(prevIdx);
+            queueManager.setCurrentIndex(prevIdx);
+          }
         }
       }
       return;
@@ -464,10 +540,30 @@ export function initPlayer() {
     }
   });
 
+  // ── Shuffle button ──────────────────────────────────────────────
+  const shuffleBtn = document.getElementById('player-shuffle');
+  shuffleBtn?.addEventListener('click', () => {
+    const isEnabled = queueManager.toggleShuffle();
+    if (isEnabled) {
+      shuffleBtn.classList.add('active');
+      shuffleBtn.setAttribute('aria-pressed', 'true');
+    } else {
+      shuffleBtn.classList.remove('active');
+      shuffleBtn.setAttribute('aria-pressed', 'false');
+    }
+  });
+
+  // Initialize shuffle button state
+  if (shuffleBtn && queueManager.getShuffleEnabled()) {
+    shuffleBtn.classList.add('active');
+    shuffleBtn.setAttribute('aria-pressed', 'true');
+  }
+
   // ── Queue panel toggle ──────────────────────────────────────────
   const queueBtn = document.getElementById('player-queue-btn');
   const queuePanel = document.getElementById('play-queue-panel');
   const queueCloseBtn = document.getElementById('pq-close');
+  const queueClearBtn = document.getElementById('pq-clear');
 
   queueBtn?.addEventListener('click', () => {
     if (queuePanel) {
@@ -479,6 +575,15 @@ export function initPlayer() {
   queueCloseBtn?.addEventListener('click', () => {
     if (queuePanel) {
       queuePanel.style.display = 'none';
+    }
+  });
+
+  queueClearBtn?.addEventListener('click', () => {
+    if (confirm('Wachtrij wissen?')) {
+      playerState.queue = [];
+      playerState.queueIndex = -1;
+      renderQueue();
+      stopWebPlayer();
     }
   });
 

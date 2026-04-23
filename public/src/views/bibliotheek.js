@@ -12,6 +12,7 @@ import { loadWishlist } from '../components/wishlist.js';
 import { loadPlexStatus } from '../api.js';
 import { playOnZone, pauseZone, skipZone, getSelectedZone } from '../components/plexRemote.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
+import { renderRecentTracks } from '../modules/recentTracks.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module-level state
@@ -27,7 +28,7 @@ let blibScroller     = null;
 let blibPlaylistKey  = null;
 
 // ── Tab system ──
-let blibCurrentTab   = localStorage.getItem('blibCurrentTab') || 'albums'; // 'albums' | 'artists' | 'tracks' | 'genres' | 'playlists'
+let blibCurrentTab   = localStorage.getItem('blibCurrentTab') || 'albums'; // 'albums' | 'artists' | 'tracks' | 'genres' | 'playlists' | 'recent'
 let blibArtistsData  = null;     // cache voor artists
 let blibTracksData   = null;     // cache voor tracks
 let blibGenresData   = null;     // cache voor genres
@@ -415,6 +416,9 @@ async function blibSwitchTab(tabKey) {
     case 'playlists':
       await blibShowPlaylistsTab(container);
       break;
+    case 'recent':
+      await blibShowRecentTab(container);
+      break;
   }
 }
 
@@ -427,8 +431,8 @@ function blibRenderToolbar() {
   if (!toolbar) return;
 
   // Maak tabbar HTML
-  const tabs = ['Albums', 'Artiesten', 'Nummers', 'Genres', 'Playlists'];
-  const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists'];
+  const tabs = ['Albums', 'Artiesten', 'Nummers', 'Genres', 'Playlists', 'Recent'];
+  const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists', 'recent'];
   const tabBarHtml = `<div class="blib-tab-bar" id="blib-tab-bar">
     ${tabs.map((name, i) => {
       const key = keys[i];
@@ -1972,4 +1976,40 @@ export function renderGaps() {
     html += `</div>`;
   }
   setContent(html);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Recent Tracks Tab
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function blibShowRecentTab(container) {
+  try {
+    showLoading(container);
+
+    // Clear toolbar for recent tab
+    const toolbar = document.getElementById('view-toolbar');
+    if (toolbar) {
+      toolbar.innerHTML = `<div class="blib-tab-bar" id="blib-tab-bar">
+        ${'Albums,Artiesten,Nummers,Genres,Playlists,Recent'.split(',').map((name, i) => {
+          const keys = ['albums', 'artists', 'tracks', 'genres', 'playlists', 'recent'];
+          const key = keys[i];
+          const active = blibCurrentTab === key ? ' active' : '';
+          return `<button class="blib-tab-btn${active}" data-tab="${key}">${name.trim()}</button>`;
+        }).join('')}
+      </div>`;
+
+      toolbar.addEventListener('click', e => {
+        const btn = e.target.closest('.blib-tab-btn');
+        if (btn) blibSwitchTab(btn.dataset.tab);
+      });
+    }
+
+    // Render recent tracks
+    container.innerHTML = '';
+    await renderRecentTracks(container);
+
+  } catch (e) {
+    console.error('Fout bij laden recent tracks:', e);
+    showError('Fout bij laden van recente nummers', container);
+  }
 }

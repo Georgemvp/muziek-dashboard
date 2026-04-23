@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <!-- Font disabled: file is corrupted (contains HTML instead of woff2) -->
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="css/recent-tracks.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
 </head>
 <body>
@@ -194,6 +195,12 @@
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
         </button>
+        <button class="player-btn" id="player-shuffle" title="Shuffle aan/uit" aria-label="Shuffle aan/uit" aria-pressed="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 17a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2z"/>
+            <path d="m5 10 5-5 5 5M19 9l-5-5-5 5"/>
+          </svg>
+        </button>
         <button class="player-btn" id="player-next" title="Volgende track" aria-label="Volgende track">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M9 18l6-6-6-6"/>
@@ -216,7 +223,7 @@
       </div>
 
       <div class="player-extra" role="group" aria-label="Extra speleropties">
-        <button class="player-btn" id="player-queue-btn" title="Bekijk afspeelwachtrij" aria-label="Bekijk afspeelwachtrij">
+        <button class="player-btn" id="player-queue-btn" title="Bekijk afspeelwachtrij" aria-label="Bekijk afspeelwachtrij" data-queue-count="0">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="8" y1="6" x2="21" y2="6"/>
             <line x1="8" y1="12" x2="21" y2="12"/>
@@ -225,6 +232,7 @@
             <line x1="3" y1="12" x2="3.01" y2="12"/>
             <line x1="3" y1="18" x2="3.01" y2="18"/>
           </svg>
+          <span class="queue-badge" id="queue-badge" style="display:none" aria-label="Items in queue">0</span>
         </button>
         <input type="range" class="player-volume" id="player-volume"
                min="0" max="100" value="80"
@@ -238,7 +246,17 @@
     <div class="play-queue-panel" id="play-queue-panel" role="region" aria-label="Afspeelwachtrij" style="display:none">
       <div class="pq-header">
         <span>Afspeelwachtrij</span>
-        <button id="pq-close" class="pq-close" aria-label="Wachtrij sluiten" title="Sluiten">✕</button>
+        <div class="pq-actions">
+          <button id="pq-clear" class="pq-action-btn" aria-label="Wachtrij wissen" title="Wachtrij wissen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              <line x1="10" y1="11" x2="10" y2="17"/>
+              <line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+          </button>
+          <button id="pq-close" class="pq-close" aria-label="Wachtrij sluiten" title="Sluiten">✕</button>
+        </div>
       </div>
       <ul class="pq-list" id="pq-list" role="list" aria-label="Nummers in wachtrij"></ul>
     </div>

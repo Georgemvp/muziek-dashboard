@@ -403,6 +403,42 @@ input[type="range"].player-volume::-moz-range-track {
   opacity: 0.5;
 }
 
+/* ── Shuffle Button ── */
+#player-shuffle {
+  position: relative;
+}
+
+#player-shuffle.active {
+  color: var(--accent);
+}
+
+#player-shuffle.active::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  z-index: -1;
+}
+
+/* ── Queue Badge ── */
+.queue-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════════
    RESPONSIVE ADJUSTMENTS
@@ -508,6 +544,31 @@ input[type="range"].player-volume::-moz-range-track {
   font-weight: 700;
   color: var(--text-primary);
   font-size: var(--text-sm);
+  gap: var(--space-2);
+}
+
+.pq-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pq-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.pq-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface2);
 }
 
 .pq-close {
@@ -546,6 +607,8 @@ input[type="range"].player-volume::-moz-range-track {
   cursor: pointer;
   transition: background-color var(--transition-fast);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  user-select: none;
+  position: relative;
 }
 
 .pq-track:hover {
@@ -556,6 +619,16 @@ input[type="range"].player-volume::-moz-range-track {
   background: var(--surface2);
   font-weight: 600;
   color: var(--accent);
+}
+
+.pq-track.dragging {
+  opacity: 0.5;
+  background: var(--surface3);
+}
+
+.pq-track.drag-over {
+  background: var(--accent-muted);
+  border-top: 2px solid var(--accent);
 }
 
 /* Track number */
@@ -570,6 +643,31 @@ input[type="range"].player-volume::-moz-range-track {
 
 .pq-track.active .pq-track-num {
   color: var(--accent);
+}
+
+/* Remove button */
+.pq-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.pq-track:hover .pq-remove-btn {
+  opacity: 1;
+}
+
+.pq-remove-btn:hover {
+  color: var(--red);
+  background: rgba(255, 69, 58, 0.1);
 }
 
 /* Track info container */
