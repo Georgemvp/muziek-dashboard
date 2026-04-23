@@ -8,7 +8,7 @@ module.exports = function(app, deps) {
     plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex,
     getPlexStatus, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient,
     pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks,
-    getAlbumTracks, triggerPlexScan, rateItem, PLEX_TOKEN, PLEX_URL, getCache, setCache
+    getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getCache, setCache
   } = deps;
 
   // ── Plex Webhook state + SSE ──────────────────────────────────────────────
@@ -690,6 +690,50 @@ module.exports = function(app, deps) {
       logger.warn({ err: e }, 'Plex genres ophalen mislukt');
       res.set('Cache-Control', 'private, max-age=300');
       res.status(500).json({ error: e.message, genres: [] });
+    }
+  });
+
+  // ── /api/plex/search ────────────────────────────────────────────────────────
+  // Parallel zoeken in artiesten, albums, nummers en afspeellijsten
+  // Query params: q (zoekterm, min 2 chars), limit (max resultaten per categorie, default 5)
+  app.get('/api/plex/search', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=60');
+      return res.json({ artists: [], albums: [], tracks: [], playlists: [] });
+    }
+
+    try {
+      const { q, limit } = req.query;
+      const parsedLimit = Math.min(parseInt(limit) || 5, 20); // max 20 per categorie
+
+      if (!q || q.length < 2) {
+        res.set('Cache-Control', 'private, max-age=60');
+        return res.json({ artists: [], albums: [], tracks: [], playlists: [] });
+      }
+
+      // Cache per zoekterm (5 minuten)
+      const cacheKey = `api:plex:search:${q.toLowerCase()}:${parsedLimit}`;
+      const cached = getCache(cacheKey, 300_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json(cached);
+      }
+
+      const results = await searchPlexLibrary(q, parsedLimit);
+
+      setCache(cacheKey, results);
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(results);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex search mislukt');
+      res.set('Cache-Control', 'private, max-age=60');
+      res.status(500).json({
+        error: 'Zoeken mislukt',
+        artists: [],
+        albums: [],
+        tracks: [],
+        playlists: []
+      });
     }
   });
 

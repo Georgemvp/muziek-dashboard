@@ -34,6 +34,51 @@ function normStr(s) {
     .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Eenvoudige fuzzy score functie.
+ * Berekent een match-score tussen query en target (0-1).
+ * Exact match = 1.0, substring match = 0.9, woord-prefix match = 0.8, etc.
+ */
+function fuzzyScore(query, target) {
+  const q = (query || '').toLowerCase().trim();
+  const t = (target || '').toLowerCase().trim();
+
+  if (!q || !t) return 0;
+  if (q === t) return 1.0;
+  if (t.includes(q)) return 0.95; // substring match
+
+  // Woord-prefix matching (bijv. "dark side" → "dark side of the moon")
+  const qWords = q.split(/\s+/);
+  const tWords = t.split(/\s+/);
+
+  let matchedWords = 0;
+  for (const qWord of qWords) {
+    if (tWords.some(tWord => tWord.startsWith(qWord))) {
+      matchedWords++;
+    }
+  }
+
+  if (matchedWords === qWords.length) {
+    return 0.85; // alle woorden matchen als prefix
+  }
+
+  // Levenshtein-achtige afstand (eenvoudig)
+  if (matchedWords > 0) {
+    return 0.5 + (matchedWords / qWords.length) * 0.3;
+  }
+
+  // Character overlap
+  const qChars = new Set(q.replace(/\s+/g, ''));
+  const tChars = new Set(t.replace(/\s+/g, ''));
+  const overlap = [...qChars].filter(c => tChars.has(c)).length;
+
+  if (overlap > 0) {
+    return (overlap / Math.max(qChars.size, tChars.size)) * 0.4;
+  }
+
+  return 0;
+}
+
 /** Normaliseer albumnamen voor fuzzy title matching.
  *  - Lowercase
  *  - Verwijder tekst tussen haakjes/brackets: (Deluxe Edition), [Bonus Tracks]
@@ -507,6 +552,175 @@ async function triggerPlexScan() {
   }
 }
 
+/**
+ * Zoek parallel in artiesten, albums, nummers en afspeellijsten.
+ * @param {string} q - zoekterm (minimaal 2 karakters)
+ * @param {number} limit - max resultaten per categorie (default: 5)
+ * @returns {Promise<{artists, albums, tracks, playlists}>}
+ */
+async function searchPlexLibrary(q, limit = 5) {
+  if (!q || q.length < 2) {
+    return { artists: [], albums: [], tracks: [], playlists: [] };
+  }
+
+  const query = q.toLowerCase().trim();
+  const results = { artists: [], albums: [], tracks: [], playlists: [] };
+
+  try {
+    // Parallel requests
+    const [artistRes, albumRes, tracksRes, playlistRes] = await Promise.allSettled([
+      _searchArtists(query, limit),
+      _searchAlbums(query, limit),
+      _searchTracks(query, limit),
+      _searchPlaylists(query, limit)
+    ]);
+
+    if (artistRes.status === 'fulfilled') results.artists = artistRes.value;
+    if (albumRes.status === 'fulfilled') results.albums = albumRes.value;
+    if (tracksRes.status === 'fulfilled') results.tracks = tracksRes.value;
+    if (playlistRes.status === 'fulfilled') results.playlists = playlistRes.value;
+  } catch (e) {
+    logger.warn({ err: e, query }, 'Plex search mislukt');
+  }
+
+  return results;
+}
+
+/**
+ * Zoek artiesten in de gecachte Plex-bibliotheek.
+ * Retourneert [{ratingKey, title, thumb}]
+ */
+async function _searchArtists(query, limit) {
+  const results = [];
+
+  // Artiesten uit gecachte map
+  for (const [lowerName, origName] of plexArtistMap) {
+    const score = fuzzyScore(query, origName);
+    if (score > 0) {
+      results.push({ name: origName, score });
+    }
+  }
+
+  // Sorteer op score (aflopend) en beperk tot limit
+  results.sort((a, b) => b.score - a.score);
+
+  // Haal ratingKeys op voor de top results
+  const topResults = results.slice(0, limit);
+  const artists = [];
+
+  for (const item of topResults) {
+    try {
+      // Query Plex voor de ratingKey van deze artiest
+      const sections = await plexGet('/library/sections');
+      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+      if (!music) continue;
+
+      const data = await plexGet(`/library/sections/${music.key}/all?type=8&title=${encodeURIComponent(item.name)}`);
+      const artistMeta = data?.MediaContainer?.Metadata?.[0];
+      if (artistMeta) {
+        artists.push({
+          ratingKey: artistMeta.ratingKey,
+          title: item.name,
+          thumb: artistMeta.thumb ? `${PLEX_URL}${artistMeta.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+        });
+      }
+    } catch (e) {
+      logger.warn({ err: e, artist: item.name }, 'Artiest ratingKey ophalen mislukt');
+    }
+  }
+
+  return artists;
+}
+
+/**
+ * Zoek albums in de gecachte Plex-bibliotheek.
+ * Retourneert [{ratingKey, title, artist, thumb}]
+ */
+async function _searchAlbums(query, limit) {
+  const results = [];
+
+  // Albums uit plexLibrary
+  for (const album of plexLibrary) {
+    const albumScore = fuzzyScore(query, album.album);
+    const artistScore = fuzzyScore(query, album.artist);
+    const score = Math.max(albumScore, artistScore);
+
+    if (score > 0) {
+      results.push({
+        ...album,
+        score
+      });
+    }
+  }
+
+  // Sorteer op score en beperk tot limit
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, limit).map(a => ({
+    ratingKey: a.ratingKey,
+    title: a.album,
+    artist: a.artist,
+    thumb: a.thumb ? (a.thumb.startsWith('http') ? a.thumb : `${PLEX_URL}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}`) : null
+  }));
+}
+
+/**
+ * Zoek nummers via Plex API.
+ * Retourneert [{ratingKey, title, artist, album, duration, thumb}]
+ */
+async function _searchTracks(query, limit) {
+  try {
+    // Haal muziek-section key op
+    const sections = await plexGet('/library/sections');
+    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    if (!music) return [];
+
+    // Zoek via Plex API (type=10 = track)
+    const data = await plexGet(`/library/sections/${music.key}/search?type=10&query=${encodeURIComponent(query)}&limit=${limit * 2}`);
+    const tracks = data?.MediaContainer?.Metadata || [];
+
+    return tracks.slice(0, limit).map(t => ({
+      ratingKey: t.ratingKey,
+      title: t.title,
+      artist: t.grandparentTitle || t.originalTitle || '',
+      album: t.parentTitle || '',
+      duration: t.duration || null,
+      thumb: t.parentThumb ? `${PLEX_URL}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+    }));
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex track zoeken mislukt');
+    return [];
+  }
+}
+
+/**
+ * Zoek afspeellijsten.
+ * Retourneert [{ratingKey, title, trackCount, thumb}]
+ */
+async function _searchPlaylists(query, limit) {
+  try {
+    const playlists = await getPlexPlaylists();
+    const results = [];
+
+    for (const playlist of playlists) {
+      const score = fuzzyScore(query, playlist.title);
+      if (score > 0) {
+        results.push({ ...playlist, score });
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, limit).map(p => ({
+      ratingKey: p.ratingKey,
+      title: p.title,
+      trackCount: p.trackCount || 0,
+      thumb: p.thumb
+    }));
+  } catch (e) {
+    logger.warn({ err: e }, 'Plex playlist zoeken mislukt');
+    return [];
+  }
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
@@ -516,6 +730,7 @@ module.exports = {
   getPlexPlaylists, getPlaylistTracks, getAlbumTracks,
   triggerPlexScan,
   rateItem,
+  searchPlexLibrary,
   PLEX_TOKEN,
   PLEX_URL,
 };

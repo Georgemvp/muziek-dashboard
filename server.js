@@ -46,7 +46,7 @@ app.use(compression());
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
 const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
-const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, PLEX_TOKEN, PLEX_URL } = require('./services/plex');
+const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
@@ -206,6 +206,7 @@ const deps = {
   getAlbumTracks,
   triggerPlexScan,
   rateItem,
+  searchPlexLibrary,
   PLEX_TOKEN,
   PLEX_URL,
 
