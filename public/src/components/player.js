@@ -228,13 +228,16 @@ async function _playTrackAtIndex(index) {
 
   try {
     // Request playback stream from server
-    const data = await apiFetch('/api/plex/play', {
+    const res = await fetch('/api/plex/play', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         machineId: '__web__',
         ratingKey: track.ratingKey,
       }),
     });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Afspelen mislukt');
 
     // Start playback
     await playWebStream(data.webStream);
