@@ -14,18 +14,19 @@
 /* ── Card list (recent/loved) ── */
 .card-list { display: flex; flex-direction: column; gap: 10px; }
 .card {
-  display: flex; align-items: center; gap: 12px; background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px; background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 14px;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
   animation: slideInFromRight 0.4s var(--ease) both;
   position: relative; overflow: hidden;
 }
 .card:hover {
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--text-primary) 12%, transparent);
-  transform: translateY(-2px);
-  border-color: var(--glass-hover-border);
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border-hover);
+  background: var(--surface2);
 }
 .card-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .card-ph { width: 56px; height: 56px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--muted); flex-shrink: 0; }
@@ -77,18 +78,19 @@
 /* ── Artist grid ── */
 .artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
 .ag-card {
-  position: relative; background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
+  position: relative; background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
   animation: fadeInFromLeft 0.45s var(--ease) both;
 }
 .ag-card:hover {
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--text-primary) 12%, transparent);
-  transform: translateY(-2px);
-  border-color: var(--glass-hover-border);
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border-hover);
+  background: var(--surface2);
 }
 .ag-photo { width: 100%; aspect-ratio: 1/1; overflow: hidden; background: var(--surface2); border-radius: 12px; }
 .ag-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s var(--ease); }
@@ -116,17 +118,18 @@
 .rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 .rec-card {
   display: flex; align-items: stretch; gap: 0;
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border); border-radius: var(--radius-lg); overflow: hidden;
+  background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
   animation: fadeUpScale 0.5s var(--ease) both;
 }
 .rec-card:hover {
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--text-primary) 12%, transparent);
-  transform: translateY(-2px);
-  border-color: var(--glass-hover-border);
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border-hover);
+  background: var(--surface2);
 }
 .rec-card.hidden { display: none; }
 .rec-photo {
@@ -165,17 +168,17 @@
 /* ── Album grid ── */
 .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .album-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: none;
+  background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
   border-radius: var(--art-radius);
   overflow: hidden;
   transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
 .album-card:hover {
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--text-primary) 14%, transparent);
-  transform: translateY(-2px);
+  box-shadow: none;
+  transform: none;
 }
 .album-card.owned { opacity: 0.4; }
 .album-card.owned:hover { opacity: 0.75; }
@@ -200,12 +203,12 @@
 
 /* ── Gaps ── */
 .gaps-block {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 16px 16px 20px; margin-bottom: 1.5rem; transition: box-shadow 0.22s var(--ease), border-color 0.18s;
+  background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 16px 20px; margin-bottom: 1.5rem; transition: box-shadow 0.22s var(--ease), border-color 0.18s;
 }
-.gaps-block:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: var(--glass-hover-border); }
+.gaps-block:hover { box-shadow: none; border-color: var(--border-hover); }
 .gaps-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .gaps-photo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .gaps-photo-ph { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--muted); flex-shrink: 0; }
@@ -247,14 +250,14 @@
 /* ── Nieuwe Releases ── */
 .releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 12px; }
 .rel-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
+  background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
   transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
   animation: fadeUpBounce 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.rel-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); transform: translateY(-2px); border-color: var(--glass-hover-border); }
+.rel-card:hover { box-shadow: none; transform: none; border-color: var(--border-hover); }
 .rel-card-new { border-left: 3px solid var(--red); }
 .rel-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
 .rel-img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -278,10 +281,10 @@
 .gaps-search { min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); }
 .gaps-list { display:flex; flex-direction:column; gap:10px; }
 .gaps-artist-row {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border); border-radius:12px; overflow:hidden;
+  background: var(--surface1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border); border-radius:12px; overflow:hidden;
 }
 .gaps-row-summary { list-style:none; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px; cursor:pointer; }
 .gaps-row-summary::-webkit-details-marker { display:none; }
