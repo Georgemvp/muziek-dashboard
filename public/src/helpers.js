@@ -289,8 +289,7 @@ export function showLoading(msg) {
     lijst: 'grid', collectie: 'cards', tidal: 'cards',
     nu: 'cards', ontdek: 'grid', bibliotheek: 'cards', downloads: 'cards'
   };
-  // Lookup by activeSubTab first, then activeTab
-  const lookupTab = state.activeSubTab || state.activeTab;
+  const lookupTab = state.activeView;
   const skType = skeletonMap[lookupTab];
   if (skType && !msg) showSkeleton(skType);
   else setContent(`<div class="loading"><div class="spinner"></div>${msg || 'Laden...'}</div>`);

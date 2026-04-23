@@ -3,8 +3,7 @@
 
 export const state = {
   // ── Navigatie ───────────────────────────────────────────────────────────
-  activeTab:        'bibliotheek',
-  activeSubTab:     null,
+  activeView:        'bibliotheek',
   bibSubTab:        'collectie',
   sectionContainerEl: null,
 
@@ -46,9 +45,8 @@ export const state = {
   spotifyEnabled: false,
   activeMood:     null,
 
-  // ── Audio preview ────────────────────────────────────────────────────────
-  previewAudio: new Audio(),
-  previewBtn:   null,
+  // ── Player module state ─────────────────────────────────────────────────
+  playerState: null,
 
   // ── Collapsible sections (Ontdek) ────────────────────────────────────────
   collapsibleSections: { recs: false, releases: false, discover: false },

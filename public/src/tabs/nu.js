@@ -137,7 +137,7 @@ export async function dw_nuLuisteren() {
   const el = document.getElementById('wbody-nu-luisteren');
   if (!el) return;
   // Guard: don't update widget if we've switched tabs
-  if (state.activeTab !== 'nu') return;
+  if (state.activeView !== 'nu') return;
   const signal = state.tabAbort?.signal;
   try {
     // Haal /api/recent uit cache (TTL: 60 seconden)
@@ -472,7 +472,7 @@ export async function loadRecent() {
 
 // ── Composiet loader (wordt aangeroepen vanuit events.js tab-routing) ─────
 export function loadNu() {
-  state.activeSubTab = null;
+  state.activeView = 'nu';
   hideTidarrUI();
   stopTidarrQueuePolling();
 
@@ -485,11 +485,11 @@ export function loadNu() {
   // Wait a moment to let widgets load before starting the polling interval
   setTimeout(() => {
     // Only start polling if still on Nu tab
-    if (state.activeTab !== 'nu') return;
+    if (state.activeView !== 'nu') return;
 
     // Poll de "Nu luisteren" widget elke 30s zolang Nu-tab actief is
     _dashPoller = setInterval(() => {
-      if (state.activeTab !== 'nu') {
+      if (state.activeView !== 'nu') {
         clearDashboardPolling();
         return;
       }
