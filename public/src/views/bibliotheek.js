@@ -154,7 +154,7 @@ function blibGroupByLetter(data) {
 function blibAlbumCard(item) {
   const src = item.thumb ? proxyImg(item.thumb, 240) : null;
   const img = src
-    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy"
+    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy" decoding="async"
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="blib-cover-ph" style="display:none;background:${gradientFor(item.album)}">${initials(item.album)}</div>`
     : `<div class="blib-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`;
@@ -669,7 +669,7 @@ async function blibShowDetail(item) {
 
   const src = item.thumb ? proxyImg(item.thumb, 320) : null;
   const coverHtml = src
-    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy"
+    ? `<img src="${esc(src)}" alt="${esc(item.album)} by ${esc(item.artist)}" loading="lazy" decoding="async"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
        <div class="blib-detail-cover-ph" style="display:none;background:${gradientFor(item.album)}">${initials(item.album)}</div>`
     : `<div class="blib-detail-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`;
@@ -1046,7 +1046,7 @@ function blibRenderArtistsGrid(artists, container) {
     ${filtered.map(a => {
       const src = a.thumb ? proxyImg(a.thumb, 200) : null;
       const img = src
-        ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
         : '';
       const ph = `<div class="blib-artist-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
       return `<div class="blib-artist-card" data-artist-name="${esc(a.title)}">
@@ -1278,7 +1278,7 @@ async function blibShowGenreDetail(genre, allGenres) {
         ${artists.map(a => {
           const src = a.thumb ? proxyImg(a.thumb, 200) : null;
           const img = src
-            ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+            ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
             : '';
           const ph = `<div class="blib-artist-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
           return `<div class="blib-genre-artist-card" data-artist-rating-key="${esc(a.ratingKey)}">
@@ -1349,7 +1349,7 @@ async function blibShowArtistDetail(ratingKey) {
 
     const coverSrc = artist.thumb ? proxyImg(artist.thumb, 320) : null;
     const coverHtml = coverSrc
-      ? `<img src="${esc(coverSrc)}" alt="${esc(artist.title)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"
+      ? `<img src="${esc(coverSrc)}" alt="${esc(artist.title)}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block"
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="blib-artist-detail-ph" style="background:${gradientFor(artist.title)};display:none;width:200px;height:200px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px">${initials(artist.title)}</div>`
       : `<div class="blib-artist-detail-ph" style="background:${gradientFor(artist.title)};width:200px;height:200px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px">${initials(artist.title)}</div>`;
@@ -1403,7 +1403,7 @@ async function blibShowArtistDetail(ratingKey) {
                 ${artist.albums.map(a => {
                   const src = a.thumb ? proxyImg(a.thumb, 200) : null;
                   const img = src
-                    ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+                    ? `<img src="${esc(src)}" alt="${esc(a.title)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
                     : '';
                   const ph = `<div class="blib-cover-ph" style="display:${src ? 'none' : 'flex'};background:${gradientFor(a.title)}">${initials(a.title)}</div>`;
                   return `<div class="blib-album-detail-card" data-album-rating-key="${esc(a.ratingKey)}">
@@ -1560,7 +1560,7 @@ async function blibShowPlaylistsTab(container) {
       const cover = pl.thumb ? proxyImg(pl.thumb, 200) : null;
       const count = pl.leafCount || pl.trackCount || 0;
       const coverHtml = cover
-        ? `<img src="${esc(cover)}" alt="${esc(pl.title || 'Playlist')}" loading="lazy">`
+        ? `<img src="${esc(cover)}" alt="${esc(pl.title || 'Playlist')}" loading="lazy" decoding="async">`
         : `<div class="blib-playlist-ph" style="background:${gradientFor(pl.title || 'Playlist')}">🎙️</div>`;
       return `<div class="blib-playlist-card" data-playlist-key="${esc(pl.ratingKey || pl.key || '')}">
         <div class="blib-playlist-cover">${coverHtml}</div>
@@ -1749,7 +1749,7 @@ export async function loadTopArtists(period) {
       const lfmImg   = getImg(a.image, 'large') || getImg(a.image);
       const agImgSrc = proxyImg(lfmImg, 120) || lfmImg;
       const photoHtml = agImgSrc
-        ? `<img src="${agImgSrc}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        ? `<img src="${agImgSrc}" alt="${esc(a.name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
            <div class="ag-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
         : `<div class="ag-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
       html += `<div class="ag-card">
@@ -1768,7 +1768,7 @@ export async function loadTopArtists(period) {
         .then(info => {
           if (info.image) {
             const el = document.getElementById(`agp-${i}`);
-            if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.display='none'">`;
+            if (el) el.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="${esc(a.name)}" loading="lazy" decoding="async" onerror="this.style.display='none'">`;
           }
           return true;
         })
@@ -1994,7 +1994,7 @@ export function renderGaps() {
     const meta = [countryFlag(a.country), a.country, a.startYear].filter(Boolean).join(' · ');
     const gapsImgSrc = proxyImg(a.image, 56) || a.image;
     const photo = gapsImgSrc
-      ? `<img class="gaps-photo" src="${esc(gapsImgSrc)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      ? `<img class="gaps-photo" src="${esc(gapsImgSrc)}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <div class="gaps-photo-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
       : `<div class="gaps-photo-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
     html += `

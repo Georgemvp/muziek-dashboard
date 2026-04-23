@@ -186,7 +186,7 @@ export async function dw_nuLuisteren() {
         const img    = getImg(np.image, 'medium');
         html += `<div class="w-np-row">
           <div class="w-np-dot lfm"></div>
-          ${img ? `<img class="w-np-img" src="${esc(img)}" alt="${esc(np.name)} by ${esc(artist)}" loading="lazy" width="48" height="48">` : ''}
+          ${img ? `<img class="w-np-img" src="${esc(img)}" alt="${esc(np.name)} by ${esc(artist)}" loading="lazy" decoding="async" width="48" height="48">` : ''}
           <div class="w-np-info">
             <div class="w-np-title">${esc(np.name)}</div>
             <div class="w-np-sub artist-link" data-artist="${esc(artist)}">${esc(artist)}</div>
@@ -276,7 +276,7 @@ async function dw_nieuweReleases() {
 
     el.innerHTML = `<div class="w-releases-list">${recent.map(r => {
       const img = r.image
-        ? `<img class="w-rel-img" src="${esc(r.image)}" alt="${esc(r.album)} by ${esc(r.artist)}" loading="lazy" onerror="this.style.display='none'">`
+        ? `<img class="w-rel-img" src="${esc(r.image)}" alt="${esc(r.album)} by ${esc(r.artist)}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
         : `<div class="w-rel-ph" style="background:${gradientFor(r.album)}">${initials(r.album)}</div>`;
       return `<div class="w-rel-row">
         <div class="w-rel-cover">${img}</div>
@@ -390,7 +390,7 @@ async function dw_aanbeveling() {
     el.innerHTML = `<div class="w-rec-wrap">
       <div class="w-rec-top">
         ${img
-          ? `<img class="w-rec-img" src="${esc(img)}" alt="${esc(pick.name)}" loading="lazy">`
+          ? `<img class="w-rec-img" src="${esc(img)}" alt="${esc(pick.name)}" loading="lazy" decoding="async">`
           : `<div class="w-rec-ph" style="background:${gradientFor(pick.name)}">${initials(pick.name)}</div>`}
         <div class="w-rec-info">
           <div class="w-rec-name artist-link" data-artist="${esc(pick.name)}">${esc(pick.name)}</div>
@@ -458,7 +458,7 @@ export async function loadRecent() {
       const art    = t.artist?.['#text'] || '';
       const img    = getImg(t.image);
       const imgEl  = img
-        ? `<img class="card-img" src="${esc(img)}" alt="${esc(t.name)} by ${esc(art)}" loading="lazy" width="56" height="56" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="card-ph" style="display:none">♪</div>`
+        ? `<img class="card-img" src="${esc(img)}" alt="${esc(t.name)} by ${esc(art)}" loading="lazy" decoding="async" width="56" height="56" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="card-ph" style="display:none">♪</div>`
         : `<div class="card-ph">♪</div>`;
       if (isNow) {
         html += `<div class="now-playing">${imgEl}<div class="np-dot"></div>

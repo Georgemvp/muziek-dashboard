@@ -169,7 +169,7 @@ export function downloadBtn(artist, album = '', inPlex = false) {
 export const trackImg = imgs => {
   const src = getImg(imgs);
   if (src)
-    return `<img class="card-img" src="${src}" alt="" loading="lazy" width="56" height="56"
+    return `<img class="card-img" src="${src}" alt="" loading="lazy" decoding="async" width="56" height="56"
       onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
       <div class="card-ph" style="display:none">♪</div>`;
   return `<div class="card-ph">♪</div>`;
@@ -189,7 +189,7 @@ export function albumCard(album, showBadge = true, artist = '') {
     <div class="album-card ${owned ? 'owned' : 'missing'}" title="${esc(album.title)}${year !== '—' ? ' ('+year+')' : ''}">
       <div class="album-cover" style="background:${bg}">
         <div class="album-cover-ph">${initials(album.title || '?')}</div>
-        <img src="${esc(album.coverUrl || '')}" alt="${esc(album.title)}" loading="lazy"
+        <img src="${esc(album.coverUrl || '')}" alt="${esc(album.title)}" loading="lazy" decoding="async"
           style="opacity:0;transition:opacity 0.35s;position:relative;z-index:1"
           onload="this.style.opacity='1'" onerror="this.remove()">
         ${dlHtml}

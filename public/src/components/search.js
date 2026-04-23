@@ -15,7 +15,7 @@ export async function doSearch(q) {
       results.innerHTML = data.results.map(a => {
         const imgSrc = proxyImg(a.image, 56) || a.image;
         const imgEl = imgSrc
-          ? `<img class="search-result-img" src="${esc(imgSrc)}" alt="${esc(a.name)}" loading="lazy" width="56" height="56"
+          ? `<img class="search-result-img" src="${esc(imgSrc)}" alt="${esc(a.name)}" loading="lazy" decoding="async" width="56" height="56"
                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
              <div class="search-result-ph" style="background:${gradientFor(a.name)};display:none">${initials(a.name)}</div>`
           : `<div class="search-result-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;

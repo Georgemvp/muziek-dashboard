@@ -115,7 +115,7 @@ export async function renderRecentTracks(container) {
 function renderRecentTrack(track, idx) {
   const src = track.thumb ? proxyImg(track.thumb, 120) : null;
   const img = src
-    ? `<img src="${esc(src)}" alt="${esc(track.title)}" loading="lazy"
+    ? `<img src="${esc(src)}" alt="${esc(track.title)}" loading="lazy" decoding="async"
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
     : '';
   const placeholder = `<div class="recent-ph" style="background:${gradientFor(track.title)}">${initials(track.title)}</div>`;
