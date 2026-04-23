@@ -299,7 +299,7 @@
 .blib-grid {
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; padding-bottom: 8px;
 }
-.blib-album { cursor: pointer; position: relative; animation: blib-fadeIn 0.25s ease both; }
+.blib-album { cursor: pointer; position: relative; }
 @keyframes blib-fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 .blib-cover {
   width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden;
@@ -342,7 +342,7 @@
 /* ── Virtual scroll ── */
 .blib-virtual-container { position:relative; }
 .blib-virtual-spacer { width:100%; }
-.blib-virtual-window { position:absolute; left:0; right:0; }
+.blib-virtual-window { position:absolute; left:0; right:0; will-change: transform; }
 /* ── A-Z Rail ── */
 .blib-az-rail {
   position:fixed; right: max(12px, calc((100vw - 1120px)/2 - 20px));
