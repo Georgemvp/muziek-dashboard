@@ -589,7 +589,7 @@ export async function loadBibliotheek() {
 
       <div class="bib-subtabs" id="bib-subtabs">
         <button class="bib-tab${state.bibSubTab === 'collectie' ? ' active' : ''}" data-bibtab="collectie">Collectie</button>
-        <button class="bib-tab${state.bibSubTab === 'lijst'     ? ' active' : ''}" data-bibtab="lijst">Lijst</button>
+        <button class="bib-tab${state.bibSubTab === 'lijst' ? ' active' : ''}" data-bibtab="lijst">Lijst</button>
       </div>
 
       <div id="bib-subtoolbar"></div>
