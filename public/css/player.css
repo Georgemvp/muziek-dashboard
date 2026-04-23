@@ -1,0 +1,420 @@
+/* ═══════════════════════════════════════════════════════════════════
+   player.css — Persistent Player Bar
+   Bevat styling voor de player-bar met track-info, controls, progress, volume
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Player Bar Container ── */
+#player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  height: var(--player-height);
+  background: var(--surface1);
+  border-top: 1px solid var(--border);
+  transition: all var(--transition-normal);
+}
+
+/* Default state: empty/not playing */
+#player-bar:not(.active) {
+  opacity: 0.6;
+  color: var(--text-muted);
+}
+
+/* Active state: something is playing */
+#player-bar.active {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+/* Hidden state: slide out of view */
+#player-bar.hidden {
+  transform: translateY(100%);
+  transition: transform var(--transition-normal);
+}
+
+/* Paused state: pulse animation on play button */
+#player-bar.paused .player-btn-main {
+  animation: none;
+}
+
+
+/* ── Track Info Section ── */
+.player-track-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Album art container */
+.player-art {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface2);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Album art image */
+.player-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Placeholder music note when no image */
+.player-art img[src=""],
+.player-art:not(:has(img[src])) {
+  position: relative;
+}
+
+.player-art::after {
+  content: "♫";
+  font-size: 24px;
+  color: var(--text-secondary);
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.player-art img[src]:not([src=""]) ~ ::after {
+  display: none;
+}
+
+
+/* Track text container */
+.player-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.player-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+#player-bar:not(.active) .player-title {
+  color: var(--text-muted);
+}
+
+.player-artist {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+#player-bar:not(.active) .player-artist {
+  color: var(--text-muted);
+}
+
+/* Default text when nothing playing */
+#player-bar:not(.active) .player-text {
+  display: flex;
+}
+
+#player-bar:not(.active) .player-title::before {
+  content: "Niet aan het afspelen";
+}
+
+#player-bar:not(.active) .player-artist {
+  display: none;
+}
+
+
+/* ── Controls Section ── */
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Control buttons */
+.player-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.player-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface2);
+}
+
+.player-btn:active {
+  transform: scale(0.95);
+}
+
+/* Main play/pause button */
+.player-btn-main {
+  background: var(--accent);
+  color: var(--text-primary);
+  padding: var(--space-3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  transition: all var(--transition-fast);
+}
+
+.player-btn-main:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.player-btn-main:active {
+  transform: scale(0.95);
+}
+
+/* Paused state: remove pulse */
+#player-bar.paused .player-btn-main {
+  animation: none;
+}
+
+
+/* ── Progress Bar Section ── */
+.player-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1.5;
+  min-width: 200px;
+}
+
+.player-time {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 30px;
+  text-align: center;
+}
+
+#player-bar:not(.active) .player-time {
+  color: var(--text-muted);
+}
+
+/* Progress bar container */
+.player-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: height var(--transition-fast);
+}
+
+.player-progress:hover {
+  height: 6px;
+}
+
+.player-progress:hover::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  top: 50%;
+  left: var(--progress-x, 0%);
+  transform: translate(-50%, -50%);
+  box-shadow: var(--shadow-sm);
+  opacity: 1;
+}
+
+/* Progress fill */
+.player-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width var(--transition-fast);
+  width: 0%;
+}
+
+#player-bar:not(.active) .player-progress-fill {
+  background: var(--text-muted);
+}
+
+
+/* ── Extra Controls Section ── */
+.player-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Queue button */
+#player-queue-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-size: 16px;
+  line-height: 1;
+}
+
+#player-queue-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface2);
+}
+
+#player-queue-btn:active {
+  transform: scale(0.95);
+}
+
+/* Volume control */
+.player-volume {
+  width: 100px;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  -webkit-appearance: slider-horizontal;
+  appearance: slider-horizontal;
+}
+
+/* Range input styling (webkit) */
+input[type="range"].player-volume {
+  -webkit-appearance: none;
+  width: 100px;
+  height: 4px;
+  background: var(--surface2);
+  outline: none;
+  border-radius: 2px;
+}
+
+input[type="range"].player-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="range"].player-volume::-webkit-slider-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.2);
+}
+
+input[type="range"].player-volume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  cursor: pointer;
+  border-radius: 50%;
+  border: none;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="range"].player-volume::-moz-range-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.2);
+}
+
+input[type="range"].player-volume::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+#player-bar:not(.active) .player-volume {
+  opacity: 0.5;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE ADJUSTMENTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Tablet: compress some spacing */
+@media (max-width: 768px) {
+  #player-bar {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .player-track-info {
+    gap: var(--space-2);
+  }
+
+  .player-art {
+    width: 44px;
+    height: 44px;
+  }
+
+  .player-progress-wrap {
+    min-width: 150px;
+    gap: var(--space-1);
+  }
+
+  .player-time {
+    font-size: 10px;
+    min-width: 25px;
+  }
+
+  .player-volume {
+    width: 80px;
+  }
+}
+
+/* Mobile: hide some elements */
+@media (max-width: 480px) {
+  .player-progress-wrap {
+    display: none;
+  }
+
+  .player-extra {
+    gap: var(--space-2);
+  }
+
+  .player-volume {
+    width: 60px;
+  }
+
+  .player-controls {
+    gap: 0;
+  }
+}

@@ -14,3 +14,4 @@
 @import './css/sections.css';   /* .section-block, .section-hdr, .bib-*, .plib-* */
 @import './css/utils.css';      /* .skeleton, .loading, .error-box, .empty       */
 @import './css/responsive.css'; /* alle @media queries gebundeld                 */
+@import './css/player.css';     /* persistent player bar styling                 */
