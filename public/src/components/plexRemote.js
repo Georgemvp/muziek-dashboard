@@ -163,9 +163,11 @@ export async function playOnZone(ratingKey, type = 'music') {
             const albumRes = await fetch(`/api/plex/album/${ratingKey}/tracks`);
             if (albumRes.ok) {
               const albumData = await albumRes.json();
+              console.debug('[Plex Remote] Album tracks response:', albumData);
 
               // If we got tracks, it's an album - play as queue
               if (albumData.tracks && albumData.tracks.length > 0) {
+                console.info(`[Plex Remote] Found ${albumData.tracks.length} tracks in album`);
                 const queueTracks = albumData.tracks.map(track => ({
                   ratingKey: track.ratingKey,
                   title: track.title || 'Onbekend nummer',
@@ -176,10 +178,15 @@ export async function playOnZone(ratingKey, type = 'music') {
                   thumb: track.thumb ? `${location.origin}/api/img?url=${encodeURIComponent(track.thumb)}&w=120` : null,
                 }));
 
+                console.debug('[Plex Remote] Queue tracks mapped:', queueTracks.slice(0, 2)); // Log first 2 for inspection
                 await playQueue(queueTracks, 0);
                 _showPlayFeedback(`${zone.name} (Browser) - Album`);
                 return true;
+              } else {
+                console.debug('[Plex Remote] No tracks found in album response');
               }
+            } else {
+              console.debug('[Plex Remote] Album fetch returned status:', albumRes.status);
             }
           } catch (e) {
             // Not an album or fetch failed - fall through to single track playback

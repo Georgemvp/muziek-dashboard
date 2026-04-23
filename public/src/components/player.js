@@ -227,6 +227,13 @@ async function _playTrackAtIndex(index) {
   const track = playerState.queue[index];
 
   try {
+    console.debug('[Queue] Playing track at index', index, ':', {
+      ratingKey: track.ratingKey,
+      title: track.title,
+      artist: track.artist,
+      duration: track.duration,
+    });
+
     // Request playback stream from server
     const res = await fetch('/api/plex/play', {
       method: 'POST',
@@ -237,7 +244,11 @@ async function _playTrackAtIndex(index) {
       }),
     });
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Afspelen mislukt');
+
+    if (!res.ok || !data.ok) {
+      console.error('[Queue] Track play failed:', { status: res.status, error: data.error });
+      throw new Error(data.error || 'Afspelen mislukt');
+    }
 
     // Start playback
     await playWebStream(data.webStream);
