@@ -11,9 +11,23 @@
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
   height: var(--player-height);
-  background: var(--surface1);
-  border-top: 1px solid var(--border);
+  position: relative;
+  background: rgba(28,28,30,0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: none;
   transition: all var(--transition-normal);
+}
+
+/* Dunne progress lijn bovenaan de player */
+#player-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.06);
 }
 
 /* Default state: empty/not playing */
@@ -171,7 +185,7 @@
 .player-btn {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.5);
   cursor: pointer;
   padding: var(--space-2);
   display: flex;
@@ -190,8 +204,8 @@
 }
 
 .player-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface2);
+  color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.08);
 }
 
 .player-btn:active {
@@ -200,18 +214,18 @@
 
 /* Main play/pause button */
 .player-btn-main {
-  background: var(--accent);
-  color: var(--text-primary);
+  background: rgba(255,255,255,0.9);
+  color: #000;
   padding: var(--space-3);
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   transition: all var(--transition-fast);
 }
 
 .player-btn-main:hover {
-  background: var(--accent-hover);
-  transform: scale(1.1);
+  background: #fff;
+  transform: none;
 }
 
 .player-btn-main:active {
@@ -295,7 +309,7 @@
   border-radius: 4px;
   transition: width var(--transition-fast);
   width: 0%;
-  box-shadow: 0 0 4px rgba(29, 185, 84, 0.4);
+  box-shadow: none;
 }
 
 #player-bar.active .player-progress-fill {
@@ -364,8 +378,8 @@ input[type="range"].player-volume {
 input[type="range"].player-volume::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--accent);
   cursor: pointer;
   border-radius: 50%;
@@ -379,8 +393,8 @@ input[type="range"].player-volume::-webkit-slider-thumb:hover {
 }
 
 input[type="range"].player-volume::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--accent);
   cursor: pointer;
   border-radius: 50%;
