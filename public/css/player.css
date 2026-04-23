@@ -26,6 +26,7 @@
 #player-bar.active {
   color: var(--text-primary);
   opacity: 1;
+  background: linear-gradient(to right, var(--surface1), var(--surface1));
 }
 
 /* Hidden state: slide out of view */
@@ -106,7 +107,7 @@
 
 .player-title {
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -114,8 +115,14 @@
   line-height: 1.2;
 }
 
+#player-bar.active .player-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 #player-bar:not(.active) .player-title {
   color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .player-artist {
@@ -125,10 +132,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+  font-weight: 500;
+}
+
+#player-bar.active .player-artist {
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 #player-bar:not(.active) .player-artist {
   color: var(--text-muted);
+  opacity: 0.6;
 }
 
 /* Default text when nothing playing */
@@ -219,18 +233,25 @@
   white-space: nowrap;
   min-width: 30px;
   text-align: center;
+  font-weight: 500;
+}
+
+#player-bar.active .player-time {
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 #player-bar:not(.active) .player-time {
   color: var(--text-muted);
+  opacity: 0.6;
 }
 
 /* Progress bar container */
 .player-progress {
   flex: 1;
-  height: 4px;
-  background: var(--surface2);
-  border-radius: 2px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -238,7 +259,8 @@
 }
 
 .player-progress:hover {
-  height: 6px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .player-progress:hover::after {
@@ -259,13 +281,19 @@
 .player-progress-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 2px;
+  border-radius: 4px;
   transition: width var(--transition-fast);
   width: 0%;
+  box-shadow: 0 0 4px rgba(29, 185, 84, 0.4);
+}
+
+#player-bar.active .player-progress-fill {
+  background: var(--accent);
 }
 
 #player-bar:not(.active) .player-progress-fill {
-  background: var(--text-muted);
+  background: var(--text-secondary);
+  opacity: 0.4;
 }
 
 

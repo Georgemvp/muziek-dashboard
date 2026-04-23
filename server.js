@@ -639,9 +639,10 @@ app.post('/api/plex/webhook',
     if (!meta || meta.type !== 'track') return res.sendStatus(200);
 
     if (['media.play','media.resume','media.pause','media.stop','media.scrobble'].includes(event)) {
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
       const thumb = meta.parentThumb
-        ? `${PLEX_URL}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
-        : (meta.grandparentThumb ? `${PLEX_URL}${meta.grandparentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null);
+        ? `${plexStreamUrl}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
+        : (meta.grandparentThumb ? `${plexStreamUrl}${meta.grandparentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null);
 
       _webhookState = {
         event,
@@ -737,6 +738,7 @@ app.get('/api/plex/nowplaying', async (req, res) => {
       return res.json({ playing: false });
     }
     const thumb = music.parentThumb || music.grandparentThumb;
+    const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
     res.set('Cache-Control', 'private, max-age=30');
     res.json({
       playing:        music.Player?.state !== 'paused',
@@ -746,7 +748,7 @@ app.get('/api/plex/nowplaying', async (req, res) => {
       album:          music.parentTitle,
       ratingKey:      music.ratingKey      || null,
       albumRatingKey: music.parentRatingKey || null,
-      thumb:          thumb ? `${PLEX_URL}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+      thumb:          thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
       duration:       music.duration   || null,
       viewOffset:     music.viewOffset || null,
       state:          music.Player?.state || 'playing',
@@ -784,9 +786,10 @@ app.get('/api/plex/library', (req, res) => {
   );
   const { ok, artistCount } = getPlexStatus();
   const total = lib.length;
+  const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
   const slice = lib.slice((page - 1) * limit, page * limit).map(x => ({
     ...x,
-    thumb: x.thumb ? `${PLEX_URL}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+    thumb: x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null
   }));
   res.set('Cache-Control', 'private, max-age=300');
   res.json({ connected: ok, artistCount, total, page, limit, library: slice });
@@ -797,13 +800,14 @@ app.get('/api/plex/library/all', (req, res) => {
     return res.json({ ok: false, library: [] });
   }
   const lib = getPlexLibrary();
+  const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
   // Compact array-formaat: [artist, album, ratingKey, thumb] per item
   // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
   const compact = lib.map(x => ([
     x.artist,
     x.album,
     x.ratingKey || '',
-    x.thumb ? `${PLEX_URL}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
+    x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : ''
   ]));
   res.set('Cache-Control', 'private, max-age=300');
   res.json({ ok: true, total: compact.length, library: compact });
@@ -960,11 +964,12 @@ app.post('/api/plex/play', async (req, res) => {
       const webStream = `${plexStreamUrl}${partKey}${separator}X-Plex-Token=${PLEX_TOKEN}`;
 
       // Extract track metadata
+      // Use external URL for browser-facing responses (thumbs, streams)
       const track = meta?.title || null;
       const artist = meta?.grandparentTitle || meta?.originalTitle || null;
       const album = meta?.parentTitle || null;
       const thumb = meta?.parentThumb
-        ? `${PLEX_URL}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
+        ? `${plexStreamUrl}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
         : null;
       const duration = meta?.duration || null;
 
