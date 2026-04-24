@@ -30,7 +30,7 @@ import { p } from './helpers.js';
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  if (btn) btn.title = theme === 'dark' ? 'Schakel naar licht' : 'Schakel naar donker';
 }
 
 function initTheme() {

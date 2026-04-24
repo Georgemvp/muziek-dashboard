@@ -24,8 +24,8 @@
   flex-direction: column;
   height: 100dvh;
   overflow-y: auto;
-  background: #000000;
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg);
+  border-right: 1px solid var(--border);
   transition: width var(--transition-normal), left var(--transition-normal),
               transform var(--transition-normal);
   z-index: 100;
@@ -34,14 +34,14 @@
 
 /* Brand / logo balk */
 .sidebar-brand {
-  padding: 20px 16px;
+  padding: 28px 20px 24px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: var(--text-lg);
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
   flex-shrink: 0;
+  letter-spacing: 0.5px;
 }
 
 .sidebar-brand-icon {
@@ -62,8 +62,8 @@
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 10px 16px;
   border-radius: var(--radius-md);
   border: none;
   background: transparent;
@@ -75,88 +75,72 @@
   width: 100%;
   text-align: left;
   text-decoration: none;
-  white-space: nowrap;
   overflow: hidden;
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.03);
   color: var(--text-primary);
 }
 
 .nav-item.active {
-  background: rgba(255,255,255,0.08);
-  color: #fff;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 600;
   position: relative;
-}
-
-/* Rode indicator links naast actief item */
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 18px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
 }
 
 .nav-item svg,
 .nav-item .nav-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  opacity: 0.8;
+  width: 18px;
+  height: 18px;
+  opacity: 0.5;
 }
 
 .nav-item.active svg,
 .nav-item.active .nav-icon {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 /* Badge (aantal / notificatie) */
 .nav-badge {
   margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: 50%;
   background: var(--accent);
-  color: #fff;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
+  padding: 0;
+  font-size: 0;
+  color: transparent;
+  display: block;
   flex-shrink: 0;
-  line-height: 1;
 }
 
 /* Scheidingslijn */
 .sidebar-divider {
   height: 1px;
   background: var(--border);
-  margin: 12px 16px;
+  margin: 16px 20px;
   flex-shrink: 0;
 }
 
 /* Sectie-titel (uppercase label) */
 .sidebar-section-title {
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: var(--text-muted);
-  padding: 12px 16px 8px;
+  padding: 16px 20px 8px;
   flex-shrink: 0;
 }
 
 /* Footer (onderaan sidebar, pushed by margin-top: auto) */
 .sidebar-footer {
   margin-top: auto;
-  padding: 12px 16px;
+  padding: 16px 20px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -170,14 +154,14 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
 /* Status-dot: rood = off, groen = on */
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--red);
   flex-shrink: 0;
@@ -192,6 +176,26 @@
 .status-dot.offline,
 .status-dot[data-status="off"] {
   background: var(--red);
+}
+
+/* Theme toggle button */
+.sidebar-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.05);
 }
 
 
