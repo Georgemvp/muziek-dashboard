@@ -210,12 +210,12 @@
 .gaps-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .gaps-photo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
 .gaps-photo-ph { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--muted); flex-shrink: 0; }
-.gaps-artist-name { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
-.gaps-artist-meta { font-size: 12px; color: var(--muted2); margin-bottom: 8px; }
-.comp-bar { height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+.gaps-artist-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+.gaps-artist-meta { font-size: 12px; color: var(--muted2); margin: 4px 0 8px; }
+.comp-bar { height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
 .comp-fill { height: 100%; background: var(--plex); border-radius: 3px; }
 .comp-text { font-size: 11px; color: var(--muted2); }
-.gaps-sub { font-size: 10px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+.gaps-sub { font-size: 10px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 12px; }
 .gaps-album-grid { display: grid; grid-template-columns: repeat(auto-fill, 110px); justify-content: start; gap: 10px; }
 
 /* ── Aanbevolen Albums ── */
@@ -275,7 +275,7 @@
 
 .gaps-view-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
 .gaps-inline-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.gaps-search { min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); }
+.gaps-search { min-width:240px; padding:10px 14px; font-size:13px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); }
 .gaps-list { display:flex; flex-direction:column; gap:10px; }
 .gaps-artist-row {
   background: var(--surface1);
