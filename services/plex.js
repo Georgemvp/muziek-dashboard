@@ -743,6 +743,249 @@ async function _searchPlaylists(query, limit) {
   }
 }
 
+// ── Play history & analytics ──────────────────────────────────────────────────
+
+/** Converteert een periode-string naar Unix timestamp (seconden). */
+function periodToTimestamp(period) {
+  const now = Date.now();
+  let days = 0;
+
+  switch (period) {
+    case '7day':
+      days = 7;
+      break;
+    case '1month':
+      days = 30;
+      break;
+    case '3month':
+      days = 90;
+      break;
+    case '12month':
+      days = 365;
+      break;
+    case 'overall':
+      days = 365 * 10; // 10 jaren terug
+      break;
+    default:
+      days = 365; // default 1 jaar
+  }
+
+  const timestamp = Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000);
+  return timestamp;
+}
+
+/**
+ * Haalt play history op van de Plex API met paginatie.
+ * Retourneert array van {title, artist, album, viewedAt, duration, thumb, ratingKey}
+ * Gecached voor 10 minuten per periode.
+ */
+async function getPlayHistory(period = '7day') {
+  const cacheKey = `play_history_${period}`;
+  const cached = getCache(cacheKey, 600_000); // 10 minuten cache
+  if (cached) return cached;
+
+  try {
+    // Haal muziek-section key op
+    const sections = await plexGet('/library/sections');
+    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    if (!music) {
+      logger.warn('Plex: geen muziekbibliotheek gevonden voor play history');
+      return [];
+    }
+
+    const since = periodToTimestamp(period);
+    const history = [];
+    let start = 0;
+    const pageSize = 500;
+    let hasMore = true;
+
+    while (hasMore) {
+      const params = new URLSearchParams({
+        'sort': 'viewedAt:desc',
+        'accountID': '1',
+        'librarySectionID': music.key,
+        'X-Plex-Container-Start': start,
+        'X-Plex-Container-Size': pageSize
+      });
+
+      const path = `/status/sessions/history/all?${params}&viewedAt>=${since}`;
+      const data = await plexGet(path);
+      const metadata = data?.MediaContainer?.Metadata || [];
+
+      if (metadata.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const m of metadata) {
+        history.push({
+          title: m.title || '',
+          artist: m.grandparentTitle || m.originalTitle || '',
+          album: m.parentTitle || '',
+          viewedAt: m.viewedAt || 0,
+          duration: m.duration || 0,
+          thumb: m.parentThumb || null,
+          ratingKey: m.ratingKey || null
+        });
+      }
+
+      if (metadata.length < pageSize) {
+        hasMore = false;
+      } else {
+        start += pageSize;
+      }
+    }
+
+    setCache(cacheKey, history);
+    return history;
+  } catch (e) {
+    logger.warn({ err: e }, 'Play history ophalen mislukt');
+    return [];
+  }
+}
+
+/**
+ * Aggregeert de meest gespeelde artiesten uit play history.
+ * @param {Array} history - array van history items
+ * @param {number} limit - max aantal artiesten (default 20)
+ * @returns {Array<{name, playcount}>}
+ */
+function aggregateTopArtists(history, limit = 20) {
+  const artistCounts = new Map();
+
+  for (const item of history) {
+    if (!item.artist) continue;
+    const count = artistCounts.get(item.artist) || 0;
+    artistCounts.set(item.artist, count + 1);
+  }
+
+  const result = [...artistCounts.entries()]
+    .map(([name, playcount]) => ({ name, playcount }))
+    .sort((a, b) => b.playcount - a.playcount)
+    .slice(0, limit);
+
+  return result;
+}
+
+/**
+ * Aggregeert de meest gespeelde tracks uit play history.
+ * @param {Array} history - array van history items
+ * @param {number} limit - max aantal tracks (default 20)
+ * @returns {Array<{title, artist, album, playcount, thumb}>}
+ */
+function aggregateTopTracks(history, limit = 20) {
+  const trackCounts = new Map();
+
+  for (const item of history) {
+    if (!item.title || !item.artist) continue;
+    const key = `${item.artist}||${item.title}`;
+    const existing = trackCounts.get(key) || {
+      title: item.title,
+      artist: item.artist,
+      album: item.album || '',
+      playcount: 0,
+      thumb: item.thumb || null
+    };
+    existing.playcount += 1;
+    trackCounts.set(key, existing);
+  }
+
+  const result = [...trackCounts.values()]
+    .sort((a, b) => b.playcount - a.playcount)
+    .slice(0, limit);
+
+  return result;
+}
+
+/**
+ * Groepeert play history per kalenderdatum.
+ * @param {Array} history - array van history items
+ * @param {number} days - aantal dagen terug (default 28)
+ * @returns {Array<{date, count, minutes}>} gesorteerd van recent naar oud
+ */
+function aggregateDailyPlays(history, days = 28) {
+  const now = new Date();
+  const dailyMap = new Map();
+
+  // Initialiseer alle dagen met 0
+  for (let i = 0; i < days; i++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    dailyMap.set(dateStr, { date: dateStr, count: 0, minutes: 0 });
+  }
+
+  // Tel plays en minuten per dag
+  for (const item of history) {
+    if (!item.viewedAt) continue;
+    const date = new Date(item.viewedAt * 1000); // viewedAt is in seconden
+    const dateStr = date.toISOString().split('T')[0];
+
+    if (dailyMap.has(dateStr)) {
+      const entry = dailyMap.get(dateStr);
+      entry.count += 1;
+      entry.minutes += Math.ceil((item.duration || 0) / 60000); // duration is in ms
+    }
+  }
+
+  // Retourneer gesorteerd van recent naar oud
+  const result = [...dailyMap.values()]
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return result;
+}
+
+/**
+ * Haalt genres op voor een array van top artiesten.
+ * @param {Array} topArtists - array van {name, playcount} objecten
+ * @returns {Promise<Array<{name, count}>>} top 8 genres gewogen naar playcount
+ */
+async function getGenresFromPlex(topArtists) {
+  const genreCounts = new Map();
+
+  try {
+    // Haal muziek-section key op
+    const sections = await plexGet('/library/sections');
+    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    if (!music) return [];
+
+    for (const artist of topArtists) {
+      try {
+        // Query Plex voor de artiest om ratingKey te krijgen
+        const data = await plexGet(`/library/sections/${music.key}/all?type=8&title=${encodeURIComponent(artist.name)}`);
+        const artistMeta = data?.MediaContainer?.Metadata?.[0];
+
+        if (!artistMeta || !artistMeta.ratingKey) continue;
+
+        // Haal artiest-metadata op inclusief genres
+        const metaData = await plexGet(`/library/metadata/${artistMeta.ratingKey}`);
+        const genres = metaData?.MediaContainer?.Metadata?.[0]?.Genre || [];
+
+        // Tel genres gewogen naar playcount
+        for (const genreObj of genres) {
+          const genreName = genreObj.tag || '';
+          if (!genreName) continue;
+          const count = (genreCounts.get(genreName) || 0) + (artist.playcount || 1);
+          genreCounts.set(genreName, count);
+        }
+      } catch (e) {
+        logger.warn({ err: e, artist: artist.name }, 'Genres voor artiest ophalen mislukt');
+      }
+    }
+
+    // Sorteer op count aflopend en beperk tot 8
+    const result = [...genreCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    return result;
+  } catch (e) {
+    logger.warn({ err: e }, 'Genres ophalen mislukt');
+    return [];
+  }
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
@@ -753,6 +996,7 @@ module.exports = {
   triggerPlexScan,
   rateItem,
   searchPlexLibrary,
+  periodToTimestamp, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, getGenresFromPlex,
   PLEX_TOKEN,
   PLEX_URL,
 };
