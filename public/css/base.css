@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
-   base.css — Design Token System
-   Muziek-client (Apple Music / Plexamp stijl)
+   base.css — Design Token System (Roon-inspired)
+   Muziek-client: warm, minimal, distilled aesthetic
    Donker thema als default, licht als alternatief.
    Bevat: tokens, reset, keyframes. Geen layout of components.
    ═══════════════════════════════════════════════════════════════════ */
@@ -29,37 +29,37 @@
   --text-xl:   20px;
   --text-2xl:  28px;
 
-  /* ── Spacing ── */
+  /* ── Spacing (ruimer, meer ademruimte) ── */
   --space-1:  4px;
   --space-2:  8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 40px;
-  --space-8: 64px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  80px;
 
-  /* ── Border radius ── */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  /* ── Border radius (bijna geen rondingen) ── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --art-radius: 4px;
 
   /* ── Transitions ── */
-  --transition-fast:   120ms cubic-bezier(0.2, 0, 0, 1);
-  --transition-normal: 200ms cubic-bezier(0.2, 0, 0, 1);
-  --ease:              cubic-bezier(0.2, 0, 0, 1);
+  --transition-fast:   150ms ease;
+  --transition-normal: 300ms ease;
+  --ease:              ease;
 
   /* ── Layout constanten ── */
   --player-height:     76px;
   --sidebar-width:    220px;
   --sidebar-collapsed: 64px;
-  --art-radius:         6px;
 
-  /* ── Grid tokens ── */
-  --grid-card-min:  180px;
+  /* ── Grid tokens (groter dan nu) ── */
+  --grid-card-min:  200px;
   --grid-wide-min:  320px;
-  --grid-gap:        20px;
+  --grid-gap:       24px;
 
   /* ── View Transition richting (behouden voor bestaande tab-animaties) ── */
   --tab-direction: -1;
@@ -67,146 +67,142 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
-   DONKER THEMA — default
+   DONKER THEMA — default (Roon-inspired: warm, distilled)
    ══════════════════════════════════════════════════════════════════ */
 :root,
 [data-theme="dark"] {
-  /* Achtergrond & surfaces */
-  --bg:       #000000;
-  --surface1: #1C1C1E;
-  --surface2: #2C2C2E;
-  --surface3: #3A3A3C;
+  /* Achtergrond & surfaces (warm bijna-zwart, NIET puur #000) */
+  --bg:       #0a0a0c;
+  --surface1: #141416;
+  --surface2: #1c1c1f;
+  --surface3: #242428;
 
-  /* Backwards-compat aliassen (voor bestaande components) */
+  /* Backwards-compat aliassen */
   --surface:  var(--surface1);
 
-  /* Borders */
-  --border:       #38383A;
-  --border-hover: #48484A;
+  /* Borders (subtiel, bijna onzichtbaar) */
+  --border:       rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.1);
 
   /* Glasmorfisme */
-  --glass-bg: rgba(28, 28, 30, 0.85);
+  --glass-bg: rgba(20, 20, 22, 0.85);
   --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-hover-border: rgba(255, 255, 255, 0.12);
+  --glass-hover-border: rgba(255, 255, 255, 0.1);
 
-  /* Tekst */
-  --text-primary:   #F2F2F7;
-  --text-secondary: #AEAEB2;
-  --text-muted:     #636366;
+  /* Tekst (warm wit, geen blauw-wit) */
+  --text-primary:   #e8e6e3;
+  --text-secondary: #9a9692;
+  --text-muted:     #5c5955;
 
   /* Backwards-compat aliassen */
   --text:   var(--text-primary);
   --muted:  var(--text-muted);
   --muted2: var(--text-secondary);
 
-  /* Accent — Apple Music rood */
-  --accent:          #FA233B;
-  --accent-hover:    #FF3B52;
-  --accent-muted:    rgba(250, 35, 59, 0.15);
-  --accent-glow:     rgba(250, 35, 59, 0.20);
+  /* Accent — warm goud (Roon-inspired) */
+  --accent:          #c4a46c;
+  --accent-hover:    #dbc49a;
+  --accent-muted:    rgba(196, 164, 108, 0.12);
+  --accent-glow:     rgba(196, 164, 108, 0.20);
 
   /* Backwards-compat Plex-kleur aliassen */
   --plex:    var(--accent);
   --plex-bg: var(--accent-muted);
   --plex-glow: var(--accent-glow);
 
-  /* Status-kleuren */
-  --red:       #FF453A;
-  --green:     #30D158;
-  --green-bg:  rgba(48, 209, 88, 0.12);
-  --new:       #BF5AF2;
-  --new-bg:    rgba(191, 90, 242, 0.13);
+  /* Status-kleuren (gedempt) */
+  --red:       #c0574e;
+  --red-bg:    rgba(192, 87, 78, 0.12);
+  --green:     #4a9e6e;
+  --green-bg:  rgba(74, 158, 110, 0.12);
+  --new:       #8b7ec8;
+  --new-bg:    rgba(139, 126, 200, 0.12);
 
-  /* Shadows — subtiel op donker */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40),
-               0 1px 2px rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.50),
-               0 2px 6px  rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.65),
-               0 4px  16px rgba(0, 0, 0, 0.45);
+  /* Shadows (bijna geen) */
+  --shadow-sm: none;
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 
 /* ══════════════════════════════════════════════════════════════════
-   LICHT THEMA — alternatief
+   LICHT THEMA — alternatief (Roon-inspired)
    ══════════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  /* Achtergrond & surfaces */
-  --bg:       #F2F2F7;
-  --surface1: #FFFFFF;
-  --surface2: #F9F9FB;
-  --surface3: #EFEFEF;
+  /* Achtergrond & surfaces (warm crème, NIET blauw-grijs) */
+  --bg:       #f5f3f0;
+  --surface1: #ffffff;
+  --surface2: #f0ece7;
+  --surface3: #e6e1db;
 
   --surface:  var(--surface1);
 
   /* Borders */
-  --border:       #E0E0E6;
-  --border-hover: #C8C8D0;
+  --border:       rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.12);
 
   /* Glasmorfisme */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.08);
   --glass-hover-border: rgba(0, 0, 0, 0.12);
 
   /* Tekst */
-  --text-primary:   #1C1C1E;
-  --text-secondary: #636366;
-  --text-muted:     #AEAEB2;
+  --text-primary:   #1a1918;
+  --text-secondary: #6b6560;
+  --text-muted:     #a09a94;
 
   --text:   var(--text-primary);
   --muted:  var(--text-muted);
   --muted2: var(--text-secondary);
 
-  /* Accent */
-  --accent:       #D92037;
-  --accent-hover: #C41A30;
-  --accent-muted: rgba(217, 32, 55, 0.10);
-  --accent-glow:  rgba(217, 32, 55, 0.20);
+  /* Accent — warm goud, meer saturé */
+  --accent:       #9a7d4e;
+  --accent-hover: #7d6440;
+  --accent-muted: rgba(154, 125, 78, 0.12);
+  --accent-glow:  rgba(154, 125, 78, 0.20);
 
   --plex:      var(--accent);
   --plex-bg:   var(--accent-muted);
   --plex-glow: var(--accent-glow);
 
-  /* Status-kleuren */
-  --red:       #FF3B30;
-  --green:     #34C759;
-  --green-bg:  rgba(52, 199, 89, 0.12);
-  --new:       #AF52DE;
-  --new-bg:    rgba(175, 82, 222, 0.13);
+  /* Status-kleuren (aangepasst voor licht thema) */
+  --red:       #c0574e;
+  --red-bg:    rgba(192, 87, 78, 0.12);
+  --green:     #4a9e6e;
+  --green-bg:  rgba(74, 158, 110, 0.12);
+  --new:       #8b7ec8;
+  --new-bg:    rgba(139, 126, 200, 0.12);
 
-  /* Shadows — luchtig op licht */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06),
-               0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08),
-               0 2px 6px  rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12),
-               0 4px  12px rgba(0, 0, 0, 0.08);
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
 
 /* ── Systeemvoorkeur fallback (geen data-theme gezet) ── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg:       #000000;
-    --surface1: #1C1C1E;
-    --surface2: #2C2C2E;
-    --surface3: #3A3A3C;
-    --surface:  #1C1C1E;
-    --border:        #38383A;
-    --border-hover:  #48484A;
-    --text-primary:  #F2F2F7;
-    --text-secondary:#AEAEB2;
-    --text-muted:    #636366;
-    --text:   #F2F2F7;
-    --muted:  #636366;
-    --muted2: #AEAEB2;
-    --accent:        #FA233B;
-    --accent-hover:  #FF3B52;
-    --accent-muted:  rgba(250, 35, 59, 0.15);
-    --accent-glow:   rgba(250, 35, 59, 0.20);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.40), 0 1px 2px rgba(0,0,0,0.30);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.35);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.45);
+    --bg:       #0a0a0c;
+    --surface1: #141416;
+    --surface2: #1c1c1f;
+    --surface3: #242428;
+    --surface:  #141416;
+    --border:        rgba(255, 255, 255, 0.06);
+    --border-hover:  rgba(255, 255, 255, 0.1);
+    --text-primary:  #e8e6e3;
+    --text-secondary:#9a9692;
+    --text-muted:    #5c5955;
+    --text:   #e8e6e3;
+    --muted:  #5c5955;
+    --muted2: #9a9692;
+    --accent:        #c4a46c;
+    --accent-hover:  #dbc49a;
+    --accent-muted:  rgba(196, 164, 108, 0.12);
+    --accent-glow:   rgba(196, 164, 108, 0.20);
+    --shadow-sm: none;
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
 }
 
@@ -239,7 +235,7 @@ body {
   font-size:   var(--text-base);
   background:  var(--bg);
   color:       var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
   min-height:  100vh;
   -webkit-font-smoothing:  antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -274,103 +270,19 @@ a {
 
 
 /* ══════════════════════════════════════════════════════════════════
-   KEYFRAMES
+   KEYFRAMES (minimal: fadeIn, spin, blink only)
    ══════════════════════════════════════════════════════════════════ */
 
-/* Gevraagde keyframes */
 @keyframes fadeIn {
   from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes slideInFromRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes pulseGlow {
-  0%, 100% {
-    box-shadow: 0 0 0   0   var(--accent-glow),
-                0 0 8px 2px var(--accent-muted);
-  }
-  50% {
-    box-shadow: 0 0 0   6px transparent,
-                0 0 20px 4px var(--accent-glow);
-  }
-}
-
-/* View Transitions API (behouden voor tab-navigatie) */
-::view-transition-old(root) { animation: vt-fade-out 0.15s ease-in; }
-::view-transition-new(root) { animation: vt-fade-in  0.20s ease-out; }
-
-@keyframes vt-fade-out {
-  to {
-    opacity:   0;
-    transform: translateY(-4px) translateX(calc(-8px * var(--tab-direction)));
-  }
-}
-@keyframes vt-fade-in {
-  from {
-    opacity:   0;
-    transform: translateY(4px) translateX(calc(8px * var(--tab-direction)));
-  }
-}
-
-/* Aanvullende animaties (al in gebruik door components) */
-@keyframes fadeUpScale {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
-}
-
-@keyframes fadeInFromLeft {
-  from { opacity: 0; transform: translateX(-8px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes fadeUpBounce {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes rotatePhotoHover {
-  0%   { transform: rotate(0deg)  scale(1); }
-  100% { transform: rotate(2deg)  scale(1.05); }
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.2; }
-}
-
-@keyframes np-pulse {
-  0%, 100% { box-shadow: 0 0  8px 0px var(--accent-muted); }
-  50%       { box-shadow: 0 0 20px 4px var(--accent-glow); }
-}
-
-@keyframes shimmer {
-  0%   { background-position:  200% 0; }
-  100% { background-position: -200% 0; }
+  to { opacity: 1; }
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes fadeUp {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes pulse-preview {
-  0%, 100% { box-shadow: 0 0 0 0px var(--accent-glow); }
-  50%       { box-shadow: 0 0 0 7px transparent; }
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
 }
