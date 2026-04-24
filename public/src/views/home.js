@@ -1173,7 +1173,7 @@ export async function loadHome() {
   } else {
     // Stap 2: Probeer het gecombineerde /api/activity endpoint
     try {
-      const activityData = await apiFetch('/api/activity?period=7day');
+      const activityData = await apiFetch('/api/activity?period=1month');
       if (activityData?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0)) {
         activityMatrixDailyPlays = activityData.dailyPlays;
         // Gebruik ook de recentTracks als die er zijn
