@@ -1147,6 +1147,29 @@ export async function loadHome() {
   const releases  = releasesRaw;
   const genreData = buildGenreData(topArtistsRaw);
 
+  // ── Activity Matrix: Check of Plex data daadwerkelijk nuttig is ──────────
+  const plexHasData = plexStatsRaw?.source === 'plex'
+    && plexStatsRaw?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0);
+
+  // Als Plex data leeg is, gebruik Last.fm fallback voor Activity Matrix
+  let activityMatrixTracks = tracks;
+  let activityMatrixDailyPlays = null;
+
+  if (plexHasData) {
+    // Plex data is nuttig, gebruik het
+    activityMatrixDailyPlays = plexStatsRaw.dailyPlays;
+  } else if (plexStatsRaw?.source === 'plex') {
+    // Plex data is leeg, fetch Last.fm recent tracks als fallback
+    try {
+      const lastfmRecent = await apiFetch('/api/recent?limit=200');
+      activityMatrixTracks = lastfmRecent?.recenttracks?.track || tracks;
+      activityMatrixDailyPlays = null;
+    } catch {
+      // Fallback mislukt, gebruik bestaande tracks
+      activityMatrixDailyPlays = null;
+    }
+  }
+
   // ── Render alle secties ────────────────────────────────────────────────
   content.innerHTML = `
     <div class="home-page">
@@ -1158,7 +1181,7 @@ export async function loadHome() {
       ${renderLiveRadioBar()}
 
       <!-- 1c. Recent Listening Activity Matrix -->
-      ${renderActivityMatrix(tracks, plexStatsRaw?.dailyPlays || null)}
+      ${renderActivityMatrix(activityMatrixTracks, activityMatrixDailyPlays)}
 
       <!-- 2. Recent Activity -->
       ${renderRecentActivity(tracks)}
