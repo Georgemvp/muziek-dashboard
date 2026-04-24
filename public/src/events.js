@@ -126,51 +126,12 @@ document.querySelectorAll('[data-period]').forEach(btn => {
   });
 });
 
-// ── Filter-knoppen (externe toolbars, legacy) ─────────────────────────────
-document.querySelectorAll('[data-filter]').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
-    state.recsFilter = btn.dataset.filter;
-    btn.classList.add(state.recsFilter === 'all' ? 'sel-def' : state.recsFilter === 'new' ? 'sel-new' : 'sel-plex');
-    (await loadOntdekModule()).applyRecsFilter();
-  });
-});
-
-document.querySelectorAll('[data-dfilter]').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
-    state.discFilter = btn.dataset.dfilter;
-    btn.classList.add(state.discFilter === 'all' ? 'sel-def' : state.discFilter === 'new' ? 'sel-new' : 'sel-miss');
-    (await loadOntdekModule()).renderDiscover();
-  });
-});
-
-document.querySelectorAll('[data-gsort]').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    state.gapsSort = btn.dataset.gsort;
-    (await loadBibliotheekModule()).renderGaps();
-  });
-});
-
-document.querySelectorAll('[data-rtype]').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    state.releasesFilter = btn.dataset.rtype;
-    (await loadOntdekModule()).renderReleases();
-  });
-});
-
-document.querySelectorAll('[data-rsort]').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
-    btn.classList.add('sel-def');
-    state.releasesSort = btn.dataset.rsort;
-    (await loadOntdekModule()).renderReleases();
-  });
-});
+// ────────────────────────────────────────────────────────────────────────────
+// NOTE: Filter/sort handlers voor ontdek-tabs (recs, releases, discover) en
+// gaps-sortering zitten nu in hun eigen view-modules:
+// - ontdek.js regelt tab-filters en -sorting
+// - gaps.js regelt gaps-sortering
+// ────────────────────────────────────────────────────────────────────────────
 
 // ── Refresh-knoppen (externe toolbars) ────────────────────────────────────
 document.getElementById('btn-refresh-releases')?.addEventListener('click', async () => {
@@ -240,6 +201,21 @@ document.addEventListener('input', e => {
 document.getElementById('panel-close')?.addEventListener('click', closeArtistPanel);
 
 // ── Globale event delegation (klikken) ────────────────────────────────────
+// Bevat ALLEEN handlers voor cross-view events:
+// - Plex bibliotheek clicks (bibliotheek-specifiek maar globaal voor fallback)
+// - Play buttons (overal beschikbaar)
+// - Artist links en panel management (globaal in alle views)
+// - Bookmarks en wishlist (globaal in alle views)
+// - Download buttons (globaal in alle views)
+// - Queue management (globaal in downloads)
+// - Mood buttons (globaal, maar gerefereerd aan ontdek module)
+// - Tidal view buttons (globaal in downloads)
+// - Panel overlay backdrop (globaal)
+//
+// VIEW-SPECIFIEKE handlers zitten in hun eigen modules:
+// - ontdek.js: tab switches, filters, sort, discover toggles
+// - gaps.js: search, sort, refresh, artist expansions
+// - altri views hebben hun eigen internal event handling
 document.addEventListener('click', async e => {
   // Plex bibliotheek knoppen (▶ play + artiest-header collapse)
   if ((await loadBibliotheekModule()).handlePlexLibraryClick(e)) return;
@@ -252,42 +228,9 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  // Discover album-sectie toggle
-  const discToggleBtn = e.target.closest('.disc-toggle-btn');
-  if (discToggleBtn) {
-    e.stopPropagation();
-    const sectionId = discToggleBtn.dataset.discId;
-    const section = document.getElementById(sectionId);
-    if (section) {
-      const isCollapsed = section.classList.toggle('collapsed');
-      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
-        b.classList.toggle('expanded', !isCollapsed);
-        b.classList.toggle('collapsed', isCollapsed);
-        const n = parseInt(b.dataset.albumCount, 10) || 0;
-        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
-        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
-      });
-    }
-    return;
-  }
-
-  // Klik op discover-kaart zelf
-  const discCard = e.target.closest('.discover-card-toggle');
-  if (discCard && !e.target.closest('.artist-link') && !e.target.closest('.bookmark-btn') && !e.target.closest('.disc-toggle-btn')) {
-    const sectionId = discCard.dataset.discId;
-    const section = document.getElementById(sectionId);
-    if (section) {
-      const isCollapsed = section.classList.toggle('collapsed');
-      section.querySelectorAll('.disc-toggle-btn').forEach(b => {
-        b.classList.toggle('expanded', !isCollapsed);
-        b.classList.toggle('collapsed', isCollapsed);
-        const n = parseInt(b.dataset.albumCount, 10) || 0;
-        const lbl = `${n} album${n !== 1 ? 's' : ''}`;
-        b.textContent = isCollapsed ? `Toon ${lbl}` : lbl;
-      });
-    }
-    return;
-  }
+  // ────────────────────────────────────────────────────────────────────────────
+  // NOTE: Discover toggle handlers (.disc-toggle-btn) zitten nu in ontdek.js
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Artiest-link → open panel
   const link = e.target.closest('[data-artist]');
@@ -379,74 +322,10 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  // Inline toolbar: recs-filter
-  const inlineFilter = e.target.closest('.inline-toolbar [data-filter]');
-  if (inlineFilter) {
-    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-plex'));
-    state.recsFilter = inlineFilter.dataset.filter;
-    inlineFilter.classList.add(state.recsFilter==='all'?'sel-def':state.recsFilter==='new'?'sel-new':'sel-plex');
-    (await loadOntdekModule()).applyRecsFilter();
-    return;
-  }
-
-  // Inline toolbar: releases type-filter
-  const inlineRtype = e.target.closest('.inline-toolbar [data-rtype]');
-  if (inlineRtype) {
-    document.querySelectorAll('[data-rtype]').forEach(b => b.classList.remove('sel-def'));
-    state.releasesFilter = inlineRtype.dataset.rtype;
-    inlineRtype.classList.add('sel-def');
-    const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.activeView === 'ontdek') {
-      state.sectionContainerEl = secRel;
-      (await loadOntdekModule()).renderReleases();
-      if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
-    } else { (await loadOntdekModule()).renderReleases(); }
-    return;
-  }
-
-  // Inline toolbar: releases sortering
-  const inlineRsort = e.target.closest('.inline-toolbar [data-rsort]');
-  if (inlineRsort) {
-    document.querySelectorAll('[data-rsort]').forEach(b => b.classList.remove('sel-def'));
-    state.releasesSort = inlineRsort.dataset.rsort;
-    inlineRsort.classList.add('sel-def');
-    const secRel = document.getElementById('sec-releases-content');
-    if (secRel && state.activeView === 'ontdek') {
-      state.sectionContainerEl = secRel;
-      (await loadOntdekModule()).renderReleases();
-      if (state.sectionContainerEl === secRel) state.sectionContainerEl = null;
-    } else { (await loadOntdekModule()).renderReleases(); }
-    return;
-  }
-
-  // Inline toolbar: discover-filter
-  const inlineDfilter = e.target.closest('.inline-toolbar [data-dfilter]');
-  if (inlineDfilter) {
-    document.querySelectorAll('[data-dfilter]').forEach(b => b.classList.remove('sel-def','sel-new','sel-miss'));
-    state.discFilter = inlineDfilter.dataset.dfilter;
-    inlineDfilter.classList.add(state.discFilter==='all'?'sel-def':state.discFilter==='new'?'sel-new':'sel-miss');
-    const secDisc = document.getElementById('sec-discover-content');
-    if (secDisc && state.activeView === 'ontdek') {
-      state.sectionContainerEl = secDisc;
-      (await loadOntdekModule()).renderDiscover();
-      if (state.sectionContainerEl === secDisc) state.sectionContainerEl = null;
-    } else { (await loadOntdekModule()).renderDiscover(); }
-    return;
-  }
-
-  // Inline toolbar: gaps-sortering
-  const inlineGsort = e.target.closest('.inline-toolbar [data-gsort]');
-  if (inlineGsort) {
-    document.querySelectorAll('[data-gsort]').forEach(b => b.classList.remove('sel-def'));
-    state.gapsSort = inlineGsort.dataset.gsort;
-    inlineGsort.classList.add('sel-def');
-    if (state.activeView === 'gaps') {
-      (await loadBibliotheekModule()).renderGaps();
-    } else {
-      (await loadBibliotheekModule()).renderGaps();
-    }
-    return;
-  }
+  // ────────────────────────────────────────────────────────────────────────────
+  // NOTE: Inline toolbar handlers voor filters en sorting zitten nu in hun
+  // respectievelijke view-modules (ontdek.js, gaps.js, etc.)
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Inline mood-knoppen
   const inlineMoodBtn = e.target.closest('.sec-mood-block [data-mood]');
