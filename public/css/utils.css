@@ -1,1 +1,29 @@
-/* utils.css - styling module */
+/* ── Skeleton loaders ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: fadeIn 1.5s ease infinite;
+  border-radius: var(--radius-md);
+}
+.skeleton-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.skeleton-card { height: 64px; border-radius: var(--radius-md); }
+.skeleton-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.skeleton-square { aspect-ratio: 1; border-radius: var(--radius-md); }
+.skeleton-stats { display: flex; flex-direction: column; gap: 20px; }
+.skeleton-stat-full { height: 180px; border-radius: var(--radius-md); }
+.skeleton-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.skeleton-stat-half { height: 160px; border-radius: var(--radius-md); }
+
+/* ── Loading / Error / Empty ── */
+.loading { text-align: center; padding: 3.5rem 1rem; color: var(--muted2); font-size: 14px; }
+.spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 14px; }
+.build-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.error-box { background: var(--red-bg); border: 1px solid rgba(192, 87, 78, 0.25); color: var(--red); border-radius: var(--radius-md); padding: 14px 16px; font-size: 14px; }
+.empty { text-align: center; padding: 3rem 1rem; color: var(--muted2); font-size: 14px; }
+.refresh-banner { padding: 8px 16px; background: var(--surface2); color: var(--muted2); font-size: 12px; text-align: center; border-radius: var(--radius-md); margin-bottom: 12px; }
+
+/* ── Staggered fade-in ── */
+.stagger-in {
+  opacity: 0; transform: translateY(8px);
+  animation: fadeIn 0.3s ease forwards;
+}
