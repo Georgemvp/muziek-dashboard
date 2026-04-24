@@ -490,8 +490,8 @@
 .blib-search::placeholder { color: var(--text-muted); }
 
 .blib-pill {
-  padding: 6px 14px; border: none; border-radius: 20px;
-  background: rgba(255,255,255,0.06); color: var(--text-muted); font-size: 12px;
+  padding: 6px 14px; border: none; border-radius: 999px;
+  background: var(--border); color: var(--text-muted); font-size: 12px;
   font-weight: 500; cursor: pointer; transition: all 0.15s;
   white-space: nowrap; font-family: inherit;
 }
@@ -961,7 +961,7 @@
 
 .blib-detail-play-all {
   display:inline-flex; align-items:center; gap:6px; padding:8px 18px;
-  border:none; border-radius:20px; background: var(--accent); color:#fff;
+  border:none; border-radius:999px; background: var(--accent); color:#fff;
   font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.15s; font-family:inherit;
 }
 
@@ -1182,7 +1182,7 @@
 
 .blib-action-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 9px 20px; border-radius: 22px;
+  padding: 9px 20px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); font-size: 13px; font-weight: 600;
   cursor: pointer; font-family: inherit; transition: all 0.15s;
@@ -1475,7 +1475,7 @@
 
 .blib-genre-tag {
   display: inline-block;
-  padding: 4px 10px; border-radius: 16px;
+  padding: 4px 10px; border-radius: var(--radius-xl);
   background: var(--surface2); color: var(--text-secondary);
   font-size: 11px; font-weight: 600; white-space: nowrap;
 }
