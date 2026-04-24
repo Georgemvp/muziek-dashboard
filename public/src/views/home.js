@@ -195,8 +195,8 @@ function renderActivityMatrix(recentTracks, dailyPlays) {
   if (dailyPlays && Array.isArray(dailyPlays)) {
     // Primaire source: dagelijkse afspeelgegevens van backend
     for (const d of dailyPlays) {
-      if (d.date && d.minutes) {
-        dayMap[d.date] = d.minutes;
+      if (d.date != null) {
+        dayMap[d.date] = d.minutes || (d.count ? d.count * 3.5 : 0);
       }
     }
   } else {
