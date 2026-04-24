@@ -1,7 +1,7 @@
 // ── Artist API Routes ─────────────────────────────────────────────────────────
 
 module.exports = function(app, deps) {
-  const { lfm, getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache } = deps;
+  const { lfm, getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre } = deps;
 
   // ── /api/artist/:name/info ────────────────────────────────────────────────
   app.get('/api/artist/:name/info', async (req, res) => {
@@ -71,16 +71,49 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/artist/:name/similar ──────────────────────────────────────────────
+  // Retourneert gelijkaardige artiesten voor een gegeven artiestnaam.
+  // Probeert eerst Last.fm API → fallback naar Plex genres als Last.fm faalt.
   app.get('/api/artist/:name/similar', async (req, res) => {
     const name = decodeURIComponent(req.params.name);
-    const { getSimilarArtists } = deps;
+    const { getSimilarArtists, getPlexArtistsByGenre } = deps;
+
+    let similar = [];
+    let source = 'lastfm';
+
     try {
-      const similar = await getSimilarArtists(name, 6);
+      // PRIMAIR: Probeer Last.fm similar artists (met 8 sec timeout inbegrepen in lfm())
+      similar = await getSimilarArtists(name, 6);
+
+      // Als Last.fm 0 resultaten oplevert, probeer Plex-fallback
+      if (!similar || similar.length === 0) {
+        try {
+          // FALLBACK: Zoek artiesten met dezelfde genres in Plex
+          similar = await getPlexArtistsByGenre(name, 6);
+          if (similar && similar.length > 0) {
+            source = 'plex';
+          }
+        } catch (plexErr) {
+          // Stille fout voor Plex-fallback
+          console.debug('Plex genre-fallback mislukt voor', name, ':', plexErr.message);
+        }
+      }
+
       res.set('Cache-Control', 'private, max-age=300');
-      res.json({ similar });
+      res.json({
+        similar: similar || [],
+        source,
+        count: (similar || []).length
+      });
     } catch (e) {
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json({ similar: [], _lfmDown: true, error: e.message });
+      // Last.fm API faalt geheel → retourneer lege lijst + error flag
+      console.warn(`Similar artists API faalt voor "${name}":`, e.message);
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json({
+        similar: [],
+        source: 'error',
+        error: e.message,
+        _lfmDown: true
+      });
     }
   });
 

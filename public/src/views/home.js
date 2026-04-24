@@ -457,16 +457,31 @@ async function loadDailyMixFeaturing(topArtists) {
     const a = artists[i];
     const el = document.getElementById(`home-mix-featuring-${i}`);
     if (!el) continue;
+
     try {
-      const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`);
-      const similar = (data?.similarartists?.artist || data?.similar || []).slice(0, 3);
-      if (similar.length) {
-        const names = similar.map(s => esc(s.name || s)).join(', ');
-        el.textContent = `Featuring ${similar.slice(0, 3).map(s => s.name || s).join(', ')} and more`;
-      } else {
+      // Probeer similar artists met 5 seconden timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      try {
+        const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        const similar = (data?.similarartists?.artist || data?.similar || []).slice(0, 3);
+        if (similar.length) {
+          el.textContent = `Featuring ${similar.map(s => s.name || s).join(', ')} and more`;
+        } else {
+          el.textContent = ''; // Verberg als geen similar artists gevonden
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        // Timeout of ander fetch-error → verberg de tekst
         el.textContent = '';
       }
     } catch {
+      // Onverwachte error → verberg stil
       el.textContent = '';
     }
   }

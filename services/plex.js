@@ -1061,6 +1061,47 @@ function getGenresFromPlex(topArtists) {
   return result;
 }
 
+/**
+ * Zoekt artiesten in Plex met dezelfde genres als de gegeven artiest.
+ * Gebruikt de in-memory plexArtistGenres cache.
+ * Handig als Last.fm API faalt.
+ *
+ * @param {string} artistName - Naam van de artiest waarvan we genres willen vinden
+ * @param {number} limit - Hoeveel artiesten teruggeven (default 6)
+ * @returns {Promise<Array>} Array van artiest-objecten met { name, ... }
+ */
+async function getPlexArtistsByGenre(artistName, limit = 6) {
+  const queryNorm = (artistName || '').toLowerCase();
+  const genres = plexArtistGenres.get(queryNorm) || [];
+
+  if (!genres.length) {
+    // Geen genres gevonden voor deze artiest → lege list
+    return [];
+  }
+
+  // Zoek alle andere artiesten met dezelfde genres
+  const candidates = [];
+  for (const [artistKey, artistGenres] of plexArtistGenres.entries()) {
+    if (artistKey === queryNorm) continue; // Skip de original artiest zelf
+
+    // Check overlap in genres
+    const overlap = artistGenres.filter(g => genres.includes(g));
+    if (overlap.length > 0) {
+      const originalName = plexArtistMap.get(artistKey) || artistKey;
+      candidates.push({
+        name: originalName,
+        genres: overlap,
+        overlapCount: overlap.length
+      });
+    }
+  }
+
+  // Sorteer op overlap-count (meest gelijkaardig eerst) en return top N
+  return candidates
+    .sort((a, b) => b.overlapCount - a.overlapCount)
+    .slice(0, limit);
+}
+
 module.exports = {
   plexGet, plexPost, plexPut, syncPlexLibrary,
   artistInPlex, albumInPlex,
@@ -1071,7 +1112,7 @@ module.exports = {
   triggerPlexScan,
   rateItem,
   searchPlexLibrary,
-  periodToTimestamp, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex,
+  periodToTimestamp, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex, getPlexArtistsByGenre,
   PLEX_TOKEN,
   PLEX_URL,
 };
