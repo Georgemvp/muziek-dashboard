@@ -9,7 +9,7 @@ module.exports = function(app, deps) {
     getPlexStatus, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient,
     pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks,
     getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getCache, setCache,
-    getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, getGenresFromPlex
+    getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex
   } = deps;
 
   // ── Plex Webhook state + SSE ──────────────────────────────────────────────
@@ -747,11 +747,14 @@ module.exports = function(app, deps) {
       const history = await getPlayHistory(period);
 
       // Bereken statistieken
-      const topArtists = aggregateTopArtists(history, 20);
+      let topArtists = aggregateTopArtists(history, 20);
       const topTracks = aggregateTopTracks(history, 20);
       const dailyPlays = aggregateDailyPlays(history);
       const genres = getGenresFromPlex(topArtists);
       const recentTracks = history.slice(0, 30);
+
+      // Verrijk top artiesten met thumbnail-URLs
+      topArtists = await enrichArtistsWithThumbs(topArtists);
 
       // Bouw response
       const result = {

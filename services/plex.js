@@ -941,6 +941,80 @@ function aggregateDailyPlays(history, days = 28) {
 }
 
 /**
+ * Verrijkt een array van top-artiesten met thumbnail-URLs.
+ * Cache de resultaten in memory (TTL: 1 uur).
+ * @param {Array} topArtists - array van {name, playcount} objecten
+ * @returns {Promise<Array<{name, playcount, thumb}>>}
+ */
+async function enrichArtistsWithThumbs(topArtists) {
+  if (!topArtists || topArtists.length === 0) return topArtists;
+
+  const cacheKey = 'plex:artist_thumbs_cache';
+  const cached = getCache(cacheKey, 3_600_000); // 1 uur cache
+  const thumbCache = cached ? new Map(Object.entries(cached)) : new Map();
+
+  const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+  const result = [];
+
+  try {
+    // Haal muziek-section key op
+    const sections = await plexGet('/library/sections');
+    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    if (!music) {
+      logger.warn('Plex: geen muziekbibliotheek gevonden voor artist enrichment');
+      return topArtists;
+    }
+
+    for (const artist of topArtists) {
+      // Check cache eerst
+      if (thumbCache.has(artist.name)) {
+        result.push({
+          ...artist,
+          thumb: thumbCache.get(artist.name)
+        });
+        continue;
+      }
+
+      try {
+        // Query Plex voor de artiest
+        const data = await plexGet(`/library/sections/${music.key}/all?type=8&title=${encodeURIComponent(artist.name)}`);
+        const artistMeta = data?.MediaContainer?.Metadata?.[0];
+
+        if (artistMeta?.thumb) {
+          const thumbUrl = `${plexStreamUrl}${artistMeta.thumb}?X-Plex-Token=${PLEX_TOKEN}`;
+          thumbCache.set(artist.name, thumbUrl);
+          result.push({
+            ...artist,
+            thumb: thumbUrl
+          });
+        } else {
+          // Geen thumb gevonden
+          thumbCache.set(artist.name, null);
+          result.push({
+            ...artist,
+            thumb: null
+          });
+        }
+      } catch (e) {
+        logger.warn({ err: e, artist: artist.name }, 'Artist thumb ophalen mislukt');
+        thumbCache.set(artist.name, null);
+        result.push({
+          ...artist,
+          thumb: null
+        });
+      }
+    }
+
+    // Sla cache op
+    setCache(cacheKey, Object.fromEntries(thumbCache));
+    return result;
+  } catch (e) {
+    logger.warn({ err: e }, 'enrichArtistsWithThumbs mislukt');
+    return topArtists;
+  }
+}
+
+/**
  * Haalt genres op voor een array van top artiesten.
  * @param {Array} topArtists - array van {name, playcount} objecten
  * @returns {Promise<Array<{name, count}>>} top 8 genres gewogen naar playcount
@@ -1001,7 +1075,7 @@ module.exports = {
   triggerPlexScan,
   rateItem,
   searchPlexLibrary,
-  periodToTimestamp, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, getGenresFromPlex,
+  periodToTimestamp, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex,
   PLEX_TOKEN,
   PLEX_URL,
 };
