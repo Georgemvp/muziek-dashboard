@@ -134,3 +134,33 @@ export async function loadUser() {
     }
   } catch {}
 }
+
+// ── Plex/Last.fm Fallback Helper ──────────────────────────────────────────
+/**
+ * Probeer eerst Plex data op te halen, val terug op Last.fm als dat faalt.
+ * @param {string} plexUrl - URL naar Plex endpoint
+ * @param {string} lastfmUrl - URL naar Last.fm fallback endpoint
+ * @returns {Promise} Object met { data, source: 'plex' | 'lastfm' | null }
+ */
+export async function plexFirstFetch(plexUrl, lastfmUrl) {
+  try {
+    const data = await apiFetch(plexUrl);
+    // Check of response valid is (geen error, source niet null)
+    if (data && !data.error && data.source !== null) {
+      return { data, source: 'plex' };
+    }
+  } catch (err) {
+    // Plex faalde, ga naar fallback
+  }
+
+  // Plex faalde of ongeldig, probeer Last.fm
+  try {
+    const data = await apiFetch(lastfmUrl);
+    return { data, source: 'lastfm' };
+  } catch (err) {
+    // Last.fm faalde ook
+  }
+
+  // Beide falen
+  return { data: null, source: null };
+}
