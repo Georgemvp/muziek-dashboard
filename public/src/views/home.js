@@ -26,14 +26,10 @@ function normalizePlexArtists(plexTopArtists) {
   return {
     topartists: {
       artist: plexTopArtists.map(a => {
-        // Altijd imageproxy gebruiken voor consistente caching en CORS handling
-        const thumbUrl = a.thumb
-          ? `/api/imageproxy?url=${encodeURIComponent(a.thumb)}`
-          : '';
         return {
           name: a.name,
           playcount: String(a.playcount || 0),
-          image: [null, null, { '#text': thumbUrl }, { '#text': thumbUrl }],
+          image: [null, null, { '#text': a.thumb || '' }, { '#text': a.thumb || '' }],
           topTag: a.genre || null,
         };
       })
@@ -49,16 +45,12 @@ function normalizePlexTracks(plexTopTracks) {
   return {
     toptracks: {
       track: plexTopTracks.map(t => {
-        // Altijd imageproxy gebruiken voor consistente caching en CORS handling
-        const thumbUrl = t.thumb
-          ? `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`
-          : '';
         return {
           name: t.title,
           playcount: String(t.playcount || 0),
           artist: { name: t.artist, '#text': t.artist },
           album: { '#text': t.album, name: t.album },
-          image: [null, null, { '#text': thumbUrl }],
+          image: [null, null, { '#text': t.thumb || '' }],
         };
       })
     }
@@ -71,15 +63,11 @@ function normalizePlexRecent(plexRecentTracks) {
   }
 
   return plexRecentTracks.map(t => {
-    // Altijd imageproxy gebruiken voor consistente caching en CORS handling
-    const thumbUrl = t.thumb
-      ? `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`
-      : '';
     return {
       name: t.title,
       artist: { '#text': t.artist },
       album: { '#text': t.album },
-      image: [null, null, { '#text': thumbUrl }],
+      image: [null, null, { '#text': t.thumb || '' }],
       date: { uts: String(t.viewedAt) },
     };
   });

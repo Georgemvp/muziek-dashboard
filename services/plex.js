@@ -844,13 +844,18 @@ async function getPlayHistory(period = '7day') {
       }
 
       for (const m of metadata) {
+        // Zet relatieve thumb-paden om naar volledige Plex URLs met token
+        const thumbPath = m.parentThumb || m.thumb || null;
+        const thumb = thumbPath
+          ? `${PLEX_URL}${thumbPath}?X-Plex-Token=${PLEX_TOKEN}`
+          : null;
         history.push({
           title: m.title || '',
           artist: m.grandparentTitle || m.originalTitle || '',
           album: m.parentTitle || '',
           viewedAt: m.viewedAt || 0,
           duration: m.duration || 0,
-          thumb: m.parentThumb || null,
+          thumb,
           ratingKey: m.ratingKey || null
         });
       }
