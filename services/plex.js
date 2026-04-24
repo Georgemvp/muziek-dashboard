@@ -824,18 +824,29 @@ async function getPlayHistory(period = '7day') {
     let start = 0;
     const pageSize = 500;
     let hasMore = true;
+    let firstPath = null;
+    let firstResponse = null;
 
     while (hasMore) {
       const params = new URLSearchParams({
         'sort': 'viewedAt:desc',
-        'accountID': '1',
         'librarySectionID': music.key,
         'X-Plex-Container-Start': start,
         'X-Plex-Container-Size': pageSize
       });
 
       const path = `/status/sessions/history/all?${params}&viewedAt>=${since}`;
+
+      if (start === 0) {
+        firstPath = path;
+      }
+
       const data = await plexGet(path);
+
+      if (start === 0) {
+        firstResponse = data;
+      }
+
       const metadata = data?.MediaContainer?.Metadata || [];
 
       if (metadata.length === 0) {
@@ -865,6 +876,19 @@ async function getPlayHistory(period = '7day') {
       } else {
         start += pageSize;
       }
+    }
+
+    // Log gegevens na de while-loop
+    logger.info({
+      count: history.length,
+      period,
+      since,
+      path: firstPath
+    }, 'Plex play history opgehaald');
+
+    // Als history leeg is, log de eerste response op warn-niveau
+    if (history.length === 0 && firstResponse) {
+      logger.warn({ response: firstResponse }, 'Plex play history is leeg - rawe Plex API response');
     }
 
     setCache(cacheKey, history);
