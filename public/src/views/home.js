@@ -185,15 +185,26 @@ function fmtDuration(minutes) {
 
 // ── Section: Recent Listening activity matrix ─────────────────────────────
 
-function renderActivityMatrix(recentTracks) {
-  // Group tracks by calendar day (YYYY-MM-DD)
+function renderActivityMatrix(recentTracks, dailyPlays) {
+  // Build dayMap using dailyPlays data if available (more accurate than track counting)
   const dayMap = {};
-  for (const t of (recentTracks || [])) {
-    const uts = t.date?.uts;
-    if (!uts) continue; // skip "now playing" tracks without timestamp
-    const date = new Date(parseInt(uts, 10) * 1000);
-    const key = date.toISOString().slice(0, 10);
-    dayMap[key] = (dayMap[key] || 0) + 3.5; // ~3.5 min per track
+
+  if (dailyPlays && Array.isArray(dailyPlays)) {
+    // Primaire source: dagelijkse afspeelgegevens van backend
+    for (const d of dailyPlays) {
+      if (d.date && d.minutes) {
+        dayMap[d.date] = d.minutes;
+      }
+    }
+  } else {
+    // Fallback: groepeer tracks per dag (als geen dailyPlays beschikbaar)
+    for (const t of (recentTracks || [])) {
+      const uts = t.date?.uts;
+      if (!uts) continue; // skip "now playing" tracks without timestamp
+      const date = new Date(parseInt(uts, 10) * 1000);
+      const key = date.toISOString().slice(0, 10);
+      dayMap[key] = (dayMap[key] || 0) + 3.5; // ~3.5 min per track
+    }
   }
 
   // Build 4 weeks (Mon–Sun), most recent first
@@ -1013,7 +1024,7 @@ export async function loadHome() {
       ${renderLiveRadioBar()}
 
       <!-- 1c. Recent Listening Activity Matrix -->
-      ${renderActivityMatrix(tracks)}
+      ${renderActivityMatrix(tracks, plexStatsRaw?.dailyPlays || null)}
 
       <!-- 2. Recent Activity -->
       ${renderRecentActivity(tracks)}
