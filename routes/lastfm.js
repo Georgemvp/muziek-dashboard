@@ -503,6 +503,125 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError('stats', e, res, deps); }
   });
 
+  // ── /api/activity – Plex + Last.fm combined ────────────────────────────────
+  app.get('/api/activity', async (req, res) => {
+    try {
+      const period = req.query.period || '7day';
+      const cacheKey = `api:activity:${period}`;
+
+      // Check cache (10 minuten TTL)
+      const cached = getCache(cacheKey, 600_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=600');
+        return res.json(cached);
+      }
+
+      // Probeer eerst Plex data
+      let result = null;
+      try {
+        const { getPlayHistory, aggregateDailyPlays } = deps;
+        if (getPlayHistory) {
+          const history = await getPlayHistory(period);
+          if (history && history.length > 0) {
+            // Plex data beschikbaar
+            const dailyData = aggregateDailyPlays(history, 28);
+            const totalPlays = history.length;
+
+            result = {
+              dailyPlays: dailyData,
+              recentTracks: history.slice(0, 20).map(t => ({
+                title: t.title,
+                artist: t.artist,
+                album: t.album,
+                viewedAt: t.viewedAt,
+                thumb: t.thumb,
+                ratingKey: t.ratingKey
+              })),
+              totalPlays,
+              source: 'plex'
+            };
+            markLastFmUp();
+            setCache(cacheKey, result);
+            res.set('Cache-Control', 'private, max-age=600');
+            return res.json(result);
+          }
+        }
+      } catch (e) {
+        logger.warn({ err: e }, 'Plex play history mislukt, fallback naar Last.fm');
+      }
+
+      // Fallback: Last.fm
+      try {
+        const { periodToTimestamp } = deps;
+        const sinceTimestamp = periodToTimestamp(period);
+        const fromDate = Math.floor(sinceTimestamp);
+
+        const data = await lfm(
+          { method: 'user.getrecenttracks', limit: 200, from: fromDate },
+          { cacheKey: `api:activity:lastfm:${period}`, cacheTTL: 600_000 }
+        );
+
+        const tracks = (data.recenttracks?.track || []).filter(t => t.date?.uts);
+
+        // Groepeer per dag en tel minuten (3.5 minuten per track)
+        const dailyMap = new Map();
+        for (const track of tracks) {
+          if (!track.date?.uts) continue;
+          const date = new Date(parseInt(track.date.uts) * 1000);
+          const dateStr = date.toISOString().split('T')[0];
+
+          if (!dailyMap.has(dateStr)) {
+            dailyMap.set(dateStr, { date: dateStr, count: 0, minutes: 0 });
+          }
+          const entry = dailyMap.get(dateStr);
+          entry.count += 1;
+          entry.minutes += 3.5; // ~3.5 minuten per track
+        }
+
+        const dailyPlays = [...dailyMap.values()]
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const recentTracks = tracks.slice(0, 20).map(t => ({
+          title: t.name || '',
+          artist: t.artist?.name || (typeof t.artist === 'string' ? t.artist : ''),
+          album: t.album?.['#text'] || t.album || '',
+          viewedAt: t.date?.uts ? parseInt(t.date.uts) : 0,
+          thumb: t.image?.find(i => i.size === 'medium')?.['#text'] || null,
+          ratingKey: null
+        }));
+
+        result = {
+          dailyPlays,
+          recentTracks,
+          totalPlays: tracks.length,
+          source: 'lastfm'
+        };
+
+        markLastFmUp();
+        setCache(cacheKey, result);
+        res.set('Cache-Control', 'private, max-age=600');
+        return res.json(result);
+      } catch (e) {
+        logger.warn({ err: e }, 'Last.fm activity mislukt');
+      }
+
+      // Graceful fallback: lege data als beide mislukt
+      markLastFmDown();
+      result = {
+        dailyPlays: [],
+        recentTracks: [],
+        totalPlays: 0,
+        source: null,
+        error: 'Zowel Plex als Last.fm zijn onbereikbaar'
+      };
+      res.status(503).json(result);
+    } catch (e) {
+      logger.error({ err: e }, '/api/activity onverwachte fout');
+      markLastFmDown();
+      res.status(500).json({ error: 'Internal server error', _lfmDown: true });
+    }
+  });
+
   // Export status functions for server.js to use
   return { markLastFmDown, markLastFmUp, lastFmDown: () => lastFmDown, lastFmDownSince: () => lastFmDownSince };
 };
