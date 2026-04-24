@@ -1,8 +1,8 @@
 /* ── Discover grid ── */
 .discover-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
 }
 .discover-section { margin-bottom: 0; }
 
@@ -11,15 +11,12 @@
   background: var(--surface1);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--space-4);
+  padding: 14px;
   cursor: pointer;
   transition: box-shadow var(--transition-normal), transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
 }
 .discover-card:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--border-hover);
   background: var(--surface2);
-  transform: translateY(calc(var(--space-1) * -0.25));
 }
 .discover-card:hover .discover-photo,
 .discover-card:hover .discover-photo-ph {

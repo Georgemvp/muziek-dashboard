@@ -212,7 +212,7 @@
 }
 
 /* ── Inline toolbars ── */
-.inline-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.inline-toolbar { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; align-items: center; }
 
 /* ── Sectie-blokken (Updated styling) ── */
 .section-block-old {
@@ -225,16 +225,11 @@
 
 /* Sticky section-header (Backward compatibility) */
 .section-hdr-old {
-  position: sticky; top: 52px; z-index: 200;
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 11px 0; margin-bottom: 18px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  border-bottom: 1px solid var(--border);
+  padding: 0 0 12px; margin-bottom: 18px;
 }
 .section-hdr-title {
-  font-size: 18px; font-weight: 800; color: var(--text);
+  font-size: 18px; font-weight: 600; color: var(--text);
   letter-spacing: -0.02em; white-space: nowrap; flex-shrink: 0;
 }
 
@@ -262,15 +257,14 @@
 
 /* ── Sectie-scheider ── */
 .ontdek-divider {
-  display: flex; align-items: center; gap: 14px;
-  margin: 10px 0 28px; color: var(--new);
-  font-size: 13px; font-weight: 700; letter-spacing: 0.02em; padding: 6px 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 32px 0 12px;
+  margin: 0;
 }
-.ontdek-divider::before, .ontdek-divider::after {
-  content: ''; flex: 1; height: 2px;
-  background: linear-gradient(90deg, var(--new-bg), transparent);
-}
-.ontdek-divider::after { background: linear-gradient(270deg, var(--new-bg), transparent); }
 
 /* ── Ontdek layout ── */
 .ontdek-layout { }
