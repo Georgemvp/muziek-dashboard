@@ -9,19 +9,19 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface2);
   color: var(--text-secondary);
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-sm);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  cursor: pointer;
 }
 .mood-btn:hover {
-  background: var(--surface3);
-  border-color: var(--border-hover);
-  color: var(--text-primary);
-  transform: translateY(calc(var(--space-1) * -0.25));
+  background: var(--surface2);
+  border-color: var(--border);
+  color: var(--text-secondary);
 }
 .mood-btn.sel-mood {
   color: var(--accent);
@@ -29,7 +29,10 @@
   background: var(--accent-muted);
   font-weight: 600;
 }
-.mood-btn.loading { opacity: 0.6; pointer-events: none; }
+.mood-btn.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
 
 /* ── Spotify recommendations ── */
 .spotify-section { margin-bottom: var(--space-7); }
@@ -67,14 +70,12 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast);
   cursor: default;
   scroll-snap-align: start;
 }
 .spotify-card:hover {
   border-color: var(--border-hover);
-  transform: translateY(calc(var(--space-1) * -0.5));
-  box-shadow: var(--shadow-sm);
 }
 
 .spotify-cover { position: relative; aspect-ratio: 1; background: var(--surface2); overflow: hidden; }
@@ -105,14 +106,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+  transition: background var(--transition-fast), opacity var(--transition-fast);
   opacity: 0;
-  transform: translateY(var(--space-1));
 }
-.spotify-card:hover .spotify-play-btn { opacity: 1; transform: translateY(0); }
-.spotify-play-btn.playing { opacity: 1; transform: translateY(0); background: var(--accent-hover); }
-.spotify-play-btn:hover { background: var(--accent-hover); transform: scale(1.06) translateY(0) !important; }
+.spotify-card:hover .spotify-play-btn {
+  opacity: 1;
+}
+.spotify-play-btn.playing {
+  opacity: 1;
+  background: var(--accent-hover);
+}
+.spotify-play-btn:hover {
+  background: var(--accent-hover);
+}
 
 .spotify-info { padding: var(--space-2) var(--space-2) var(--space-3); }
 .spotify-track {
