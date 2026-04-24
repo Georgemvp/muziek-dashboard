@@ -447,6 +447,19 @@ async function loadDailyMixFeaturing(topArtists) {
 // ── Section: Genres for you ───────────────────────────────────────────────
 
 function buildGenreData(topArtistsRaw) {
+  // Plex stats brengen genres direct mee
+  if (topArtistsRaw?.genres && Array.isArray(topArtistsRaw.genres)) {
+    return topArtistsRaw.genres
+      .map((g, i) => ({
+        name: g.name,
+        count: g.count,
+        pct: g.pct || Math.round((g.count / topArtistsRaw.genres.reduce((s, x) => s + x.count, 0)) * 100),
+        color: GENRE_COLORS[i % GENRE_COLORS.length],
+      }))
+      .slice(0, 6);
+  }
+
+  // Fallback: Last.fm groepering op topTag per artiest
   const artists = topArtistsRaw?.topartists?.artist || [];
   const genreMap = {};
 
@@ -635,34 +648,57 @@ function drawGenreChart(genres) {
 async function loadAndRenderGenres(period) {
   const legendEl = document.getElementById('home-genres-legend');
   try {
-    const data    = await apiFetch(`/api/top/artists?period=${period}`);
-    const artists = (data?.topartists?.artist || []).slice(0, 8);
-
-    // Groepeer op topTag, tel playcounts op
-    const genreMap = {};
-    for (const a of artists) {
-      const tag      = a.topTag || 'Other';
-      const playcount = parseInt(a.playcount, 10) || 0;
-      genreMap[tag] = (genreMap[tag] || 0) + playcount;
+    // EERST: Probeer Plex stats
+    let genres = null;
+    try {
+      const plexData = await apiFetch(`/api/plex/stats?period=${period}`);
+      if (plexData && plexData.source === 'plex' && plexData.genres && Array.isArray(plexData.genres) && plexData.genres.length > 0) {
+        const total = plexData.genres.reduce((s, g) => s + g.count, 0) || 1;
+        genres = plexData.genres
+          .map((g, i) => ({
+            name: g.name,
+            count: g.count,
+            pct: Math.round(g.count / total * 100),
+            color: GENRE_COLORS[i % GENRE_COLORS.length],
+          }))
+          .slice(0, 6);
+      }
+    } catch {
+      // Plex niet beschikbaar, ga verder naar fallback
     }
 
-    const sorted = Object.entries(genreMap).sort((a, b) => b[1] - a[1]);
-    const top6   = sorted.slice(0, 6);
-    const rest   = sorted.slice(6).reduce((s, [, v]) => s + v, 0);
-    if (rest > 0) {
-      const otherIdx = top6.findIndex(([n]) => n === 'Other');
-      if (otherIdx >= 0) top6[otherIdx][1] += rest;
-      else top6.push(['Other', rest]);
+    // FALLBACK: Last.fm groepering op topTag
+    if (!genres) {
+      const data = await apiFetch(`/api/top/artists?period=${period}`);
+      const artists = (data?.topartists?.artist || []).slice(0, 8);
+
+      // Groepeer op topTag, tel playcounts op
+      const genreMap = {};
+      for (const a of artists) {
+        const tag = a.topTag || 'Other';
+        const playcount = parseInt(a.playcount, 10) || 0;
+        genreMap[tag] = (genreMap[tag] || 0) + playcount;
+      }
+
+      const sorted = Object.entries(genreMap).sort((a, b) => b[1] - a[1]);
+      const top6 = sorted.slice(0, 6);
+      const rest = sorted.slice(6).reduce((s, [, v]) => s + v, 0);
+      if (rest > 0) {
+        const otherIdx = top6.findIndex(([n]) => n === 'Other');
+        if (otherIdx >= 0) top6[otherIdx][1] += rest;
+        else top6.push(['Other', rest]);
+      }
+
+      const total = top6.reduce((s, [, v]) => s + v, 0) || 1;
+      genres = top6.map(([name, count], i) => ({
+        name,
+        count,
+        pct: Math.round(count / total * 100),
+        color: GENRE_COLORS[i % GENRE_COLORS.length],
+      }));
     }
 
-    const total  = top6.reduce((s, [, v]) => s + v, 0) || 1;
-    const genres = top6.map(([name, count], i) => ({
-      name,
-      count,
-      pct:   Math.round(count / total * 100),
-      color: GENRE_COLORS[i % GENRE_COLORS.length],
-    }));
-
+    // Render chart en legend
     if (legendEl) {
       legendEl.innerHTML = genres.map(g => `
         <div class="home-genres-legend-item">
