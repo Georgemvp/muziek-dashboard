@@ -108,7 +108,7 @@ async function start() {
   ]).catch(() => {});
 
   // Navigate to first view (niet blokkeren)
-  switchView('bibliotheek');
+  switchView('home');
 
   // Load sidebar playlists
   try {

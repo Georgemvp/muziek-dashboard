@@ -5,6 +5,7 @@ import { state } from './state.js';
 
 // ── View metadata ──────────────────────────────────────────────────────────
 const viewMeta = {
+  home:        { title: 'Muziek · Home' },
   bibliotheek: { title: 'Muziek · Bibliotheek' },
   ontdek:      { title: 'Muziek · Ontdek' },
   gaps:        { title: 'Muziek · Gaps' },
@@ -14,6 +15,7 @@ const viewMeta = {
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
 const viewLoaders = {
+  home:        () => import('./views/home.js'),
   bibliotheek: () => import('./views/bibliotheek.js'),
   ontdek:      () => import('./views/ontdek.js'),
   gaps:        () => import('./views/gaps.js'),
@@ -71,11 +73,12 @@ export async function switchView(viewName) {
 
     // Bepaal welke render functie te roepen
     const renderFn =
-      viewName === 'gaps' ? viewModule.loadGaps :
+      viewName === 'home'        ? viewModule.loadHome :
+      viewName === 'gaps'        ? viewModule.loadGaps :
       viewName === 'bibliotheek' ? viewModule.loadBibliotheek :
-      viewName === 'ontdek' ? viewModule.loadOntdek :
-      viewName === 'downloads' ? viewModule.loadDownloads :
-      viewName === 'nu' ? viewModule.loadNu :
+      viewName === 'ontdek'      ? viewModule.loadOntdek :
+      viewName === 'downloads'   ? viewModule.loadDownloads :
+      viewName === 'nu'          ? viewModule.loadNu :
       null;
 
     if (renderFn) {
