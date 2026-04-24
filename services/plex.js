@@ -7,6 +7,7 @@ const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
 
 let plexArtists       = new Set();
 let plexArtistMap     = new Map(); // lowercase → originele naam
+let plexArtistGenres  = new Map(); // lowercase artiestNaam → [genre strings]
 let plexAlbums        = new Set();
 let plexAlbumsNorm    = new Set();
 let plexAlbumsByArtist = new Map(); // normArtist → Set van normAlbum strings (lookup voor snelle albumInPlex checks)
@@ -20,6 +21,7 @@ const cached = getCache('plex', 3_600_000);
 if (cached) {
   plexArtists    = new Set(cached.artists    || []);
   plexArtistMap  = new Map(Object.entries(cached.artistMap || {}));
+  plexArtistGenres = new Map(Object.entries(cached.artistGenres || {}));
   plexAlbums     = new Set(cached.albums     || []);
   plexAlbumsNorm = new Set(cached.albumsNorm || []);
   if (cached.albumsByArtist) {
@@ -164,6 +166,16 @@ async function syncPlexLibrary(force = false) {
     const artistMeta = artistData?.MediaContainer?.Metadata || [];
     plexArtists   = new Set(artistMeta.map(a => a.title.toLowerCase()));
     plexArtistMap = new Map(artistMeta.map(a => [a.title.toLowerCase(), a.title]));
+
+    // Bouw plexArtistGenres Map: lowercase artiestNaam → [genre strings]
+    plexArtistGenres = new Map();
+    for (const a of artistMeta) {
+      const genres = (a.Genre || []).map(g => g.tag || g).filter(Boolean);
+      if (genres.length) {
+        plexArtistGenres.set(a.title.toLowerCase(), genres);
+      }
+    }
+
     const albumMeta = albumData?.MediaContainer?.Metadata || [];
     plexTrackCount = trackCountData?.MediaContainer?.totalSize || 0;
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
@@ -191,6 +203,7 @@ async function syncPlexLibrary(force = false) {
     setCache('plex', {
       artists:    [...plexArtists],
       artistMap:  Object.fromEntries(plexArtistMap),
+      artistGenres: Object.fromEntries(plexArtistGenres),
       albums:     [...plexAlbums],
       albumsNorm: [...plexAlbumsNorm],
       albumsByArtist: Object.fromEntries(
@@ -1016,53 +1029,28 @@ async function enrichArtistsWithThumbs(topArtists) {
 
 /**
  * Haalt genres op voor een array van top artiesten.
+ * Gebruikt de gecachte plexArtistGenres Map om N+1 API calls te vermijden.
  * @param {Array} topArtists - array van {name, playcount} objecten
- * @returns {Promise<Array<{name, count}>>} top 8 genres gewogen naar playcount
+ * @returns {Array<{name, count}>} top 8 genres gewogen naar playcount
  */
-async function getGenresFromPlex(topArtists) {
+function getGenresFromPlex(topArtists) {
   const genreCounts = new Map();
 
-  try {
-    // Haal muziek-section key op
-    const sections = await plexGet('/library/sections');
-    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
-    if (!music) return [];
-
-    for (const artist of topArtists) {
-      try {
-        // Query Plex voor de artiest om ratingKey te krijgen
-        const data = await plexGet(`/library/sections/${music.key}/all?type=8&title=${encodeURIComponent(artist.name)}`);
-        const artistMeta = data?.MediaContainer?.Metadata?.[0];
-
-        if (!artistMeta || !artistMeta.ratingKey) continue;
-
-        // Haal artiest-metadata op inclusief genres
-        const metaData = await plexGet(`/library/metadata/${artistMeta.ratingKey}`);
-        const genres = metaData?.MediaContainer?.Metadata?.[0]?.Genre || [];
-
-        // Tel genres gewogen naar playcount
-        for (const genreObj of genres) {
-          const genreName = genreObj.tag || '';
-          if (!genreName) continue;
-          const count = (genreCounts.get(genreName) || 0) + (artist.playcount || 1);
-          genreCounts.set(genreName, count);
-        }
-      } catch (e) {
-        logger.warn({ err: e, artist: artist.name }, 'Genres voor artiest ophalen mislukt');
-      }
+  for (const artist of topArtists) {
+    const genres = plexArtistGenres.get(artist.name.toLowerCase()) || [];
+    for (const genre of genres) {
+      const count = (genreCounts.get(genre) || 0) + (artist.playcount || 1);
+      genreCounts.set(genre, count);
     }
-
-    // Sorteer op count aflopend en beperk tot 8
-    const result = [...genreCounts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
-
-    return result;
-  } catch (e) {
-    logger.warn({ err: e }, 'Genres ophalen mislukt');
-    return [];
   }
+
+  // Sorteer op count aflopend en beperk tot 8
+  const result = [...genreCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  return result;
 }
 
 module.exports = {

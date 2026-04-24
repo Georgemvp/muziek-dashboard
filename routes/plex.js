@@ -750,7 +750,7 @@ module.exports = function(app, deps) {
       let topArtists = aggregateTopArtists(history, 20);
       const topTracks = aggregateTopTracks(history, 20);
       const dailyPlays = aggregateDailyPlays(history);
-      const genres = getGenresFromPlex(topArtists);
+      const genres = getGenresFromPlex(topArtists); // Nu synchrone functie (geen API calls meer)
       const recentTracks = history.slice(0, 30);
 
       // Verrijk top artiesten met thumbnail-URLs
