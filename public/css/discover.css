@@ -199,3 +199,155 @@
 }
 .collapsed-thumb-round { border-radius: 50%; }
 .collapsed-thumb-ph { width: 100%; height: 100%; }
+
+/* ── GAPS COMPACT CARDS ── */
+.gaps-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: box-shadow 0.2s;
+}
+.gaps-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.gaps-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gaps-card-photo {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.gaps-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gaps-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.gaps-card-name {
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gaps-card-meta {
+  font-size: 12px;
+  color: var(--muted2);
+  margin-top: 2px;
+}
+
+/* Completeness bar */
+.gaps-comp-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  margin: 10px 0 4px;
+  overflow: hidden;
+}
+.gaps-comp-fill {
+  height: 100%;
+  background: var(--plex);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.gaps-comp-text {
+  font-size: 12px;
+  color: var(--muted2);
+}
+.gaps-comp-text .missing {
+  color: var(--new);
+  font-weight: 600;
+}
+
+/* Toggle button */
+.gaps-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text);
+}
+.gaps-toggle-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Albums wrapper - collapsed by default */
+.gaps-albums-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.gaps-card.expanded .gaps-albums-wrap {
+  max-height: 2000px;
+}
+.gaps-albums-inner {
+  padding-top: 14px;
+}
+
+/* ── ONTDEK TAB BAR ── */
+.ontdek-tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.ontdek-tab-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted2);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ontdek-tab-btn:hover {
+  color: var(--text);
+  background: rgba(0,0,0,0.04);
+}
+.ontdek-tab-btn.active {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* ── DISCOVER SECTION TOGGLE FIX ── */
+.discover-section .discover-albums-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+}
+.discover-section:not(.collapsed) .discover-albums-wrap {
+  max-height: 3000px;
+}
+.discover-section.collapsed .discover-preview-row {
+  display: flex;
+}
+.discover-section:not(.collapsed) .discover-preview-row {
+  display: none;
+}
