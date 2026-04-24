@@ -87,15 +87,15 @@ function renderArtistCard(artist) {
     html += `<div class="gaps-albums-section">
       <h4>Ontbrekende albums</h4>
       <div class="gaps-albums-grid">
-        ${artist.missing.map(album => albumCard(album)).join('')}
+        ${(artist.missing || []).map(album => albumCard(album)).join('')}
       </div>`;
 
-    if (artist.owned?.length > 0) {
+    if (artist.owned && artist.owned.length > 0) {
       html += `
         <details class="gaps-owned-details">
-          <summary>Albums die je al hebt (${artist.owned.length})</summary>
+          <summary>Albums die je al hebt (${artist.owned?.length || 0})</summary>
           <div class="gaps-albums-grid">
-            ${artist.owned.map(album => albumCard(album)).join('')}
+            ${(artist.owned || []).map(album => albumCard(album)).join('')}
           </div>
         </details>`;
     }
@@ -113,6 +113,13 @@ async function renderGaps() {
     if (!gapsData) {
       showLoading();
       let d = getCached('gaps', 5 * 60 * 1000);
+
+      // Validate cache format - if old format detected, refresh
+      if (d?.gaps && d.gaps.length > 0 && !('artistId' in d.gaps[0])) {
+        invalidate('gaps');
+        d = null;
+      }
+
       if (!d) {
         d = await apiFetch('/api/gaps');
         setCache('gaps', d);
