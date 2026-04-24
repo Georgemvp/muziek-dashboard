@@ -16,6 +16,7 @@ const viewMeta = {
 const viewLoaders = {
   bibliotheek: () => import('./views/bibliotheek.js'),
   ontdek:      () => import('./views/ontdek.js'),
+  gaps:        () => import('./views/gaps.js'),
   downloads:   () => import('./views/downloads.js'),
   nu:          () => import('./views/nu.js'),
 };
