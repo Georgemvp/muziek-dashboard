@@ -724,7 +724,7 @@ module.exports = function(app, deps) {
 
     try {
       const period = req.query.period || '7day';
-      const validPeriods = ['7day', '1month', '3month', '12month', 'overall'];
+      const validPeriods = ['today', '7day', '1month', '3month', '12month', 'overall'];
 
       // Valideer period parameter
       if (!validPeriods.includes(period)) {

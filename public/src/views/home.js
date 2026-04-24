@@ -126,6 +126,18 @@ function renderGreeting(username, libData) {
   return `
     <div class="home-greeting">
       <div class="home-greeting-text">Hi, ${esc(displayName)}</div>
+
+      <!-- Globale periode-selector -->
+      <div class="home-period-selector">
+        <span class="home-period-label">Period:</span>
+        <div class="home-period-pills">
+          <button class="home-period-pill" data-period="today">Today</button>
+          <button class="home-period-pill" data-period="7day" data-default="true">Last week</button>
+          <button class="home-period-pill" data-period="1month">Last month</button>
+          <button class="home-period-pill" data-period="12month">Last year</button>
+        </div>
+      </div>
+
       <div class="home-stat-cards">
         <div class="home-stat-card">
           <div class="home-stat-icon">${iconArtist}</div>
@@ -804,13 +816,6 @@ function renderListeningStats(topArtists, topTracks) {
   return `
     <div class="home-wylbt-header">
       <div class="home-wylbt-title">What you've been listening to</div>
-      <select class="home-stats-period" id="home-stats-period">
-        <option value="7day"    selected>Last week</option>
-        <option value="1month">Last month</option>
-        <option value="3month">Last 3 months</option>
-        <option value="12month">Last year</option>
-        <option value="overall">All time</option>
-      </select>
     </div>
 
     <div class="home-wylbt-blocks">
@@ -921,6 +926,109 @@ async function reloadStats(period) {
 
   // Blok 1: Genres (async, update chart + legend)
   await loadAndRenderGenres(period);
+}
+
+// ── Globale periode-selector herlaad ──────────────────────────────────────
+
+async function reloadAllWidgetsForPeriod(period) {
+  // Update localStorage zodat periode persistent blijft
+  localStorage.setItem('homePeriod', period);
+
+  // Update active styling van pills
+  document.querySelectorAll('.home-period-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.period === period);
+  });
+
+  // Herlaad Activity Matrix
+  try {
+    const statsData = await apiFetch(`/api/plex/stats?period=${period}`);
+    const dailyPlays = statsData?.dailyPlays || null;
+    const recentTracks = statsData?.recentTracks || [];
+
+    const matrixEl = document.querySelector('.activity-matrix-card');
+    if (matrixEl) {
+      matrixEl.innerHTML = renderActivityMatrix(recentTracks, dailyPlays);
+    }
+  } catch (e) {
+    console.warn('Activity matrix herlaad mislukt:', e);
+  }
+
+  // Herlaad Recent Activity (bij "today" filter op vandaag, anders standaard recent)
+  if (period === 'today') {
+    try {
+      // Voor vandaag: filter recent tracks op vandaag
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayUts = Math.floor(today.getTime() / 1000);
+
+      const statsData = await apiFetch(`/api/plex/stats?period=today`);
+      const recentTracks = (statsData?.recentTracks || []).filter(t => {
+        const trackUts = parseInt(t.date?.uts || 0, 10);
+        return trackUts >= todayUts;
+      });
+
+      const coversEl = document.getElementById('home-recent-covers');
+      if (coversEl) {
+        coversEl.innerHTML = recentCoversHtml(recentTracks);
+      }
+    } catch (e) {
+      console.warn('Recent activity herlaad mislukt:', e);
+    }
+  } else {
+    // Bij andere periodes: toon standaard recent tracks
+    try {
+      const statsData = await apiFetch(`/api/plex/stats?period=${period}`);
+      const recentTracks = statsData?.recentTracks || [];
+
+      const coversEl = document.getElementById('home-recent-covers');
+      if (coversEl) {
+        coversEl.innerHTML = recentCoversHtml(recentTracks);
+      }
+    } catch (e) {
+      console.warn('Recent activity herlaad mislukt:', e);
+    }
+  }
+
+  // Herlaad Listening Stats (genres, top artists, top releases)
+  await reloadStats(period);
+
+  // Herlaad Recent Artists (top artiesten van deze periode)
+  try {
+    const statsData = await apiFetch(`/api/plex/stats?period=${period}`);
+    const topArtistsRaw = statsData?.topArtists || [];
+
+    const artistsWrapper = document.getElementById('home-recent-artists');
+    if (artistsWrapper) {
+      const artists = topArtistsRaw.slice(0, 5);
+      if (artists.length) {
+        const artistsHtml = artists.map(a => {
+          // Plex API geeft thumb direct, Last.fm API geeft image array
+          const thumbUrl = a.thumb || (a.image?.[3]?.['#text'] || a.image?.[2]?.['#text']);
+          const img = coverImg(thumbUrl, 200);
+          const imgEl = img
+            ? `<img class="home-artist-circle-img" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy">`
+            : `<div class="home-artist-circle-ph">♪</div>`;
+          return `
+            <div class="home-artist-circle-item" data-artist="${esc(a.name)}">
+              <div class="home-artist-circle">${imgEl}</div>
+              <div class="home-artist-circle-name">${esc(a.name)}</div>
+            </div>`;
+        }).join('');
+
+        artistsWrapper.innerHTML = artistsHtml;
+
+        // Rebind click handlers voor artiest-cirkels
+        artistsWrapper.querySelectorAll('.home-artist-circle-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const name = item.dataset.artist;
+            if (name) openArtistPanel(name);
+          });
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Recent artists herlaad mislukt:', e);
+  }
 }
 
 // ── Username resolven ─────────────────────────────────────────────────────
@@ -1053,6 +1161,24 @@ export async function loadHome() {
 
   // ── Post-render initialisatie ──────────────────────────────────────────
 
+  // Haal opgeslagen periode uit localStorage (default: 7day)
+  const savedPeriod = localStorage.getItem('homePeriod') || '7day';
+
+  // Stel de standaard active pill in
+  content.querySelectorAll('.home-period-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.period === savedPeriod);
+  });
+
+  // Event listeners voor periode-pills
+  content.querySelectorAll('.home-period-pill').forEach(pill => {
+    pill.addEventListener('click', async () => {
+      const period = pill.dataset.period;
+      if (period) {
+        await reloadAllWidgetsForPeriod(period);
+      }
+    });
+  });
+
   // Carousel
   initRecentCarousel();
 
@@ -1124,11 +1250,6 @@ export async function loadHome() {
         coversEl.innerHTML = recentCoversHtml(tracks);
       }
     });
-  });
-
-  // Stats period dropdown
-  document.getElementById('home-stats-period')?.addEventListener('change', async e => {
-    await reloadStats(e.target.value);
   });
 
   // Artiest cirkels → open artiest panel

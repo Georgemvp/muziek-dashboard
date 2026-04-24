@@ -765,7 +765,15 @@ async function _searchPlaylists(query, limit) {
 
 /** Converteert een periode-string naar Unix timestamp (seconden). */
 function periodToTimestamp(period) {
-  const now = Date.now();
+  const now = new Date();
+
+  // Speciale behandeling voor 'today'
+  if (period === 'today') {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return Math.floor(todayStart.getTime() / 1000);
+  }
+
   let days = 0;
 
   switch (period) {
@@ -788,7 +796,7 @@ function periodToTimestamp(period) {
       days = 365; // default 1 jaar
   }
 
-  const timestamp = Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000);
+  const timestamp = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
   return timestamp;
 }
 
