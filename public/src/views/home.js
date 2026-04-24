@@ -26,8 +26,9 @@ function normalizePlexArtists(plexTopArtists) {
   return {
     topartists: {
       artist: plexTopArtists.map(a => {
+        // Altijd imageproxy gebruiken voor consistente caching en CORS handling
         const thumbUrl = a.thumb
-          ? (a.thumb.startsWith('http') ? a.thumb : `/api/imageproxy?url=${encodeURIComponent(a.thumb)}`)
+          ? `/api/imageproxy?url=${encodeURIComponent(a.thumb)}`
           : '';
         return {
           name: a.name,
@@ -48,8 +49,9 @@ function normalizePlexTracks(plexTopTracks) {
   return {
     toptracks: {
       track: plexTopTracks.map(t => {
+        // Altijd imageproxy gebruiken voor consistente caching en CORS handling
         const thumbUrl = t.thumb
-          ? (t.thumb.startsWith('http') ? t.thumb : `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`)
+          ? `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`
           : '';
         return {
           name: t.title,
@@ -69,8 +71,9 @@ function normalizePlexRecent(plexRecentTracks) {
   }
 
   return plexRecentTracks.map(t => {
+    // Altijd imageproxy gebruiken voor consistente caching en CORS handling
     const thumbUrl = t.thumb
-      ? (t.thumb.startsWith('http') ? t.thumb : `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`)
+      ? `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`
       : '';
     return {
       name: t.title,
@@ -294,7 +297,9 @@ function recentCoversHtml(tracks) {
   }
   const items = tracks.slice(0, 8);
   return items.map(t => {
-    const img = coverImg(t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'], 120);
+    // Verbeterde fallback: probeer [2], dan [1], dan [3]. Check dat URL niet leeg is.
+    const imgUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
+    const img = imgUrl ? coverImg(imgUrl, 120) : null;
     const imgEl = img
       ? `<img src="${esc(img)}" alt="${esc(t.name)}" loading="lazy">`
       : `<div class="home-recent-cover-ph">♪</div>`;
