@@ -123,11 +123,11 @@ async function start() {
   // Background prefetch (non-blocking)
   prefetchBackgroundData();
 
-  // Load downloads tidarr status
+  // Load downloads tidarr status (fire-and-forget, non-blocking)
   try {
     const downloads = await import('./views/downloads.js');
     if (downloads?.loadTidarrStatus) {
-      await downloads.loadTidarrStatus();
+      downloads.loadTidarrStatus(); // No await - runs in background
       downloads.startTidarrSSE?.();
     }
   } catch (err) {
