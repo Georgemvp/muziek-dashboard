@@ -266,12 +266,10 @@
 .topbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 28px;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: 16px;
+  padding: 16px 32px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -299,18 +297,18 @@
 /* Zoekbalk wrapper */
 .search-wrap {
   flex: 1;
-  max-width: 480px;
+  max-width: 520px;
   position: relative;
 }
 
 .search-input {
   width: 100%;
-  padding: 8px 36px 8px 14px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  padding: 10px 16px;
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-family: var(--font-body);
   outline: none;
   transition: border-color var(--transition-fast),
@@ -324,7 +322,7 @@
 
 .search-input:focus {
   border-color: var(--accent);
-  background: var(--surface3);
+  background: var(--surface1);
 }
 
 .search-icon {
@@ -344,7 +342,7 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  background: var(--surface2);
+  background: var(--surface1);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
@@ -362,8 +360,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   flex-shrink: 0;
+}
+
+/* Topbar rechterkant (zone picker + quality) */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 
@@ -372,8 +377,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 32px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--border);
   min-height: 0;
   flex-shrink: 0;
   overflow-x: auto;
@@ -392,23 +397,38 @@
 .filter-btn {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  border: 1px solid var(--border);
+  padding: 6px 0;
+  border: none;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 500;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
+  position: relative;
+  margin-right: 20px;
 }
 
 .filter-btn.active {
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+}
+
+.filter-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  border-radius: 1px;
 }
 
 .filter-btn:hover {
-  background: var(--surface2);
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 
