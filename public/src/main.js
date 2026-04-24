@@ -23,6 +23,7 @@ import {
   apiFetch,
 } from './api.js';
 
+import { getCached, setCache } from './cache.js';
 import { p } from './helpers.js';
 
 // ── Theme initialization ────────────────────────────────────────────────────
@@ -68,6 +69,23 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── Background prefetch voor snellere tab-navigatie ──────────────────────────
+function prefetchBackgroundData() {
+  const endpoints = [
+    { url: '/api/discover', key: 'discover', ttl: 5 * 60 * 1000 },
+    { url: '/api/gaps', key: 'gaps', ttl: 5 * 60 * 1000 },
+    { url: '/api/releases', key: 'releases', ttl: 5 * 60 * 1000 },
+    { url: '/api/recs', key: 'recs', ttl: 5 * 60 * 1000 },
+  ];
+  for (const { url, key, ttl } of endpoints) {
+    if (!getCached(key, ttl)) {
+      apiFetch(url)
+        .then(data => { if (data) setCache(key, data); })
+        .catch(() => {}); // stil falen, gebruiker merkt niets
+    }
+  }
+}
+
 // ── Bootstrap application ──────────────────────────────────────────────────
 async function start() {
   // Initialize state and storage
@@ -99,6 +117,9 @@ async function start() {
   } catch (err) {
     console.error('Failed to load sidebar playlists:', err);
   }
+
+  // Background prefetch (non-blocking)
+  prefetchBackgroundData();
 
   // Load downloads tidarr status
   try {
