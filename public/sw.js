@@ -191,24 +191,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Strategie 4: Stabiele API endpoints — Network First met cache fallback ──
+  // ── Strategie 4: Stabiele API — Stale-While-Revalidate ──
+  // Geeft direct cached response terug, ververst op achtergrond
   if (isApiEndpoint(url.pathname)) {
     event.respondWith(
       caches.open(CACHE_API).then(async (cache) => {
-        try {
-          const response = await fetch(event.request);
-          if (response.ok) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
-        } catch (err) {
-          console.warn('[SW] Network error - terugvallen op cache:', event.request.url);
-          const cached = await cache.match(event.request);
-          return cached || new Response(JSON.stringify({ error: 'Offline', cached: true }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
+        const cached = await cache.match(event.request);
+        // Altijd op achtergrond verversen
+        const networkFetch = fetch(event.request)
+          .then((response) => {
+            if (response.ok) {
+              cache.put(event.request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => null);
+        // Cached beschikbaar? Direct teruggeven
+        if (cached) return cached;
+        // Geen cache: wacht op netwerk
+        const response = await networkFetch;
+        return response || new Response(JSON.stringify({ error: 'Offline', cached: false }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
       })
     );
     return;

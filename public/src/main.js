@@ -98,17 +98,17 @@ async function start() {
   initZonePicker();
   initPlayer();
 
-  // Load initial data in parallel
-  await Promise.all([
+  // Load initial data non-blocking (cache zorgt voor instant weergave)
+  Promise.all([
     loadPlexStatus(),
     loadPlexNP(),
     loadUser(),
     loadWishlistState(),
     loadDownloadHistory(),
-  ]);
+  ]).catch(() => {});
 
-  // Navigate to first view
-  await switchView('bibliotheek');
+  // Navigate to first view (niet blokkeren)
+  switchView('bibliotheek');
 
   // Load sidebar playlists
   try {
