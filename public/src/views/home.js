@@ -634,18 +634,36 @@ async function checkPlexBadges(releases, activeTab) {
   const singles = allItems.filter(r => (r.type || '').toLowerCase() === 'single');
   const items   = (activeTab === 'singles' ? singles : albums).slice(0, 3);
 
-  for (let i = 0; i < items.length; i++) {
-    const r = items[i];
-    const query = r.title || r.album || r.artist;
-    if (!query) continue;
-    const badgeEl = document.getElementById(`plex-badge-${i}`);
-    if (!badgeEl) continue;
-    try {
-      const result = await apiFetch(`/api/plex/search?q=${encodeURIComponent(query)}`);
-      const found = result?.results?.length || result?.albums?.length ||
-                    result?.artists?.length || (Array.isArray(result) && result.length > 0);
-      if (found) badgeEl.style.display = 'inline-flex';
-    } catch { /* stil falen */ }
+  if (!items.length) return;
+
+  // ── Batch-check: gather all items, POST to /api/plex/check-batch ──────────
+  const checkItems = items.map(r => ({
+    artist: r.artist || '',
+    album:  r.title || r.album || ''
+  }));
+
+  try {
+    const res = await fetch('/api/plex/check-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: checkItems })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const results = data.results || {};
+
+    // ── Update badges based on batch results ────────────────────────────────
+    checkItems.forEach((item, i) => {
+      const key = `${item.artist}||${item.album}`;
+      const badge = document.getElementById(`plex-badge-${i}`);
+      if (badge && results[key]) {
+        badge.style.display = 'inline-flex';
+      }
+    });
+  } catch (e) {
+    console.warn('Plex check-batch aanroep mislukt:', e);
+    // Stil falen — badges blijven verborgen
   }
 }
 

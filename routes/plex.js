@@ -891,4 +891,44 @@ module.exports = function(app, deps) {
       res.status(500).json({ error: e.message });
     }
   });
+
+  // ── /api/plex/check-batch ─────────────────────────────────────────────────
+  // POST batch-check of meerdere artiest+album combinaties in Plex zitten
+  // Body: { items: [{ artist, album }, ...] }
+  // Response: { results: { "artist||album": true|false, ... } }
+  app.post('/api/plex/check-batch', (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=60');
+      return res.json({ results: {} });
+    }
+
+    try {
+      const items = req.body?.items || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        res.set('Cache-Control', 'private, max-age=60');
+        return res.json({ results: {} });
+      }
+
+      const results = {};
+
+      // Limiteer tot max 20 items per request
+      const limit = Math.min(items.length, 20);
+      for (let i = 0; i < limit; i++) {
+        const item = items[i];
+        const artist = (item.artist || '').trim();
+        const album = (item.album || '').trim();
+        const key = `${artist}||${album}`;
+
+        // Check: eerst album + artist, dan alleen artist als fallback
+        results[key] = albumInPlex(artist, album) || artistInPlex(artist);
+      }
+
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json({ results });
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex check-batch mislukt');
+      res.set('Cache-Control', 'private, max-age=60');
+      res.status(500).json({ error: e.message, results: {} });
+    }
+  });
 };

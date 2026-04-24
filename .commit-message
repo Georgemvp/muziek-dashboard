@@ -1,12 +1,16 @@
-Fix: Add track count to Plex status endpoint
+Optimaliseer Plex badge checks met batch-endpoint
 
-- Backend: Add plexTrackCount tracking in syncPlexLibrary()
-- Backend: Fetch total tracks with X-Plex-Container-Size=0 for performance
-- Backend: Return trackCount in /api/plex/status and /api/plex/refresh
-- Frontend: Update normalizeLibStats() to map Plex API response properties
-- Frontend: Track count now displays in home dashboard stat-cards instead of '—'
+Backend (routes/plex.js):
+- Nieuw POST /api/plex/check-batch endpoint
+- Accepteert max 20 artist+album combinaties per request
+- Retourneert results als object met "artist||album" keys
 
-Changes:
-- services/plex.js: Added plexTrackCount variable and tracking logic
-- routes/plex.js: Updated /api/plex/status and /api/plex/refresh endpoints
-- public/src/views/home.js: Updated normalizeLibStats() for proper mapping
+Frontend (public/src/views/home.js):
+- checkPlexBadges() vervangen 3 sequential apiFetch calls
+- Nu single POST-call naar batch-endpoint via native fetch
+- Reduceert API-overhead van 3 roundtrips naar 1
+
+Voordelen:
+- 66% minder API calls voor release badge checks
+- Snellere responsiviteit van release-kaarten
+- Beter scalable voor toekomstige expansies
