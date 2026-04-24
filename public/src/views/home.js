@@ -273,70 +273,153 @@ async function loadDailyMixFeaturing(topArtists) {
   }
 }
 
-// ── Section 5: New Releases ───────────────────────────────────────────────
+// ── Section: Genres for you ───────────────────────────────────────────────
 
-function renderNewReleases(releases) {
-  const items = (releases?.releases || releases || []).slice(0, 3);
+function buildGenreData(topArtistsRaw) {
+  const artists = topArtistsRaw?.topartists?.artist || [];
+  const genreMap = {};
+
+  for (const a of artists) {
+    const tag = a.topTag;
+    if (!tag || tag.toLowerCase() === 'other') continue;
+    const rawImg = a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'] || '';
+    const proxyUrl = rawImg ? proxyImg(rawImg, 400) : null;
+    if (!genreMap[tag]) {
+      genreMap[tag] = { name: tag, count: 0, artistImage: proxyUrl };
+    }
+    genreMap[tag].count += parseInt(a.playcount, 10) || 0;
+    if (!genreMap[tag].artistImage && proxyUrl) {
+      genreMap[tag].artistImage = proxyUrl;
+    }
+  }
+
+  return Object.values(genreMap)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
+
+function renderGenresForYou(genreData) {
+  if (!genreData?.length) return '';
+
+  const cardHtml = (g) => {
+    const bg = g.artistImage
+      ? `background: linear-gradient(rgba(30,50,140,0.7), rgba(30,50,140,0.7)), url('${esc(g.artistImage)}'); background-size: cover; background-position: center;`
+      : `background: linear-gradient(135deg, rgba(30,50,140,0.9), rgba(60,20,120,0.9));`;
+    return `
+      <div class="genre-card" data-genre="${esc(g.name)}" style="${bg}" role="button" tabindex="0">
+        <span class="genre-card-name">${esc(g.name)}</span>
+      </div>`;
+  };
+
+  const row1 = genreData.slice(0, 3);
+  const row2 = genreData.slice(3, 6);
+
+  return `
+    <div class="home-section-header">
+      <div class="home-section-title">Genres for you</div>
+    </div>
+    <div class="genres-grid">
+      <div class="genres-grid-row">${row1.map(cardHtml).join('')}</div>
+      <div class="genres-grid-row">${row2.map(cardHtml).join('')}</div>
+    </div>`;
+}
+
+// ── Section 5: New Releases (herontworpen) ────────────────────────────────
+
+function buildReleasesHtml(releases, activeTab) {
+  const allItems = releases?.releases || (Array.isArray(releases) ? releases : []);
+  const albums  = allItems.filter(r => (r.type || 'album').toLowerCase() !== 'single');
+  const singles = allItems.filter(r => (r.type || '').toLowerCase() === 'single');
+  const items   = (activeTab === 'singles' ? singles : albums).slice(0, 3);
 
   if (!items.length) {
-    return `
-      <div class="home-section-header">
-        <div class="home-tabs">
-          <button class="home-tab active">ALBUMS</button>
-          <button class="home-tab">SINGLES</button>
-        </div>
-        <div class="home-section-title">New releases for you</div>
-        <button class="home-more-btn" data-switch="ontdek">MORE</button>
-      </div>
-      <div class="home-releases-grid">
-        <div class="home-releases-empty">Geen nieuwe releases gevonden.</div>
-      </div>`;
+    return `<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:14px">Geen releases gevonden.</div>`;
   }
 
   const [main, ...rest] = items;
+
   const mainImg = coverImg(main.image || main.thumb, 400);
   const mainImgEl = mainImg
     ? `<img src="${esc(mainImg)}" alt="${esc(main.title || main.album || '')}" loading="lazy">`
-    : `<div style="width:100%;height:100%;background:${gradientFor(main.title || 'release')};position:absolute;inset:0"></div>`;
+    : `<div class="releases-main-ph">♫</div>`;
 
-  const smallCards = rest.slice(0, 2).map(r => {
-    const img = coverImg(r.image || r.thumb, 120);
+  const desc = main.description || main.bio || '';
+
+  const mainCard = `
+    <div class="releases-main-card">
+      ${mainImgEl}
+      <div class="releases-main-info">
+        <div class="releases-main-artist">${esc(main.artist || '—')}</div>
+        <div class="releases-main-title">${esc(main.title || main.album || '—')}</div>
+        <div class="releases-main-date">${esc(main.date || main.releaseDate || '')}</div>
+        ${desc ? `<div class="releases-main-desc">${esc(desc)}</div>` : ''}
+        <div class="releases-plex-badge" id="plex-badge-0" style="display:none" title="Beschikbaar in Plex">Q</div>
+      </div>
+    </div>`;
+
+  const smallCards = rest.slice(0, 2).map((r, i) => {
+    const img = coverImg(r.image || r.thumb, 160);
     const imgEl = img
       ? `<img src="${esc(img)}" alt="${esc(r.title || r.album || '')}" loading="lazy">`
-      : `<div class="home-release-small-ph">♫</div>`;
-    const badge = r.type?.toLowerCase() === 'single' ? 'Single' : 'Album';
+      : `<div class="releases-small-ph">♫</div>`;
     return `
-      <div class="home-release-small">
+      <div class="releases-small-card">
         ${imgEl}
-        <div class="home-release-small-info">
-          <div class="home-release-small-title" title="${esc(r.title || r.album || '')}">${esc(r.title || r.album || '—')}</div>
-          <div class="home-release-small-artist">${esc(r.artist || '—')}</div>
+        <div class="releases-small-info">
+          <div class="releases-small-artist">${esc(r.artist || '—')}</div>
+          <div class="releases-small-title">${esc(r.title || r.album || '—')}</div>
+          <div class="releases-small-date">${esc(r.date || r.releaseDate || '')}</div>
+          <div class="releases-plex-badge" id="plex-badge-${i + 1}" style="display:none" title="Beschikbaar in Plex">Q</div>
         </div>
-        <div class="home-release-small-badge">${esc(badge)}</div>
       </div>`;
   }).join('');
 
   return `
-    <div class="home-section-header">
-      <div class="home-tabs">
-        <button class="home-tab active">ALBUMS</button>
-        <button class="home-tab">SINGLES</button>
-      </div>
-      <div class="home-section-title">New releases for you</div>
-      <button class="home-more-btn" data-switch="ontdek">MORE</button>
-    </div>
-    <div class="home-releases-grid">
-      <div class="home-release-main">
-        ${mainImgEl}
-        <div class="home-release-main-overlay"></div>
-        <div class="home-release-main-info">
-          <div class="home-release-main-artist">${esc(main.artist || '—')}</div>
-          <div class="home-release-main-title">${esc(main.title || main.album || '—')}</div>
-          <div class="home-release-main-meta">${esc(main.date || main.releaseDate || '')}</div>
-        </div>
-      </div>
-      ${smallCards}
+    <div class="releases-preview">
+      ${mainCard}
+      <div class="releases-stack">${smallCards}</div>
     </div>`;
+}
+
+function renderNewReleases(releases, activeTab = 'albums') {
+  const header = `
+    <div class="home-section-header">
+      <div class="home-section-title">New releases for you</div>
+      <div class="home-tabs">
+        <button class="home-tab home-tab--releases ${activeTab === 'albums' ? 'active' : ''}" data-releases-tab="albums">ALBUMS</button>
+        <button class="home-tab home-tab--releases ${activeTab === 'singles' ? 'active' : ''}" data-releases-tab="singles">SINGLES</button>
+      </div>
+      <button class="home-more-btn" data-switch="ontdek">MORE</button>
+    </div>`;
+
+  return `
+    ${header}
+    <div id="releases-body">
+      ${buildReleasesHtml(releases, activeTab)}
+    </div>`;
+}
+
+// ── Async Plex-badge controle ─────────────────────────────────────────────
+
+async function checkPlexBadges(releases, activeTab) {
+  const allItems = releases?.releases || (Array.isArray(releases) ? releases : []);
+  const albums  = allItems.filter(r => (r.type || 'album').toLowerCase() !== 'single');
+  const singles = allItems.filter(r => (r.type || '').toLowerCase() === 'single');
+  const items   = (activeTab === 'singles' ? singles : albums).slice(0, 3);
+
+  for (let i = 0; i < items.length; i++) {
+    const r = items[i];
+    const query = r.title || r.album || r.artist;
+    if (!query) continue;
+    const badgeEl = document.getElementById(`plex-badge-${i}`);
+    if (!badgeEl) continue;
+    try {
+      const result = await apiFetch(`/api/plex/search?q=${encodeURIComponent(query)}`);
+      const found = result?.results?.length || result?.albums?.length ||
+                    result?.artists?.length || (Array.isArray(result) && result.length > 0);
+      if (found) badgeEl.style.display = 'inline-flex';
+    } catch { /* stil falen */ }
+  }
 }
 
 // ── Section 6: What you've been listening to ─────────────────────────────
@@ -666,10 +749,11 @@ export async function loadHome() {
     apiFetch('/api/releases').catch(() => null),
   ]);
 
-  const libData  = normalizeLibStats(libRaw);
-  const tracks   = recentRaw?.recenttracks?.track || [];
-  const wishlist = wishlistRaw?.wishlist || wishlistRaw || [];
-  const releases = releasesRaw;
+  const libData   = normalizeLibStats(libRaw);
+  const tracks    = recentRaw?.recenttracks?.track || [];
+  const wishlist  = wishlistRaw?.wishlist || wishlistRaw || [];
+  const releases  = releasesRaw;
+  const genreData = buildGenreData(topArtistsRaw);
 
   // ── Render alle secties ────────────────────────────────────────────────
   content.innerHTML = `
@@ -690,8 +774,11 @@ export async function loadHome() {
       <!-- 4. Daily Mixes -->
       <div>${renderDailyMixes(topArtistsRaw)}</div>
 
+      <!-- 4b. Genres for you -->
+      <div id="home-genres-section">${renderGenresForYou(genreData)}</div>
+
       <!-- 5. New Releases -->
-      <div>${renderNewReleases(releases)}</div>
+      <div id="home-releases-section">${renderNewReleases(releases)}</div>
 
       <!-- 6. Listening Stats -->
       <div id="home-stats-section">
@@ -723,6 +810,32 @@ export async function loadHome() {
     switchView('bibliotheek');
   });
 
+  // Genre kaarten → switchView('ontdek')
+  content.querySelectorAll('.genre-card').forEach(card => {
+    card.addEventListener('click', () => switchView('ontdek'));
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') switchView('ontdek');
+    });
+  });
+
+  // New Releases tab-switching
+  let _releasesTab = 'albums';
+  content.querySelectorAll('[data-releases-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      _releasesTab = tab.dataset.releasesTab;
+      // Update actieve tab styling
+      content.querySelectorAll('[data-releases-tab]').forEach(t =>
+        t.classList.toggle('active', t === tab));
+      // Herrender releases body
+      const body = document.getElementById('releases-body');
+      if (body) {
+        body.innerHTML = buildReleasesHtml(releases, _releasesTab);
+        // Opnieuw Plex badges checken
+        checkPlexBadges(releases, _releasesTab);
+      }
+    });
+  });
+
   // Recent tabs (PLAYED / LOVED)
   let recentTab = 'played';
   content.querySelectorAll('[data-recent-tab]').forEach(tab => {
@@ -740,7 +853,6 @@ export async function loadHome() {
           const lovedTracks = data?.lovedtracks?.track || [];
           coversEl.innerHTML = recentCoversHtml(lovedTracks.map(t => ({
             ...t,
-            // loved tracks hebben iets andere structuur
             image: t.image,
           })));
         } catch { /* stil falen */ }
@@ -766,7 +878,7 @@ export async function loadHome() {
   // Recent artists nav pijlen
   const artistsRow = document.getElementById('home-recent-artists');
   if (artistsRow) {
-    const ARTIST_STEP = 128; // 100px + 28px gap
+    const ARTIST_STEP = 128;
     document.getElementById('home-artists-prev')?.addEventListener('click', () => {
       artistsRow.scrollBy({ left: -ARTIST_STEP * 2, behavior: 'smooth' });
     });
@@ -777,4 +889,7 @@ export async function loadHome() {
 
   // Lazy-load "Featuring…" voor Daily Mixes
   loadDailyMixFeaturing(topArtistsRaw);
+
+  // Plex badges asynchroon controleren voor New Releases
+  checkPlexBadges(releases, _releasesTab);
 }
