@@ -160,7 +160,7 @@ async function syncPlexLibrary(force = false) {
     const [artistData, albumData, trackCountData] = await Promise.all([
       plexGet(`/library/sections/${music.key}/all?type=8`),
       plexGet(`/library/sections/${music.key}/all?type=9`),
-      plexGet(`/library/sections/${music.key}/all?type=10&X-Plex-Container-Size=0`)
+      plexGet(`/library/sections/${music.key}/all?type=10&X-Plex-Container-Start=0&X-Plex-Container-Size=0`)
     ]);
 
     const artistMeta = artistData?.MediaContainer?.Metadata || [];

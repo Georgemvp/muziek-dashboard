@@ -77,14 +77,6 @@ function pruneCache({ maxRows = CACHE_MAX_ROWS, maxAgeMs = CACHE_MAX_AGE_MS } = 
   }
 }
 
-// Eenmalige startup-prune
-try {
-  const deleted = pruneCache();
-  logger.info({ deletedTotal: deleted }, 'Initial cache pruning completed');
-} catch (err) {
-  logger.warn({ err }, 'Initial cache pruning failed, continuing anyway');
-}
-
 // Initialize wishlist table
 try {
   db.exec(`
@@ -345,6 +337,14 @@ function normalizeKey(artist, title) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '');
   return `${n(artist)}|${n(title)}`;
+}
+
+// Eenmalige startup-prune
+try {
+  const deleted = pruneCache();
+  logger.info({ deletedTotal: deleted }, 'Initial cache pruning completed');
+} catch (err) {
+  logger.warn({ err }, 'Initial cache pruning failed, continuing anyway');
 }
 
 module.exports = {
