@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="nl" data-theme="dark">
+<html lang="nl" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Muziek</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0a0a0c">
+<meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/icon-192.png">
@@ -30,7 +30,17 @@
 
     <nav class="sidebar-nav" aria-label="Navigatieonderdelen">
 
-      <button class="nav-item active" data-view="bibliotheek" aria-label="Bibliotheek" aria-current="page">
+      <button class="nav-item active" data-view="home" aria-label="Home" aria-current="page">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span class="nav-label">Home</span>
+      </button>
+
+      <button class="nav-item" data-view="bibliotheek" aria-label="Bibliotheek">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              aria-hidden="true">
@@ -84,6 +94,33 @@
     </div>
 
     <div class="sidebar-footer">
+
+      <!-- Zone picker (verplaatst vanuit topbar) -->
+      <div class="zone-picker sidebar-zone-picker" id="plex-zone-wrap" aria-label="Plex afspeelzone kiezer">
+        <button class="zone-btn sidebar-zone-btn" id="plex-zone-btn"
+                title="Selecteer Plex afspeelzone"
+                aria-label="Selecteer Plex afspeelzone"
+                aria-haspopup="listbox"
+                aria-expanded="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <span id="plex-zone-name">—</span>
+        </button>
+        <div class="zone-dropdown" id="plex-zone-dropdown"
+             role="listbox"
+             aria-label="Beschikbare afspeelzones"
+             style="display:none"></div>
+      </div>
+
+      <!-- Quality select (verplaatst vanuit topbar) -->
+      <label class="quality-select sidebar-quality-select" title="Download kwaliteit" aria-label="Download kwaliteit kiezen">
+        <select id="download-quality" aria-label="Selecteer download kwaliteit">
+          <option value="max">Hi-Res</option>
+          <option value="high" selected>FLAC</option>
+          <option value="normal">AAC</option>
+          <option value="low">96kbps</option>
+        </select>
+      </label>
+
       <div class="sidebar-status" aria-label="Plex verbindingsstatus">
         <span class="status-dot" id="plex-dot" aria-hidden="true"></span>
         <span id="plex-status-text">Plex</span>
@@ -125,28 +162,15 @@
 
       <div class="topbar-right">
 
-        <div class="zone-picker" id="plex-zone-wrap" aria-label="Plex afspeelzone kiezer">
-          <button class="zone-btn" id="plex-zone-btn"
-                  title="Selecteer Plex afspeelzone"
-                  aria-label="Selecteer Plex afspeelzone"
-                  aria-haspopup="listbox"
-                  aria-expanded="false">
-            🔊 <span id="plex-zone-name">—</span>
-          </button>
-          <div class="zone-dropdown" id="plex-zone-dropdown"
-               role="listbox"
-               aria-label="Beschikbare afspeelzones"
-               style="display:none"></div>
-        </div>
+        <button class="topbar-icon-btn" title="Bladwijzers" aria-label="Bladwijzers">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
 
-        <label class="quality-select" title="Download kwaliteit" aria-label="Download kwaliteit kiezen">
-          <select id="download-quality" aria-label="Selecteer download kwaliteit">
-            <option value="max">Hi-Res</option>
-            <option value="high" selected>FLAC</option>
-            <option value="normal">AAC</option>
-            <option value="low">96kbps</option>
-          </select>
-        </label>
+        <div class="topbar-avatar" title="Profiel" aria-label="Profiel" role="button" tabindex="0"></div>
 
       </div>
     </header>
@@ -266,7 +290,15 @@
 </div>
 
 <nav class="bottom-nav" id="bottom-nav">
-  <button class="bnav-btn active" data-view="bibliotheek">
+  <button class="bnav-btn active" data-view="home">
+    <svg width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+    <span>Home</span>
+  </button>
+  <button class="bnav-btn" data-view="bibliotheek">
     <svg width="20" height="20" viewBox="0 0 24 24"
          fill="none" stroke="currentColor" stroke-width="2">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2

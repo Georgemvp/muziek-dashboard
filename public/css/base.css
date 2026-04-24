@@ -155,11 +155,11 @@
   --muted:  var(--text-muted);
   --muted2: var(--text-secondary);
 
-  /* Accent — warm goud, meer saturé */
-  --accent:       #9a7d4e;
-  --accent-hover: #7d6440;
-  --accent-muted: rgba(154, 125, 78, 0.12);
-  --accent-glow:  rgba(154, 125, 78, 0.20);
+  /* Accent — Roon paars */
+  --accent:       #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-muted: rgba(124, 58, 237, 0.10);
+  --accent-glow:  rgba(124, 58, 237, 0.18);
 
   --plex:      var(--accent);
   --plex-bg:   var(--accent-muted);

@@ -1,3 +1,117 @@
+/* ══════════════════════════════════════════════════════════════════
+   TOPBAR — Roon-stijl (licht thema)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Sidebar-toggle knop (altijd zichtbaar in Roon-stijl) */
+.sidebar-toggle {
+  display: flex !important;
+  color: #333;
+  font-size: 20px;
+}
+
+/* Topbar rechts: bookmark + avatar */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.topbar-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #666;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.topbar-icon-btn:hover {
+  color: #333;
+  background: #f0f0f0;
+}
+
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #d5d5d5;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.topbar-avatar:hover {
+  opacity: 0.85;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SIDEBAR-FOOTER — zone picker + quality select (verplaatst vanuit topbar)
+   ══════════════════════════════════════════════════════════════════ */
+
+.sidebar-zone-picker {
+  position: relative;
+}
+
+.sidebar-zone-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-zone-btn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+}
+
+.sidebar-zone-btn.has-zone {
+  color: #7c3aed;
+  border-color: #7c3aed;
+}
+
+.sidebar-quality-select {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-quality-select select {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.sidebar-quality-select select:hover,
+.sidebar-quality-select select:focus {
+  border-color: #7c3aed;
+  color: #333;
+}
+
 /* ── Plex now playing ── */
 .plex-np {
   display: flex; align-items: center; gap: 10px;
