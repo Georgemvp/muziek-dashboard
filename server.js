@@ -285,24 +285,43 @@ if (require.main === module) {
     logger.info({ port: PORT, address: server.address() }, '✓ Express server listening');
   });
 
-  // Pre-load Plex library bij opstarten (blokkerend)
-  logger.info('🔄 Initializing Plex library...');
-  syncPlexLibrary(true)
-    .then(() => {
-      logger.info({ status: 'ready' }, '✓ Plex library pre-loaded at startup');
-      logger.info('🔄 Initializing discovery services...');
-      initDiscover();
-      initGaps();
-      initReleases();
-      logger.info('✓ All services initialized - app fully operational');
-    })
-    .catch(e => {
-      logger.warn({ err: e, message: e.message }, '⚠ Plex library pre-load failed (will retry on first request)');
-      logger.info('🔄 Initializing discovery services without Plex...');
-      initDiscover();
-      initGaps();
-      initReleases();
-      logger.warn('⚠ App operational but Plex features unavailable');
+  // Parallel initialization: Plex library + discovery services (independent of each other)
+  logger.info('🔄 Initializing Plex library and discovery services in parallel...');
+  Promise.allSettled([
+    syncPlexLibrary(true),
+    initDiscover(),
+    initGaps(),
+    initReleases()
+  ])
+    .then((results) => {
+      const [plexResult, discoverResult, gapsResult, releasesResult] = results;
+
+      // Check Plex status
+      if (plexResult.status === 'fulfilled') {
+        logger.info({ status: 'ready' }, '✓ Plex library initialized');
+      } else {
+        logger.warn(
+          { err: plexResult.reason, message: plexResult.reason?.message },
+          '⚠ Plex library initialization failed (will retry on first request)'
+        );
+      }
+
+      // Check discovery services status
+      const discoveryFailed = [];
+      if (discoverResult.status === 'rejected') discoveryFailed.push('Discover');
+      if (gapsResult.status === 'rejected') discoveryFailed.push('Gaps');
+      if (releasesResult.status === 'rejected') discoveryFailed.push('Releases');
+
+      if (discoveryFailed.length > 0) {
+        logger.warn(
+          { services: discoveryFailed },
+          `⚠ ${discoveryFailed.join(', ')} service(s) initialization failed`
+        );
+      } else {
+        logger.info('✓ All discovery services initialized');
+      }
+
+      logger.info('✓ All initialization tasks completed - app fully operational');
     });
 
   // Automatische Plex achtergrond-sync elke 30 minuten
