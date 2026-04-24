@@ -64,14 +64,14 @@ function renderArtistCard(artist) {
     <div class="gaps-artist-card" data-artist-id="${artist.artistId}">
       <div class="gaps-artist-header">
         <div class="gaps-artist-info">
-          <img src="${proxyImg(artist.thumb)}" class="gaps-artist-photo" alt="">
+          ${artist.thumb ? `<img src="${proxyImg(artist.thumb)}" class="gaps-artist-photo" alt="">` : `<div class="gaps-artist-photo" style="background:${gradientFor(artist.title)}"></div>`}
           <div class="gaps-artist-meta">
             <h3><a href="#" class="artist-link" data-id="${artist.artistId}">${esc(artist.title)}</a></h3>
             <div class="gaps-artist-tags">${countryFlag(artist.country)} ${tagsHtml(artist.genres?.slice(0, 3) || [])}</div>
           </div>
         </div>
         <div class="gaps-artist-actions">
-          ${bookmarkBtn(artist.artistId, artist.wishedFor)}
+          ${bookmarkBtn('artist', artist.title, artist.title, artist.thumb || '')}
           <button class="gaps-toggle-btn" data-id="${artist.artistId}">
             ${isExpanded ? '▼' : '▶'} ${gapCount} ontbreken
           </button>
@@ -152,7 +152,7 @@ async function renderGaps() {
     container.addEventListener('click', e => {
       if (e.target.classList.contains('gaps-toggle-btn')) {
         e.preventDefault();
-        const artistId = parseInt(e.target.dataset.id);
+        const artistId = e.target.dataset.id;
         expandedArtists.has(artistId) ? expandedArtists.delete(artistId) : expandedArtists.add(artistId);
         renderGaps();
       }
