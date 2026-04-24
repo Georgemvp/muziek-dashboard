@@ -106,8 +106,8 @@ async function buildGapsCache() {
       .filter(r => r.status === 'fulfilled' && r.value)
       .map(r => r.value);
 
-    setCache('gaps', { artists: gapArtists, builtAt: Date.now(), period });
-    logger.info({ artists: gapArtists.length, period }, 'Gaps cache klaar');
+    setCache('gaps', { gaps: gapArtists, builtAt: Date.now(), period });
+    logger.info({ gaps: gapArtists.length, period }, 'Gaps cache klaar');
   } catch (e) {
     logger.error({ err: e }, 'Gaps cache mislukt');
     // Oude cache blijft onaangetast in de DB — timestamp NIET resetten,
