@@ -13,14 +13,14 @@
   border-radius: var(--radius-lg);
   padding: 14px;
   cursor: pointer;
-  transition: box-shadow var(--transition-normal), transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .discover-card:hover {
   background: var(--surface2);
 }
 .discover-card:hover .discover-photo,
 .discover-card:hover .discover-photo-ph {
-  transform: scale(1.04);
+  transform: none;
 }
 .discover-section:not(.collapsed) .discover-card {
   border-bottom-left-radius: var(--radius-sm);
@@ -166,10 +166,10 @@
 .collapsed-thumb img { object-fit: cover; }
 .discover-preview-thumb,
 .collapsed-thumb {
-  transition: transform var(--transition-fast);
+  transition: none;
 }
 .discover-preview-thumb:hover,
-.collapsed-thumb:hover { transform: scale(1.04); }
+.collapsed-thumb:hover { transform: none; }
 .discover-preview-ph,
 .collapsed-thumb-ph {
   display: flex;
@@ -202,15 +202,15 @@
 
 /* ── GAPS COMPACT CARDS ── */
 .gaps-card {
-  background: var(--card);
+  background: var(--surface1);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 12px;
-  transition: box-shadow 0.2s;
+  transition: none;
 }
 .gaps-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background: var(--surface2);
 }
 .gaps-card-header {
   display: flex;
@@ -278,16 +278,16 @@
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 500;
-  background: var(--bg2);
+  background: var(--surface2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s;
   color: var(--text);
 }
 .gaps-toggle-btn:hover {
-  background: var(--accent);
-  color: white;
+  background: var(--surface2);
+  color: var(--accent);
   border-color: var(--accent);
 }
 
@@ -309,8 +309,8 @@
   display: flex;
   gap: 2px;
   padding: 4px;
-  background: var(--bg2);
-  border-radius: 8px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
   margin-bottom: 8px;
 }
 .ontdek-tab-btn {
@@ -319,21 +319,21 @@
   font-weight: 500;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted2);
-  transition: all 0.15s;
+  transition: color 0.15s;
   white-space: nowrap;
 }
 .ontdek-tab-btn:hover {
   color: var(--text);
-  background: rgba(0,0,0,0.04);
+  background: transparent;
 }
 .ontdek-tab-btn.active {
-  background: var(--card);
+  background: var(--surface1);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: none;
 }
 
 /* ── DISCOVER SECTION TOGGLE FIX ── */
