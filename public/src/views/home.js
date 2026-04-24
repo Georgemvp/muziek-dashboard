@@ -7,6 +7,7 @@ import { apiFetch } from '../api.js';
 import { switchView } from '../router.js';
 import { esc, proxyImg, gradientFor } from '../helpers.js';
 import { state } from '../state.js';
+import { openArtistPanel } from '../components/panel.js';
 
 // ── Kleuren voor donut chart genres ───────────────────────────────────────
 const DONUT_COLORS = ['#7c3aed', '#2962ff', '#4a9e6e', '#c0574e', '#c4a46c', '#8b7ec8'];
@@ -171,23 +172,55 @@ function renderListenLater(wishlist) {
     <div class="home-listen-later-grid">${itemsHtml}</div>`;
 }
 
+// ── Section 3b: Your Recent Artists ──────────────────────────────────────
+
+function renderRecentArtists(topArtists) {
+  const artists = (topArtists?.topartists?.artist || []).slice(0, 5);
+  if (!artists.length) return '';
+
+  const artistsHtml = artists.map(a => {
+    const img = coverImg(a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'], 200);
+    const imgEl = img
+      ? `<img class="home-artist-circle-img" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy">`
+      : `<div class="home-artist-circle-ph">♪</div>`;
+    return `
+      <div class="home-artist-circle-item" data-artist="${esc(a.name)}">
+        <div class="home-artist-circle">${imgEl}</div>
+        <div class="home-artist-circle-name">${esc(a.name)}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="home-section-header">
+      <div class="home-section-title">Your recent artists</div>
+      <div class="home-recent-artists-nav">
+        <button class="home-recent-artists-btn" id="home-artists-prev" aria-label="Vorige">&#8249;</button>
+        <button class="home-recent-artists-btn" id="home-artists-next" aria-label="Volgende">&#8250;</button>
+      </div>
+      <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+    </div>
+    <div class="home-recent-artists-wrap">
+      <div class="home-recent-artists" id="home-recent-artists">${artistsHtml}</div>
+    </div>`;
+}
+
 // ── Section 4: Daily Mixes ────────────────────────────────────────────────
 
 function renderDailyMixes(topArtists) {
   const artists = (topArtists?.topartists?.artist || []).slice(0, 2);
 
   const cards = artists.map((a, i) => {
-    const img = coverImg(a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'], 400);
-    const imgEl = img
-      ? `<img src="${esc(img)}" alt="${esc(a.name)}" loading="lazy">`
-      : `<div class="home-mix-ph">♪</div>`;
+    const rawImg = a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'] || '';
+    const imgUrl = rawImg ? proxyImg(rawImg, 400) : '';
+    const bgCss = imgUrl
+      ? `background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.6)), url('${esc(imgUrl)}'); background-size: cover; background-position: center;`
+      : `background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.7));`;
     return `
-      <div class="home-mix-card">
-        ${imgEl}
-        <div class="home-mix-overlay"></div>
+      <div class="home-mix-card" data-switch="ontdek" style="${bgCss}">
         <div class="home-mix-info">
-          <div class="home-mix-label">Daily Mix ${i + 1}</div>
-          <div class="home-mix-name">${esc(a.name)}</div>
+          <div class="home-mix-label">DAILY MIX</div>
+          <div class="home-mix-name">${esc(a.name)} Mix</div>
+          <div class="home-mix-featuring" id="home-mix-featuring-${i}">Laden…</div>
         </div>
       </div>`;
   });
@@ -196,12 +229,12 @@ function renderDailyMixes(topArtists) {
   while (cards.length < 2) {
     const n = cards.length + 1;
     cards.push(`
-      <div class="home-mix-card">
+      <div class="home-mix-card" data-switch="ontdek" style="background: var(--bg-tertiary);">
         <div class="home-mix-ph">♪</div>
-        <div class="home-mix-overlay"></div>
         <div class="home-mix-info">
-          <div class="home-mix-label">Daily Mix ${n}</div>
+          <div class="home-mix-label">DAILY MIX</div>
           <div class="home-mix-name">Laden…</div>
+          <div class="home-mix-featuring"></div>
         </div>
       </div>`);
   }
@@ -212,6 +245,29 @@ function renderDailyMixes(topArtists) {
       <button class="home-more-btn" data-switch="ontdek">MORE</button>
     </div>
     <div class="home-daily-mixes">${cards.join('')}</div>`;
+}
+
+// ── Lazy-load "Featuring…" tekst voor Daily Mixes ─────────────────────────
+
+async function loadDailyMixFeaturing(topArtists) {
+  const artists = (topArtists?.topartists?.artist || []).slice(0, 2);
+  for (let i = 0; i < artists.length; i++) {
+    const a = artists[i];
+    const el = document.getElementById(`home-mix-featuring-${i}`);
+    if (!el) continue;
+    try {
+      const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`);
+      const similar = (data?.similarartists?.artist || data?.similar || []).slice(0, 3);
+      if (similar.length) {
+        const names = similar.map(s => esc(s.name || s)).join(', ');
+        el.textContent = `Featuring ${similar.slice(0, 3).map(s => s.name || s).join(', ')} and more`;
+      } else {
+        el.textContent = '';
+      }
+    } catch {
+      el.textContent = '';
+    }
+  }
 }
 
 // ── Section 5: New Releases ───────────────────────────────────────────────
@@ -553,6 +609,9 @@ export async function loadHome() {
       <!-- 3. Listen Later -->
       <div>${renderListenLater(wishlist)}</div>
 
+      <!-- 3b. Recent Artists -->
+      <div>${renderRecentArtists(topArtistsRaw)}</div>
+
       <!-- 4. Daily Mixes -->
       <div>${renderDailyMixes(topArtistsRaw)}</div>
 
@@ -616,4 +675,27 @@ export async function loadHome() {
   document.getElementById('home-stats-period')?.addEventListener('change', async e => {
     await reloadStats(e.target.value);
   });
+
+  // Artiest cirkels → open artiest panel
+  content.querySelectorAll('.home-artist-circle-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const name = item.dataset.artist;
+      if (name) openArtistPanel(name);
+    });
+  });
+
+  // Recent artists nav pijlen
+  const artistsRow = document.getElementById('home-recent-artists');
+  if (artistsRow) {
+    const ARTIST_STEP = 128; // 100px + 28px gap
+    document.getElementById('home-artists-prev')?.addEventListener('click', () => {
+      artistsRow.scrollBy({ left: -ARTIST_STEP * 2, behavior: 'smooth' });
+    });
+    document.getElementById('home-artists-next')?.addEventListener('click', () => {
+      artistsRow.scrollBy({ left: ARTIST_STEP * 2, behavior: 'smooth' });
+    });
+  }
+
+  // Lazy-load "Featuring…" voor Daily Mixes
+  loadDailyMixFeaturing(topArtistsRaw);
 }
