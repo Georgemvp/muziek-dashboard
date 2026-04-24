@@ -131,10 +131,8 @@
     gap: 4px;
   }
 
-  .quality-select {
-    display: none;
-  }
 }
+
 
 /* ── Touch / geen hover ── */
 @media (hover: none) {

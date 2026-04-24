@@ -1,0 +1,141 @@
+/* ═══ Bottom Navigation ═══ */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1000;
+  background: var(--surface1);
+  border-top: 1px solid var(--border);
+  padding: 6px 0 env(safe-area-inset-bottom, 8px);
+  justify-content: space-around;
+}
+.bnav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-body);
+  padding: 6px 12px;
+  cursor: pointer;
+  min-width: 64px;
+  min-height: 48px;
+}
+.bnav-btn.active { color: var(--accent); }
+.bnav-btn svg { width: 22px; height: 22px; }
+
+/* ═══ Mobile overrides (768px) ═══ */
+@media (max-width: 768px) {
+  .bottom-nav { display: flex; }
+
+  /* Fix sidebar overlay class mismatch */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .sidebar-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Ruimte voor bottom nav + player */
+  .content-area {
+    padding-bottom: calc(var(--player-height) + 72px);
+  }
+
+  #queue-fab { bottom: 140px; }
+  .queue-popover { bottom: 200px; }
+  .play-queue-panel {
+    bottom: calc(var(--player-height) + 56px);
+  }
+
+  /* Player bar compact */
+  #player-bar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  #player-bar .player-progress-wrap {
+    display: flex;
+    width: 100%;
+    order: 10;
+    min-width: unset;
+  }
+  #player-bar .player-extra { display: none; }
+  #player-bar .player-btn-main {
+    width: 32px; height: 32px;
+  }
+
+  /* Search fullscreen op mobiel */
+  .search-results {
+    position: fixed;
+    top: 52px; left: 0; right: 0;
+    max-height: calc(100vh - 52px);
+    border-radius: 0;
+    z-index: 400;
+  }
+
+  /* Artist panel als bottom sheet */
+  .artist-panel {
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* Touch-vriendelijke targets */
+  .player-btn { min-width: 44px; min-height: 44px; }
+  .filter-btn { min-height: 44px; padding: 8px 14px; }
+  .nav-item { min-height: 44px; }
+}
+
+/* ═══ Kleine schermen (480px) ═══ */
+@media (max-width: 480px) {
+  .discover-grid { grid-template-columns: 1fr; }
+  .rec-grid { grid-template-columns: 1fr; }
+  .widget-grid { grid-template-columns: 1fr; }
+  .tidal-card {
+    grid-template-columns: 48px 1fr auto;
+    gap: 8px; padding: 8px;
+  }
+  .q-row {
+    grid-template-columns: 40px 1fr auto;
+    gap: 8px; padding: 8px;
+  }
+  .q-row .q-bar,
+  .q-row .q-pct { display: none; }
+  .gaps-album-grid {
+    grid-template-columns: repeat(auto-fill, 90px);
+  }
+  .dl-confirm-box {
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 85vh;
+    margin-top: auto;
+  }
+  .dl-confirm-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .quality-select select {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+}
+
+/* ═══ Touch devices ═══ */
+@media (hover: none) {
+  .play-btn { opacity: 0.8; }
+  .blib-play-overlay { opacity: 0.7; }
+  .pq-remove-btn { opacity: 1; }
+}
