@@ -10,6 +10,7 @@ let plexArtistMap     = new Map(); // lowercase → originele naam
 let plexAlbums        = new Set();
 let plexAlbumsNorm    = new Set();
 let plexAlbumsByArtist = new Map(); // normArtist → Set van normAlbum strings (lookup voor snelle albumInPlex checks)
+let plexTrackCount    = 0; // totaal aantal tracks in bibliotheek
 let plexLastSync      = 0;
 let plexSyncOk        = false;
 let plexLibrary       = []; // [{artist, album}] originele casing, gesorteerd op artiest
@@ -27,9 +28,10 @@ if (cached) {
     );
   }
   plexLibrary    = cached.library  || [];
+  plexTrackCount = cached.trackCount || 0;
   plexLastSync   = cached.lastSync || 0;
   plexSyncOk     = cached.syncOk   || false;
-  logger.info({ artists: plexArtists.size, albums: plexLibrary.length }, 'Plex: geladen uit SQLite-cache');
+  logger.info({ artists: plexArtists.size, albums: plexLibrary.length, tracks: plexTrackCount }, 'Plex: geladen uit SQLite-cache');
 }
 
 /** Normaliseer albumtitels voor fuzzy matching (Plex vs MusicBrainz). */
@@ -153,15 +155,17 @@ async function syncPlexLibrary(force = false) {
     const music     = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
     if (!music) { logger.warn('Plex: geen muziekbibliotheek gevonden'); return; }
 
-    const [artistData, albumData] = await Promise.all([
+    const [artistData, albumData, trackCountData] = await Promise.all([
       plexGet(`/library/sections/${music.key}/all?type=8`),
-      plexGet(`/library/sections/${music.key}/all?type=9`)
+      plexGet(`/library/sections/${music.key}/all?type=9`),
+      plexGet(`/library/sections/${music.key}/all?type=10&X-Plex-Container-Size=0`)
     ]);
 
     const artistMeta = artistData?.MediaContainer?.Metadata || [];
     plexArtists   = new Set(artistMeta.map(a => a.title.toLowerCase()));
     plexArtistMap = new Map(artistMeta.map(a => [a.title.toLowerCase(), a.title]));
     const albumMeta = albumData?.MediaContainer?.Metadata || [];
+    plexTrackCount = trackCountData?.MediaContainer?.totalSize || 0;
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
     plexLibrary    = albumMeta
@@ -193,11 +197,12 @@ async function syncPlexLibrary(force = false) {
         [...plexAlbumsByArtist].map(([k, v]) => [k, [...v]])
       ),
       library:    plexLibrary,
+      trackCount: plexTrackCount,
       lastSync:   plexLastSync,
       syncOk:     plexSyncOk
     });
 
-    logger.info({ artists: plexArtists.size, albums: plexAlbums.size }, 'Plex: gesynchroniseerd');
+    logger.info({ artists: plexArtists.size, albums: plexAlbums.size, tracks: plexTrackCount }, 'Plex: gesynchroniseerd');
   } catch (e) {
     logger.warn({ err: e }, 'Plex sync mislukt');
     plexSyncOk = false;
@@ -240,7 +245,7 @@ function albumInPlex(artist, album) {
 }
 
 function getPlexStatus() {
-  return { ok: plexSyncOk, artistCount: plexArtists.size, albumCount: plexAlbums.size, lastSync: plexLastSync };
+  return { ok: plexSyncOk, artistCount: plexArtists.size, albumCount: plexAlbums.size, trackCount: plexTrackCount, lastSync: plexLastSync };
 }
 
 /**

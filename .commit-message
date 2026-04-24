@@ -1,0 +1,12 @@
+Fix: Add track count to Plex status endpoint
+
+- Backend: Add plexTrackCount tracking in syncPlexLibrary()
+- Backend: Fetch total tracks with X-Plex-Container-Size=0 for performance
+- Backend: Return trackCount in /api/plex/status and /api/plex/refresh
+- Frontend: Update normalizeLibStats() to map Plex API response properties
+- Frontend: Track count now displays in home dashboard stat-cards instead of '—'
+
+Changes:
+- services/plex.js: Added plexTrackCount variable and tracking logic
+- routes/plex.js: Updated /api/plex/status and /api/plex/refresh endpoints
+- public/src/views/home.js: Updated normalizeLibStats() for proper mapping

@@ -930,13 +930,30 @@ async function resolveUsername() {
 function normalizeLibStats(data) {
   // /api/plex/library geeft verschillende vormen terug
   if (!data) return {};
+
+  // Plex /api/plex/status geeft artists, albums, tracks terug
+  // Map naar het formaat dat renderGreeting() verwacht
+  let normalized = { ...data };
+
+  // Converteer Plex API response properties naar gewenste namen
+  if (data.artists !== undefined && data.artistCount === undefined) {
+    normalized.artistCount = data.artists;
+  }
+  if (data.albums !== undefined && data.albumCount === undefined) {
+    normalized.albumCount = data.albums;
+  }
+  if (data.tracks !== undefined && data.trackCount === undefined) {
+    normalized.trackCount = data.tracks;
+  }
+
   // Probeer directe properties
-  if (data.artistCount !== undefined) return data;
+  if (normalized.artistCount !== undefined) return normalized;
+
   // Soms genest onder 'library' of 'stats'
   if (data.library) return normalizeLibStats(data.library);
   if (data.stats)   return data.stats;
-  // Plex /api/plex/status geeft size, artistCount, albumCount
-  return data;
+
+  return normalized;
 }
 
 // ── Main loadHome() ───────────────────────────────────────────────────────

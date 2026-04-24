@@ -128,9 +128,9 @@ module.exports = function(app, deps) {
     }
     try {
       await syncPlexLibrary(true);
-      const { ok, artistCount, albumCount, lastSync } = getPlexStatus();
+      const { ok, artistCount, albumCount, trackCount, lastSync } = getPlexStatus();
       res.set('Cache-Control', 'private, max-age=300');
-      res.json({ connected: ok, artists: artistCount, albums: albumCount, lastSync: new Date(lastSync).toISOString() });
+      res.json({ connected: ok, artists: artistCount, albums: albumCount, tracks: trackCount, lastSync: new Date(lastSync).toISOString() });
     } catch (e) {
       res.set('Cache-Control', 'private, max-age=300');
       res.json({ connected: false, reason: e.message });
@@ -191,8 +191,8 @@ module.exports = function(app, deps) {
     if (!PLEX_TOKEN) return res.json({ connected: false, reason: 'Geen PLEX_TOKEN' });
     try {
       await syncPlexLibrary(true);
-      const { ok, artistCount, albumCount, lastSync } = getPlexStatus();
-      res.json({ connected: ok, artists: artistCount, albums: albumCount, lastSync: new Date(lastSync).toISOString() });
+      const { ok, artistCount, albumCount, trackCount, lastSync } = getPlexStatus();
+      res.json({ connected: ok, artists: artistCount, albums: albumCount, tracks: trackCount, lastSync: new Date(lastSync).toISOString() });
     } catch (e) { res.json({ connected: false, reason: e.message }); }
   });
 
