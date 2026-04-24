@@ -75,6 +75,68 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError(`api:topartists:${req.query.period || '7day'}`, e, res, deps); }
   });
 
+  // ── /api/top/artists — artiesten + topTag voor genre donut ───────────────
+  app.get('/api/top/artists', async (req, res) => {
+    try {
+      const period   = req.query.period || '7day';
+      const cacheKey = `api:top:artists:${period}`;
+
+      // Korte aggregate-cache (5 min)
+      const cached = getCache(cacheKey, 300_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json(cached);
+      }
+
+      // Haal top-artiesten op (gedeelde cache met /api/topartists)
+      const artistData = await lfm(
+        { method: 'user.gettopartists', period, limit: 20 },
+        { cacheKey: `api:topartists:${period}`, cacheTTL: 300_000 }
+      );
+      markLastFmUp();
+
+      const stopwords = new Set([
+        'seen live', 'listened', 'favourite', 'favorites', 'love', 'loved',
+        'awesome', 'cool', 'good', 'great', 'american', 'british', 'german',
+        'swedish', 'norwegian', 'dutch', 'canadian', 'australian',
+      ]);
+
+      const artists = (artistData.topartists?.artist || []).slice(0, 20);
+
+      // Haal tags parallel op — 24-uurs cache per artiest
+      const tagResults = await Promise.allSettled(
+        artists.map(a => lfm(
+          { method: 'artist.gettoptags', artist: a.name },
+          { includeUser: false, cacheKey: `tags:${a.name.toLowerCase()}`, cacheTTL: 86_400_000 }
+        ))
+      );
+
+      const enriched = artists.map((a, i) => {
+        let topTag = null;
+        if (tagResults[i].status === 'fulfilled') {
+          const tags = tagResults[i].value?.toptags?.tag || [];
+          for (const tag of tags) {
+            const name = (tag.name || '').toLowerCase().trim();
+            if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
+              topTag = tag.name;
+              break;
+            }
+          }
+        }
+        return { ...a, topTag };
+      });
+
+      const result = {
+        ...artistData,
+        topartists: { ...artistData.topartists, artist: enriched },
+      };
+
+      setCache(cacheKey, result);
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(result);
+    } catch (e) { staleOrError(`api:top:artists:${req.query.period || '7day'}`, e, res, deps); }
+  });
+
   // ── /api/toptracks ────────────────────────────────────────────────────────
   app.get('/api/toptracks', async (req, res) => {
     try {

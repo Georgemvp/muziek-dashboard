@@ -9,8 +9,11 @@ import { esc, proxyImg, gradientFor } from '../helpers.js';
 import { state } from '../state.js';
 import { openArtistPanel } from '../components/panel.js';
 
-// ── Kleuren voor donut chart genres ───────────────────────────────────────
-const DONUT_COLORS = ['#7c3aed', '#2962ff', '#4a9e6e', '#c0574e', '#c4a46c', '#8b7ec8'];
+// ── Kleuren voor genre donut (blauw-paars spectrum) ───────────────────────
+const GENRE_COLORS = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb', '#9fa8da'];
+
+// Huidige Chart.js instantie — vernietigen voor hergebruik
+let _genreChartInstance = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -336,130 +339,220 @@ function renderNewReleases(releases) {
     </div>`;
 }
 
-// ── Section 6: Listening Stats ────────────────────────────────────────────
+// ── Section 6: What you've been listening to ─────────────────────────────
 
-function buildGenreData(topTracks) {
-  // Haal tags uit top tracks om genre-verdeling te simuleren
-  // We gebruiken artiestnamen als proxy voor genres als tags ontbreken
-  const tracks = topTracks?.toptracks?.track || [];
-  const countMap = {};
-  for (const t of tracks) {
-    const tag = t.artist?.name || t.artist || 'Overig';
-    countMap[tag] = (countMap[tag] || 0) + (parseInt(t.playcount, 10) || 1);
+// ── Blok 1: Genres ─────────────────────────────────────────────────────────
+
+function drawGenreChart(genres) {
+  const canvas = document.getElementById('home-donut-chart');
+  if (!canvas || !window.Chart) return;
+
+  if (_genreChartInstance) {
+    _genreChartInstance.destroy();
+    _genreChartInstance = null;
   }
-  const sorted = Object.entries(countMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const total = sorted.reduce((s, [, v]) => s + v, 0);
-  return sorted.map(([name, count], i) => ({
-    name,
-    count,
-    pct: total ? Math.round((count / total) * 100) : 0,
-    color: DONUT_COLORS[i % DONUT_COLORS.length],
-  }));
+
+  _genreChartInstance = new window.Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: genres.map(g => g.name),
+      datasets: [{
+        data:            genres.map(g => g.count),
+        backgroundColor: genres.map(g => g.color),
+        borderWidth:     0,
+        hoverOffset:     4,
+      }],
+    },
+    options: {
+      cutout: '65%',
+      plugins: {
+        legend:  { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${fmt(ctx.parsed)} plays`,
+          },
+        },
+      },
+      animation: { duration: 400 },
+    },
+  });
 }
 
-function topBarsHtml(items, valueKey = 'playcount', nameKey = 'name') {
-  if (!items?.length) return `<div style="color:var(--text-muted);font-size:13px">Geen data</div>`;
-  const max = parseInt(items[0]?.[valueKey], 10) || 1;
-  return items.slice(0, 4).map((item, i) => {
-    const count = parseInt(item[valueKey], 10) || 0;
-    const pct = Math.round((count / max) * 100);
-    const img = coverImg(item.image?.[1]?.['#text'] || item.image?.[0]?.['#text'], 64);
+async function loadAndRenderGenres(period) {
+  const legendEl = document.getElementById('home-genres-legend');
+  try {
+    const data    = await apiFetch(`/api/top/artists?period=${period}`);
+    const artists = (data?.topartists?.artist || []).slice(0, 8);
+
+    // Groepeer op topTag, tel playcounts op
+    const genreMap = {};
+    for (const a of artists) {
+      const tag      = a.topTag || 'Other';
+      const playcount = parseInt(a.playcount, 10) || 0;
+      genreMap[tag] = (genreMap[tag] || 0) + playcount;
+    }
+
+    const sorted = Object.entries(genreMap).sort((a, b) => b[1] - a[1]);
+    const top6   = sorted.slice(0, 6);
+    const rest   = sorted.slice(6).reduce((s, [, v]) => s + v, 0);
+    if (rest > 0) {
+      const otherIdx = top6.findIndex(([n]) => n === 'Other');
+      if (otherIdx >= 0) top6[otherIdx][1] += rest;
+      else top6.push(['Other', rest]);
+    }
+
+    const total  = top6.reduce((s, [, v]) => s + v, 0) || 1;
+    const genres = top6.map(([name, count], i) => ({
+      name,
+      count,
+      pct:   Math.round(count / total * 100),
+      color: GENRE_COLORS[i % GENRE_COLORS.length],
+    }));
+
+    if (legendEl) {
+      legendEl.innerHTML = genres.map(g => `
+        <div class="home-genres-legend-item">
+          <div class="home-genres-legend-dot" style="background:${g.color}"></div>
+          <div class="home-genres-legend-name">${esc(g.name)}</div>
+        </div>`).join('');
+    }
+    drawGenreChart(genres);
+  } catch (err) {
+    console.warn('Genre chart mislukt:', err);
+    if (legendEl) legendEl.innerHTML = `<div style="color:var(--text-muted);font-size:13px">Geen genre-data</div>`;
+  }
+}
+
+// ── Blok 2: Top Artists ────────────────────────────────────────────────────
+
+function renderTopArtistsList(topArtists) {
+  const artists = (topArtists?.topartists?.artist || []).slice(0, 4);
+  if (!artists.length) return `<div style="color:var(--text-muted);font-size:13px">Geen data</div>`;
+  const max = parseInt(artists[0]?.playcount, 10) || 1;
+  return artists.map(a => {
+    const pct = Math.round((parseInt(a.playcount, 10) || 0) / max * 100);
+    const img = coverImg(a.image?.[2]?.['#text'] || a.image?.[1]?.['#text'], 72);
     const imgEl = img
-      ? `<img class="home-top-bar-img" src="${esc(img)}" alt="${esc(item[nameKey] || '')}" loading="lazy">`
-      : `<div class="home-top-bar-ph">♪</div>`;
+      ? `<img class="home-wylbt-artist-img" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy">`
+      : `<div class="home-wylbt-artist-ph">♪</div>`;
     return `
-      <div class="home-top-bar-item">
-        <div class="home-top-bar-rank">${i + 1}</div>
+      <div class="home-wylbt-artist-item" data-artist="${esc(a.name)}">
         ${imgEl}
-        <div class="home-top-bar-info">
-          <div class="home-top-bar-name">${esc(item[nameKey] || '—')}</div>
-          <div class="home-top-bar-sub">${fmt(count)} plays</div>
-          <div class="home-top-bar-track">
-            <div class="home-top-bar-fill" style="width:${pct}%"></div>
+        <div class="home-wylbt-item-info">
+          <div class="home-wylbt-item-name">${esc(a.name)}</div>
+          <div class="home-wylbt-bar-wrap">
+            <div class="home-wylbt-bar-track">
+              <div class="home-wylbt-bar-fill" style="width:${pct}%"></div>
+            </div>
           </div>
         </div>
+        <div class="home-wylbt-item-count">${fmt(parseInt(a.playcount, 10) || 0)}</div>
       </div>`;
   }).join('');
 }
 
+// ── Blok 3: Top Releases ───────────────────────────────────────────────────
+
+function buildTopReleases(topTracks) {
+  const albumMap = {};
+  for (const t of (topTracks?.toptracks?.track || [])) {
+    const album  = t.album?.['#text'] || t.album?.name || null;
+    const artist = t.artist?.name || t.artist?.['#text'] || t.artist || '';
+    if (!album) continue;
+    const key = `${album}|||${artist}`;
+    if (!albumMap[key]) {
+      albumMap[key] = { album, artist, playcount: 0, image: t.image };
+    }
+    albumMap[key].playcount += parseInt(t.playcount, 10) || 0;
+  }
+  return Object.values(albumMap)
+    .sort((a, b) => b.playcount - a.playcount)
+    .slice(0, 4);
+}
+
+function renderTopReleasesList(topTracks) {
+  const releases = buildTopReleases(topTracks);
+  if (!releases.length) return `<div style="color:var(--text-muted);font-size:13px">Geen data</div>`;
+  const max = releases[0]?.playcount || 1;
+  return releases.map(r => {
+    const pct  = Math.round(r.playcount / max * 100);
+    const img  = coverImg(r.image?.[2]?.['#text'] || r.image?.[1]?.['#text'], 72);
+    const imgEl = img
+      ? `<img class="home-wylbt-release-img" src="${esc(img)}" alt="${esc(r.album)}" loading="lazy">`
+      : `<div class="home-wylbt-release-ph">♫</div>`;
+    return `
+      <div class="home-wylbt-release-item">
+        ${imgEl}
+        <div class="home-wylbt-item-info">
+          <div class="home-wylbt-item-name">${esc(r.album)}</div>
+          <div class="home-wylbt-item-sub">${esc(r.artist)}</div>
+          <div class="home-wylbt-bar-wrap">
+            <div class="home-wylbt-bar-track">
+              <div class="home-wylbt-bar-fill" style="width:${pct}%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="home-wylbt-item-count">${fmt(r.playcount)}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Shell HTML voor de sectie ──────────────────────────────────────────────
+
 function renderListeningStats(topArtists, topTracks) {
-  const artists = topArtists?.topartists?.artist || [];
-  const tracks  = topTracks?.toptracks?.track   || [];
-  const genres  = buildGenreData(topTracks);
-
-  const legendHtml = genres.map(g => `
-    <div class="home-donut-legend-item">
-      <div class="home-donut-legend-dot" style="background:${g.color}"></div>
-      <div class="home-donut-legend-name">${esc(g.name)}</div>
-      <div class="home-donut-legend-pct">${g.pct}%</div>
-    </div>`).join('');
-
   return `
-    <div class="home-stats-header">
-      <div class="home-stats-title">What you've been listening to</div>
+    <div class="home-wylbt-header">
+      <div class="home-wylbt-title">What you've been listening to</div>
       <select class="home-stats-period" id="home-stats-period">
-        <option value="7day" selected>Last week</option>
+        <option value="7day"    selected>Last week</option>
         <option value="1month">Last month</option>
         <option value="3month">Last 3 months</option>
         <option value="12month">Last year</option>
+        <option value="overall">All time</option>
       </select>
-      <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
     </div>
-    <div class="home-stats-grid">
-      <div class="home-donut-wrap">
-        <div class="home-donut-canvas-wrap">
-          <canvas id="home-donut-chart" width="160" height="160"></canvas>
+
+    <div class="home-wylbt-blocks">
+
+      <!-- Blok 1: Genres donut -->
+      <div class="home-wylbt-card">
+        <div class="home-wylbt-card-header">
+          <div class="home-wylbt-card-title">Genres</div>
+          <button class="home-more-btn">MORE</button>
         </div>
-        <div class="home-donut-label">Genres</div>
-        <div class="home-donut-legend" id="home-donut-legend">${legendHtml}</div>
+        <div class="home-genres-body">
+          <div class="home-genres-chart-wrap">
+            <canvas id="home-donut-chart" width="160" height="160"></canvas>
+          </div>
+          <div class="home-genres-legend" id="home-genres-legend">
+            <div style="color:var(--text-muted);font-size:13px">Laden…</div>
+          </div>
+        </div>
       </div>
-      <div class="home-top-col">
-        <div class="home-top-col-title">Top Artists</div>
-        ${topBarsHtml(artists, 'playcount', 'name')}
+
+      <!-- Blok 2: Top Artists -->
+      <div class="home-wylbt-card">
+        <div class="home-wylbt-card-header">
+          <div class="home-wylbt-card-title">Your top artists</div>
+          <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+        </div>
+        <div id="home-wylbt-artists-list">
+          ${renderTopArtistsList(topArtists)}
+        </div>
       </div>
-      <div class="home-top-col">
-        <div class="home-top-col-title">Top Tracks</div>
-        ${topBarsHtml(tracks, 'playcount', 'name')}
+
+      <!-- Blok 3: Top Releases -->
+      <div class="home-wylbt-card">
+        <div class="home-wylbt-card-header">
+          <div class="home-wylbt-card-title">Your top releases</div>
+          <button class="home-more-btn">MORE</button>
+        </div>
+        <div id="home-wylbt-releases-list">
+          ${renderTopReleasesList(topTracks)}
+        </div>
       </div>
+
     </div>`;
-}
-
-// ── Donut chart tekenen via canvas 2D ─────────────────────────────────────
-
-function drawDonut(canvasId, genres) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  const cx = W / 2;
-  const cy = H / 2;
-  const outerR = W / 2 - 6;
-  const innerR = outerR * 0.58;
-  const total = genres.reduce((s, g) => s + g.pct, 0) || 1;
-
-  ctx.clearRect(0, 0, W, H);
-
-  let angle = -Math.PI / 2;
-  for (const g of genres) {
-    const slice = (g.pct / total) * 2 * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, outerR, angle, angle + slice);
-    ctx.closePath();
-    ctx.fillStyle = g.color;
-    ctx.fill();
-    angle += slice;
-  }
-
-  // Punch inner circle (donut hole)
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
-  ctx.fillStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--bg-primary').trim() || '#ffffff';
-  ctx.fill();
 }
 
 // ── Recent carousel interactie ────────────────────────────────────────────
@@ -489,45 +582,27 @@ function initRecentCarousel() {
 // ── Stats period herlaad ──────────────────────────────────────────────────
 
 async function reloadStats(period) {
-  const statsSection = document.getElementById('home-stats-section');
-  if (!statsSection) return;
+  // Alle 3 blokken parallel herladen
+  const [topArtists, topTracks] = await Promise.all([
+    apiFetch(`/api/topartists?period=${period}`).catch(() => null),
+    apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
+  ]);
 
-  try {
-    const [topArtists, topTracks] = await Promise.all([
-      apiFetch(`/api/topartists?period=${period}`),
-      apiFetch(`/api/toptracks?period=${period}`),
-    ]);
+  // Blok 2: Top Artists
+  const artistsList = document.getElementById('home-wylbt-artists-list');
+  if (artistsList) artistsList.innerHTML = renderTopArtistsList(topArtists);
 
-    const statsGrid = statsSection.querySelector('.home-stats-grid');
-    if (!statsGrid) return;
+  // Blok 3: Top Releases
+  const releasesList = document.getElementById('home-wylbt-releases-list');
+  if (releasesList) releasesList.innerHTML = renderTopReleasesList(topTracks);
 
-    const genres   = buildGenreData(topTracks);
-    const artists  = topArtists?.topartists?.artist || [];
-    const tracks   = topTracks?.toptracks?.track   || [];
+  // Klik-handlers voor artiesten opnieuw koppelen
+  artistsList?.querySelectorAll('[data-artist]').forEach(item => {
+    item.addEventListener('click', () => openArtistPanel(item.dataset.artist));
+  });
 
-    // Update legend
-    const legend = document.getElementById('home-donut-legend');
-    if (legend) {
-      legend.innerHTML = genres.map(g => `
-        <div class="home-donut-legend-item">
-          <div class="home-donut-legend-dot" style="background:${g.color}"></div>
-          <div class="home-donut-legend-name">${esc(g.name)}</div>
-          <div class="home-donut-legend-pct">${g.pct}%</div>
-        </div>`).join('');
-    }
-    drawDonut('home-donut-chart', genres);
-
-    // Update top cols
-    const cols = statsGrid.querySelectorAll('.home-top-col');
-    if (cols[0]) {
-      cols[0].innerHTML = `<div class="home-top-col-title">Top Artists</div>${topBarsHtml(artists, 'playcount', 'name')}`;
-    }
-    if (cols[1]) {
-      cols[1].innerHTML = `<div class="home-top-col-title">Top Tracks</div>${topBarsHtml(tracks, 'playcount', 'name')}`;
-    }
-  } catch (err) {
-    console.warn('Stats herlaad mislukt:', err);
-  }
+  // Blok 1: Genres (async, update chart + legend)
+  await loadAndRenderGenres(period);
 }
 
 // ── Username resolven ─────────────────────────────────────────────────────
@@ -630,13 +705,17 @@ export async function loadHome() {
   // Carousel
   initRecentCarousel();
 
-  // Donut chart
-  const genres = buildGenreData(topTracksRaw);
-  drawDonut('home-donut-chart', genres);
+  // Genre donut — asynchroon laden (eigen API-calls, geen blokkering)
+  loadAndRenderGenres('7day');
 
   // "MORE" knoppen → switchView
   content.querySelectorAll('[data-switch]').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.switch));
+  });
+
+  // Top-artists in WYLBT → open artiest panel
+  content.querySelectorAll('#home-wylbt-artists-list [data-artist]').forEach(item => {
+    item.addEventListener('click', () => openArtistPanel(item.dataset.artist));
   });
 
   // Recent "MORE" knop

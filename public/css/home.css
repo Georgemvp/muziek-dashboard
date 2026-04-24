@@ -752,17 +752,18 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
-   6. LISTENING STATS — donut + top bars
+   6. WHAT YOU'VE BEEN LISTENING TO — 3 kaart-blokken
    ══════════════════════════════════════════════════════════════════ */
 
-.home-stats-header {
+/* Sectie header */
+.home-wylbt-header {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
-.home-stats-title {
+.home-wylbt-title {
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: normal;
@@ -770,6 +771,7 @@
   flex: 1;
 }
 
+/* Hergebruikt door dropdown */
 .home-stats-period {
   font-size: var(--text-sm);
   color: var(--text-muted);
@@ -783,164 +785,202 @@
   -webkit-appearance: none;
 }
 
-.home-stats-grid {
-  display: grid;
-  grid-template-columns: 220px 1fr 1fr;
-  gap: 32px;
-  align-items: start;
-}
-
-/* Donut */
-.home-donut-wrap {
+/* Kaart-blokken container */
+.home-wylbt-blocks {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
-.home-donut-canvas-wrap {
-  position: relative;
+/* Elk kaart-blok */
+.home-wylbt-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.home-wylbt-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.home-wylbt-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* ── Blok 1: Genres donut ─────────────────────────────────────── */
+
+.home-genres-body {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.home-genres-chart-wrap {
+  flex-shrink: 0;
   width: 160px;
   height: 160px;
 }
 
-.home-donut-canvas-wrap canvas {
+.home-genres-chart-wrap canvas {
   display: block;
 }
 
-.home-donut-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.home-donut-legend {
+.home-genres-legend {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 100%;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
-.home-donut-legend-item {
+.home-genres-legend-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-xs);
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.home-donut-legend-dot {
+.home-genres-legend-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.home-donut-legend-name {
+.home-genres-legend-name {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: capitalize;
 }
 
-.home-donut-legend-pct {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
+/* ── Blok 2 & 3: rij-items ────────────────────────────────────── */
 
-/* Top bars column */
-.home-top-col {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.home-top-col-title {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-
-.home-top-bar-item {
+.home-wylbt-artist-item,
+.home-wylbt-release-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: 12px;
+  padding: 4px 0;
+  cursor: pointer;
 }
 
-.home-top-bar-rank {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  width: 16px;
-  text-align: center;
-  flex-shrink: 0;
+.home-wylbt-artist-item:hover,
+.home-wylbt-release-item:hover {
+  opacity: 0.85;
 }
 
-.home-top-bar-img {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+.home-wylbt-release-item {
+  cursor: default;
+}
+
+/* Afbeeldingen */
+.home-wylbt-artist-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
   background: var(--bg-tertiary);
 }
 
-.home-top-bar-ph {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+.home-wylbt-artist-ph {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background: var(--bg-tertiary);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
+  color: var(--text-muted);
 }
 
-.home-top-bar-info {
+.home-wylbt-release-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+}
+
+.home-wylbt-release-ph {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Info kolom */
+.home-wylbt-item-info {
   flex: 1;
   min-width: 0;
 }
 
-.home-top-bar-name {
-  font-size: var(--text-sm);
+.home-wylbt-item-name {
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.3;
-  margin-bottom: 3px;
 }
 
-.home-top-bar-sub {
-  font-size: 11px;
+.home-wylbt-item-sub {
+  font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
 }
 
-.home-top-bar-track {
-  position: relative;
-  height: 3px;
-  background: var(--bg-tertiary);
-  border-radius: 2px;
-  overflow: hidden;
+/* Balk */
+.home-wylbt-bar-wrap {
   margin-top: 4px;
 }
 
-.home-top-bar-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background: var(--accent);
+.home-wylbt-bar-track {
+  background: var(--bg-tertiary);
+  height: 4px;
   border-radius: 2px;
-  transition: width 0.6s ease;
+  overflow: hidden;
+}
+
+.home-wylbt-bar-fill {
+  background: var(--accent);
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* Playcount rechts */
+.home-wylbt-item-count {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 36px;
 }
 
 
@@ -979,8 +1019,6 @@
 @media (max-width: 900px) {
   .home-page { padding: 20px 20px 100px; gap: 36px; }
   .home-stat-cards { grid-template-columns: repeat(2, 1fr); }
-  .home-stats-grid { grid-template-columns: 1fr 1fr; }
-  .home-donut-wrap { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -991,5 +1029,7 @@
   .home-releases-grid { grid-template-columns: 1fr; }
   .home-release-main { grid-row: auto; aspect-ratio: 4/3; }
   .home-listen-later-grid { grid-template-columns: 1fr; }
-  .home-stats-grid { grid-template-columns: 1fr; }
+  .home-genres-body { flex-direction: column; align-items: flex-start; }
+  .home-genres-chart-wrap { align-self: center; }
+  .home-wylbt-card { padding: 16px; }
 }
