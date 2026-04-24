@@ -98,12 +98,14 @@ async function start() {
   initZonePicker();
   initPlayer();
 
-  // Load initial data
-  await loadPlexStatus();
-  await loadPlexNP();
-  await loadUser();
-  await loadWishlistState();
-  await loadDownloadHistory();
+  // Load initial data in parallel
+  await Promise.all([
+    loadPlexStatus(),
+    loadPlexNP(),
+    loadUser(),
+    loadWishlistState(),
+    loadDownloadHistory(),
+  ]);
 
   // Navigate to first view
   await switchView('bibliotheek');
@@ -138,9 +140,6 @@ async function start() {
       await loadPlexNP();
     }
   }, 30_000);
-
-  // First sync
-  await loadPlexNP();
 }
 
 // ── Go ─────────────────────────────────────────────────────────────────────
