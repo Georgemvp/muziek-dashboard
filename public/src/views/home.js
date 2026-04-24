@@ -3,7 +3,7 @@
 // Secties: greeting + stats, recent activity, listen later,
 //          daily mixes, new releases, listening stats.
 
-import { apiFetch } from '../api.js';
+import { apiFetch, plexFirstFetch } from '../api.js';
 import { switchView } from '../router.js';
 import { esc, proxyImg, gradientFor } from '../helpers.js';
 import { state } from '../state.js';
@@ -836,11 +836,28 @@ function initRecentCarousel() {
 // ── Stats period herlaad ──────────────────────────────────────────────────
 
 async function reloadStats(period) {
-  // Alle 3 blokken parallel herladen
-  const [topArtists, topTracks] = await Promise.all([
-    apiFetch(`/api/topartists?period=${period}`).catch(() => null),
-    apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
-  ]);
+  // Probeer eerst Plex stats, fallback naar Last.fm
+  let topArtists, topTracks;
+
+  try {
+    const plexStats = await apiFetch(`/api/plex/stats?period=${period}`);
+    if (plexStats && plexStats.source === 'plex') {
+      topArtists = normalizePlexArtists(plexStats.topArtists);
+      topTracks = normalizePlexTracks(plexStats.topTracks);
+    } else {
+      // Fallback naar Last.fm
+      [topArtists, topTracks] = await Promise.all([
+        apiFetch(`/api/topartists?period=${period}`).catch(() => null),
+        apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
+      ]);
+    }
+  } catch {
+    // Last.fm fallback bij fout
+    [topArtists, topTracks] = await Promise.all([
+      apiFetch(`/api/topartists?period=${period}`).catch(() => null),
+      apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
+    ]);
+  }
 
   // Blok 2: Top Artists
   const artistsList = document.getElementById('home-wylbt-artists-list');
@@ -902,23 +919,29 @@ export async function loadHome() {
     </div>`;
 
   // ── Parallel data fetching ─────────────────────────────────────────────
-  const [
-    username,
-    libRaw,
-    recentRaw,
-    wishlistRaw,
-    topArtistsRaw,
-    topTracksRaw,
-    releasesRaw,
-  ] = await Promise.all([
+  // Plex stats ophalen (primaire bron)
+  const [username, libRaw, plexStatsRaw, wishlistRaw, releasesRaw] = await Promise.all([
     resolveUsername().catch(() => null),
     apiFetch('/api/plex/status').catch(() => null),
-    apiFetch('/api/recent?limit=200').catch(() => null),
+    apiFetch('/api/plex/stats?period=7day').catch(() => null),
     apiFetch('/api/wishlist').catch(() => null),
-    apiFetch('/api/topartists?period=7day').catch(() => null),
-    apiFetch('/api/toptracks?period=7day').catch(() => null),
     apiFetch('/api/releases').catch(() => null),
   ]);
+
+  // Fallback naar Last.fm als Plex stats niet beschikbaar zijn
+  let topArtistsRaw, topTracksRaw, recentRaw;
+  if (plexStatsRaw && plexStatsRaw.source === 'plex') {
+    topArtistsRaw = normalizePlexArtists(plexStatsRaw.topArtists);
+    topTracksRaw = normalizePlexTracks(plexStatsRaw.topTracks);
+    recentRaw = { recenttracks: { track: normalizePlexRecent(plexStatsRaw.recentTracks) } };
+  } else {
+    // Last.fm fallback
+    [topArtistsRaw, topTracksRaw, recentRaw] = await Promise.all([
+      apiFetch('/api/topartists?period=7day').catch(() => null),
+      apiFetch('/api/toptracks?period=7day').catch(() => null),
+      apiFetch('/api/recent?limit=200').catch(() => null),
+    ]);
+  }
 
   const libData   = normalizeLibStats(libRaw);
   const tracks    = recentRaw?.recenttracks?.track || [];
