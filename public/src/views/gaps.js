@@ -112,7 +112,12 @@ async function renderGaps() {
   try {
     if (!gapsData) {
       showLoading();
-      gapsData = await getCached('gaps', () => apiFetch('/api/gaps'), 5 * 60 * 1000);
+      let d = getCached('gaps', 5 * 60 * 1000);
+      if (!d) {
+        d = await apiFetch('/api/gaps');
+        setCache('gaps', d);
+      }
+      gapsData = d;
 
       if (gapsData.status === 'building') {
         content.innerHTML = `<div class="loading-state"><p>Gaps-scanning lopend...</p>${showLoading()}</div>`;
