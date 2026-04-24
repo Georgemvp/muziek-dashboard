@@ -8,7 +8,8 @@ module.exports = function(app, deps) {
     plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex,
     getPlexStatus, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient,
     pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks,
-    getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getCache, setCache
+    getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getCache, setCache,
+    getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, getGenresFromPlex
   } = deps;
 
   // ── Plex Webhook state + SSE ──────────────────────────────────────────────
@@ -709,6 +710,69 @@ module.exports = function(app, deps) {
       logger.warn({ err: e }, 'Plex genres ophalen mislukt');
       res.set('Cache-Control', 'private, max-age=300');
       res.status(500).json({ error: e.message, genres: [] });
+    }
+  });
+
+  // ── /api/plex/stats ─────────────────────────────────────────────────────────
+  // GET statistieken over speelgeschiedenis: top artiesten, nummers, genres, etc.
+  // Query param: period (7day, 1month, 3month, 12month, overall; default: 7day)
+  app.get('/api/plex/stats', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json({ error: 'Geen PLEX_TOKEN', source: null });
+    }
+
+    try {
+      const period = req.query.period || '7day';
+      const validPeriods = ['7day', '1month', '3month', '12month', 'overall'];
+
+      // Valideer period parameter
+      if (!validPeriods.includes(period)) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.status(400).json({
+          error: `Ongeldige period. Geldige waarden: ${validPeriods.join(', ')}`,
+          source: null
+        });
+      }
+
+      // Cache check (10 minuten = 600_000 ms)
+      const cacheKey = `plex:stats:${period}`;
+      const cached = getCache(cacheKey, 600_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json(cached);
+      }
+
+      // Haal speelgeschiedenis op voor de gegeven periode
+      const history = await getPlayHistory(period);
+
+      // Bereken statistieken
+      const topArtists = aggregateTopArtists(history, 20);
+      const topTracks = aggregateTopTracks(history, 20);
+      const dailyPlays = aggregateDailyPlays(history);
+      const genres = getGenresFromPlex(topArtists);
+      const recentTracks = history.slice(0, 30);
+
+      // Bouw response
+      const result = {
+        topArtists,
+        topTracks,
+        dailyPlays,
+        genres,
+        recentTracks,
+        totalPlays: history.length,
+        source: 'plex'
+      };
+
+      // Sla op in cache
+      setCache(cacheKey, result);
+
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(result);
+    } catch (e) {
+      logger.warn({ err: e, period: req.query.period }, 'Plex stats ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=300');
+      res.status(500).json({ error: e.message, source: null });
     }
   });
 
