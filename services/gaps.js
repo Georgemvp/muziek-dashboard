@@ -82,15 +82,16 @@ async function buildGapsCache() {
         if (missing.length === 0) return null;
 
         return {
-          name, image,
-          mbid:          mbz.mbid,
-          country:       mbz.country,
-          startYear:     mbz.startYear,
-          tags:          mbz.tags,
-          allAlbums:     albums,
-          missingAlbums: missing,
-          ownedCount:    albums.filter(a =>  a.inPlex).length,
-          totalCount:    albums.length
+          artistId:   mbz.mbid,
+          title:      name,
+          thumb:      image,
+          country:    mbz.country,
+          startYear:  mbz.startYear,
+          genres:     mbz.tags,
+          missing:    missing,
+          owned:      albums.filter(a => a.inPlex),
+          ownedCount: albums.filter(a => a.inPlex).length,
+          totalCount: albums.length
         };
       } catch (e) {
         logger.error({ err: e, artist: name }, 'Gaps: fout bij verwerken artiest');
