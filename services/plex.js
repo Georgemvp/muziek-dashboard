@@ -988,7 +988,7 @@ function aggregateDailyPlays(history, days = 28) {
     if (dailyMap.has(dateStr)) {
       const entry = dailyMap.get(dateStr);
       entry.count += 1;
-      entry.minutes += Math.ceil((item.duration || 0) / 60000); // duration is in ms
+      entry.minutes += (item.duration > 0) ? Math.ceil(item.duration / 60000) : 3.5;
     }
   }
 
