@@ -813,9 +813,15 @@ async function getPlayHistory(period = '7day') {
   try {
     // Haal muziek-section key op
     const sections = await plexGet('/library/sections');
-    const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+    let music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+
+    // Fallback: probeer ook type === 'track' als 'artist' niet gevonden wordt
     if (!music) {
-      logger.warn('Plex: geen muziekbibliotheek gevonden voor play history');
+      music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'track');
+    }
+
+    if (!music) {
+      logger.warn('Plex: geen muziekbibliotheek gevonden voor play history (tried both artist and track types)');
       return [];
     }
 
@@ -832,10 +838,11 @@ async function getPlayHistory(period = '7day') {
         'sort': 'viewedAt:desc',
         'librarySectionID': music.key,
         'X-Plex-Container-Start': start,
-        'X-Plex-Container-Size': pageSize
+        'X-Plex-Container-Size': pageSize,
+        'viewedAt>': since.toString()
       });
 
-      const path = `/status/sessions/history/all?${params}&viewedAt>=${since}`;
+      const path = `/status/sessions/history/all?${params}`;
 
       if (start === 0) {
         firstPath = path;
