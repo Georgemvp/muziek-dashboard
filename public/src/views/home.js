@@ -15,6 +15,73 @@ const GENRE_COLORS = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb', '#9
 // Huidige Chart.js instantie — vernietigen voor hergebruik
 let _genreChartInstance = null;
 
+// ── Plex Data Normalisatie ────────────────────────────────────────────────
+// Converteer Plex API responses naar Last.fm formaat voor render-functies
+
+function normalizePlexArtists(plexTopArtists) {
+  if (!plexTopArtists || !Array.isArray(plexTopArtists)) {
+    return { topartists: { artist: [] } };
+  }
+
+  return {
+    topartists: {
+      artist: plexTopArtists.map(a => {
+        const thumbUrl = a.thumb
+          ? (a.thumb.startsWith('http') ? a.thumb : `/api/imageproxy?url=${encodeURIComponent(a.thumb)}`)
+          : '';
+        return {
+          name: a.name,
+          playcount: String(a.playcount || 0),
+          image: [null, null, { '#text': thumbUrl }, { '#text': thumbUrl }],
+          topTag: a.genre || null,
+        };
+      })
+    }
+  };
+}
+
+function normalizePlexTracks(plexTopTracks) {
+  if (!plexTopTracks || !Array.isArray(plexTopTracks)) {
+    return { toptracks: { track: [] } };
+  }
+
+  return {
+    toptracks: {
+      track: plexTopTracks.map(t => {
+        const thumbUrl = t.thumb
+          ? (t.thumb.startsWith('http') ? t.thumb : `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`)
+          : '';
+        return {
+          name: t.title,
+          playcount: String(t.playcount || 0),
+          artist: { name: t.artist, '#text': t.artist },
+          album: { '#text': t.album, name: t.album },
+          image: [null, null, { '#text': thumbUrl }],
+        };
+      })
+    }
+  };
+}
+
+function normalizePlexRecent(plexRecentTracks) {
+  if (!plexRecentTracks || !Array.isArray(plexRecentTracks)) {
+    return [];
+  }
+
+  return plexRecentTracks.map(t => {
+    const thumbUrl = t.thumb
+      ? (t.thumb.startsWith('http') ? t.thumb : `/api/imageproxy?url=${encodeURIComponent(t.thumb)}`)
+      : '';
+    return {
+      name: t.title,
+      artist: { '#text': t.artist },
+      album: { '#text': t.album },
+      image: [null, null, { '#text': thumbUrl }],
+      date: { uts: String(t.viewedAt) },
+    };
+  });
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function fmt(n) {
