@@ -12,6 +12,7 @@ let ontdekModulePromise;
 let bibliotheekModulePromise;
 let downloadsModulePromise;
 let playerModulePromise;
+let gapsModulePromise;
 
 function loadOntdekModule() {
   if (!ontdekModulePromise) ontdekModulePromise = import('./views/ontdek.js');
@@ -27,6 +28,12 @@ function loadDownloadsModule() {
   if (!downloadsModulePromise) downloadsModulePromise = import('./views/downloads.js');
   return downloadsModulePromise;
 }
+
+function loadGapsModule() {
+  if (!gapsModulePromise) gapsModulePromise = import('./views/gaps.js');
+  return gapsModulePromise;
+}
+
 function loadPlayerModule() {
   if (!playerModulePromise) playerModulePromise = import('./components/player.js');
   return playerModulePromise;
@@ -41,7 +48,7 @@ export const tabLoaders = {
   downloads:   async () => (await loadDownloadsModule()).loadDownloads(),
   // Backward-compat voor keyboard shortcuts en sub-tab loaders
   discover:    async () => (await loadOntdekModule()).loadDiscover(),
-  gaps:        async () => (await loadBibliotheekModule()).loadGaps(),
+  gaps:        async () => (await loadGapsModule()).loadGaps(),
   recent:      () => loadRecent(),
   recs:        async () => (await loadOntdekModule()).loadRecs(),
   releases:    async () => (await loadOntdekModule()).loadReleases(),
@@ -149,9 +156,8 @@ document.getElementById('btn-refresh-discover')?.addEventListener('click', async
 });
 
 document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () => {
-  state.lastGaps = null;
   try { await p('/api/gaps/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
-  (await loadBibliotheekModule()).loadGaps();
+  (await loadGapsModule()).loadGaps();
 });
 
 // ── Plex lib zoeken (externe toolbar) ────────────────────────────────────
@@ -395,7 +401,7 @@ document.addEventListener('keydown', async e => {
   if (e.key === 'r' && !inInput) {
     if (state.activeView === 'ontdek')           (await loadOntdekModule()).loadOntdek();
     else if (state.activeView === 'bibliotheek') (await loadBibliotheekModule()).loadBibliotheek();
-    else if (state.activeView === 'gaps')        (await loadBibliotheekModule()).loadGaps();
+    else if (state.activeView === 'gaps')        (await loadGapsModule()).loadGaps();
     else await tabLoaders[state.activeView]?.();
     return;
   }
