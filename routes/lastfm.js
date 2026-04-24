@@ -182,12 +182,27 @@ module.exports = function(app, deps) {
 
       const { syncPlexLibrary, artistInPlex, albumInPlex } = deps;
       await syncPlexLibrary();
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const top        = await lfm(
-        { method: 'user.gettopartists', period: '3month', limit: 30 },
-        { cacheKey: 'api:recs:topArtists', cacheTTL: 3_600_000 } // 1 uur cache
-      );
-      const topArtists = (top.topartists?.artist || []).map(a => a.name);
+
+      // Probeer seeds uit Plex play history
+      let topArtists = [];
+      try {
+        const { getPlayHistory, aggregateTopArtists } = deps;
+        if (getPlayHistory) {
+          const history = await getPlayHistory('3month');
+          topArtists = aggregateTopArtists(history, 30).map(a => a.name);
+        }
+      } catch (e) {
+        logger.warn({ err: e }, 'Plex history voor recs seeds mislukt, fallback naar Last.fm');
+      }
+
+      // Fallback naar Last.fm als Plex seeds onvoldoende
+      if (topArtists.length < 5) {
+        const top = await lfm(
+          { method: 'user.gettopartists', period: '3month', limit: 30 },
+          { cacheKey: 'api:recs:topArtists', cacheTTL: 3_600_000 }
+        );
+        topArtists = (top.topartists?.artist || []).map(a => a.name);
+      }
 
       // ── 1. SEED-DIVERSITEIT: Top-5 + 5 random uit posities 10-30 ──────────
       const seedArtists = [];
