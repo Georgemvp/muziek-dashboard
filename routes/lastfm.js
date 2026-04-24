@@ -34,14 +34,12 @@ module.exports = function(app, deps) {
   // ── /api/user ──────────────────────────────────────────────────────────────
   app.get('/api/user', async (req, res) => {
     try {
-      const cached = getCache('api:user', 300_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=600');
-        return res.json(cached);
-      }
-      const data = await lfm({ method: 'user.getinfo' });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.getinfo' },
+        { cacheKey: 'api:user', cacheTTL: 300_000 }
+      );
       markLastFmUp();
-      setCache('api:user', data);
       res.set('Cache-Control', 'private, max-age=600');
       res.json(data);
     } catch (e) { staleOrError('api:user', e, res, deps); }
@@ -50,14 +48,12 @@ module.exports = function(app, deps) {
   // ── /api/recent ────────────────────────────────────────────────────────────
   app.get('/api/recent', async (req, res) => {
     try {
-      const cached = getCache('api:recent', 120_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=30');
-        return res.json(cached);
-      }
-      const data = await lfm({ method: 'user.getrecenttracks', limit: 20 });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.getrecenttracks', limit: 20 },
+        { cacheKey: 'api:recent', cacheTTL: 120_000 }
+      );
       markLastFmUp();
-      setCache('api:recent', data);
       res.set('Cache-Control', 'private, max-age=30');
       res.json(data);
     } catch (e) { staleOrError('api:recent', e, res, deps); }
@@ -68,14 +64,12 @@ module.exports = function(app, deps) {
     try {
       const period = req.query.period || '7day';
       const cacheKey = `api:topartists:${period}`;
-      const cached = getCache(cacheKey, 300_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=300');
-        return res.json(cached);
-      }
-      const data = await lfm({ method: 'user.gettopartists', period, limit: 20 });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.gettopartists', period, limit: 20 },
+        { cacheKey, cacheTTL: 300_000 }
+      );
       markLastFmUp();
-      setCache(cacheKey, data);
       res.set('Cache-Control', 'private, max-age=300');
       res.json(data);
     } catch (e) { staleOrError(`api:topartists:${req.query.period || '7day'}`, e, res, deps); }
@@ -86,14 +80,12 @@ module.exports = function(app, deps) {
     try {
       const period = req.query.period || '7day';
       const cacheKey = `api:toptracks:${period}`;
-      const cached = getCache(cacheKey, 300_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=300');
-        return res.json(cached);
-      }
-      const data = await lfm({ method: 'user.gettoptracks', period, limit: 20 });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.gettoptracks', period, limit: 20 },
+        { cacheKey, cacheTTL: 300_000 }
+      );
       markLastFmUp();
-      setCache(cacheKey, data);
       res.set('Cache-Control', 'private, max-age=300');
       res.json(data);
     } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
@@ -102,14 +94,12 @@ module.exports = function(app, deps) {
   // ── /api/loved ─────────────────────────────────────────────────────────────
   app.get('/api/loved', async (req, res) => {
     try {
-      const cached = getCache('api:loved', 600_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=600');
-        return res.json(cached);
-      }
-      const data = await lfm({ method: 'user.getlovedtracks', limit: 20 });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.getlovedtracks', limit: 20 },
+        { cacheKey: 'api:loved', cacheTTL: 600_000 }
+      );
       markLastFmUp();
-      setCache('api:loved', data);
       res.set('Cache-Control', 'private, max-age=600');
       res.json(data);
     } catch (e) { staleOrError('api:loved', e, res, deps); }
@@ -130,7 +120,11 @@ module.exports = function(app, deps) {
 
       const { syncPlexLibrary, artistInPlex, albumInPlex } = deps;
       await syncPlexLibrary();
-      const top        = await lfm({ method: 'user.gettopartists', period: '3month', limit: 30 });
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const top        = await lfm(
+        { method: 'user.gettopartists', period: '3month', limit: 30 },
+        { cacheKey: 'api:recs:topArtists', cacheTTL: 3_600_000 } // 1 uur cache
+      );
       const topArtists = (top.topartists?.artist || []).map(a => a.name);
 
       // ── 1. SEED-DIVERSITEIT: Top-5 + 5 random uit posities 10-30 ──────────
@@ -150,13 +144,14 @@ module.exports = function(app, deps) {
       const stopwords = new Set(['seen live', 'listened', 'favourite', 'favorites', 'love', 'loved', 'awesome', 'cool', 'good', 'great']);
 
       // Helper: haal top-3 tags op met 24-uurs cache per artiest
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
       async function getArtistTags(artist) {
         const tagCacheKey = `tags:${artist.toLowerCase()}`;
-        const tagCached = getCache(tagCacheKey, 86_400_000); // 24 uur TTL
-        if (tagCached) return tagCached;
-        const result = await lfm({ method: 'artist.gettoptags', artist }, { includeUser: false });
+        const result = await lfm(
+          { method: 'artist.gettoptags', artist },
+          { includeUser: false, cacheKey: tagCacheKey, cacheTTL: 86_400_000 } // 24 uur TTL
+        );
         const tags = (result.toptags?.tag || []).slice(0, 3);
-        setCache(tagCacheKey, tags);
         return tags;
       }
 
@@ -243,7 +238,11 @@ module.exports = function(app, deps) {
         Promise.allSettled(
           top8.map(async rec => {
             try {
-              const data = await lfm({ method: 'artist.gettopalbums', artist: rec.name, limit: 3 }, { includeUser: false });
+              // Cache per artiest (12 uur TTL)
+              const data = await lfm(
+                { method: 'artist.gettopalbums', artist: rec.name, limit: 3 },
+                { includeUser: false, cacheKey: `albums:${rec.name.toLowerCase()}`, cacheTTL: 43_200_000 }
+              );
               return (data.topalbums?.album || [])
                 .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
                 .map(a => {
@@ -262,7 +261,11 @@ module.exports = function(app, deps) {
         Promise.allSettled(
           top8.map(async rec => {
             try {
-              const data = await lfm({ method: 'artist.gettoptracks', artist: rec.name, limit: 3 }, { includeUser: false });
+              // Cache per artiest (12 uur TTL)
+              const data = await lfm(
+                { method: 'artist.gettoptracks', artist: rec.name, limit: 3 },
+                { includeUser: false, cacheKey: `tracks:${rec.name.toLowerCase()}`, cacheTTL: 43_200_000 }
+              );
               return (data.toptracks?.track || []).map(t => ({
                 track:     t.name,
                 artist:    rec.name,
@@ -325,8 +328,12 @@ module.exports = function(app, deps) {
       return res.json({ results: [] });
     }
     try {
+      // Cache per zoekterm (1 uur TTL)
       const [searchR, deezerR] = await Promise.allSettled([
-        lfm({ method: 'artist.search', artist: q, limit: 6 }, { includeUser: false }),
+        lfm(
+          { method: 'artist.search', artist: q, limit: 6 },
+          { includeUser: false, cacheKey: `search:${q.toLowerCase()}`, cacheTTL: 3_600_000 }
+        ),
         fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(q)}&limit=6`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json())
       ]);
       const artists = searchR.status === 'fulfilled'
@@ -356,12 +363,16 @@ module.exports = function(app, deps) {
   // ── /api/stats ─────────────────────────────────────────────────────────────
   app.get('/api/stats', async (req, res) => {
     try {
-      const cached = getCache('stats', 3_600_000);
-      if (cached) return res.json(cached);
-
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
       const [recentR, topR] = await Promise.allSettled([
-        lfm({ method: 'user.getrecenttracks', limit: 200 }),
-        lfm({ method: 'user.gettopartists', period: '1month', limit: 15 })
+        lfm(
+          { method: 'user.getrecenttracks', limit: 200 },
+          { cacheKey: 'stats:recent', cacheTTL: 1_800_000 } // 30 min
+        ),
+        lfm(
+          { method: 'user.gettopartists', period: '1month', limit: 15 },
+          { cacheKey: 'stats:top', cacheTTL: 1_800_000 } // 30 min
+        )
       ]);
 
       // Dagelijkse scrobbles
@@ -409,7 +420,7 @@ module.exports = function(app, deps) {
 
       const result = { dailyScrobbles, topArtists, genres };
       markLastFmUp();
-      setCache('stats', result);
+      // Individual API calls zijn nu gecached in lfm() (voor throttle)
       res.set('Cache-Control', 'private, max-age=900');
       res.json(result);
     } catch (e) { staleOrError('stats', e, res, deps); }

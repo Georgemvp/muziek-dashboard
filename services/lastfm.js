@@ -21,12 +21,23 @@ function _lfmSchedule(fn) {
 
 /**
  * Doe een Last.fm API-aanroep (automatisch gethrottled naar ≤4/sec).
+ * Cache-checks gebeuren VOOR de throttle: cache-hits return direct zonder queue.
+ *
  * @param {object} params       - API-parameters (method, period, limit, …)
  * @param {object} [opts]
  * @param {boolean} [opts.includeUser=true] - Voeg user: USERNAME toe aan de aanroep
+ * @param {string} [opts.cacheKey]          - Cache-sleutel (optional); als ingesteld, check cache eerst
+ * @param {number} [opts.cacheTTL]          - Cache TTL in ms; alleen gebruikt als cacheKey is ingesteld
  */
-async function lfm(params, { includeUser = true } = {}) {
-  return _lfmSchedule(async () => {
+async function lfm(params, { includeUser = true, cacheKey, cacheTTL } = {}) {
+  // ── Cache-check VOOR throttle: cache-hits gaan niet door de queue ─────────
+  if (cacheKey) {
+    const cached = getCache(cacheKey, cacheTTL);
+    if (cached) return cached;
+  }
+
+  // ── Alleen echte Last.fm requests gaan door _lfmSchedule ──────────────────
+  const data = await _lfmSchedule(async () => {
     const url  = new URL(LASTFM);
     const base = { api_key: API_KEY, format: 'json', ...(includeUser ? { user: USERNAME } : {}) };
     Object.entries({ ...base, ...params }).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -35,27 +46,37 @@ async function lfm(params, { includeUser = true } = {}) {
     if (data.error) throw new Error(data.message || `Last.fm fout ${data.error}`);
     return data;
   });
+
+  // ── Cache het resultaat als cacheKey is ingesteld ────────────────────────
+  if (cacheKey) {
+    setCache(cacheKey, data);
+  }
+
+  return data;
 }
 
 /**
  * Geeft vergelijkbare artiesten terug voor een gegeven artiestnaam.
  * Cacheert resultaten 24 uur lang (TTL).
  * Haalt altijd 20 op van Last.fm (voor optimale cache-hit), slice daarna naar gewenste limit.
+ * Cache-check gebeurt nu in lfm() zelf, voor de throttle.
  */
 async function getSimilarArtists(artist, limit = 8) {
   const cacheKey = `similar:${artist.toLowerCase()}`;
-  const cached = getCache(cacheKey, 24 * 3_600_000); // 24 uur TTL
-  if (cached) return cached.slice(0, limit);
+  const cacheTTL = 24 * 3_600_000; // 24 uur TTL
 
-  // Haal altijd 20 op van Last.fm (vollediger resultaat voor caching)
-  const data = await lfm({ method: 'artist.getsimilar', artist, limit: 20 }, { includeUser: false });
-  const similar = data.similarartists?.artist || [];
+  // lfm() zal cache checken VOOR throttle en direct returnen als hit
+  const similar = await lfm(
+    { method: 'artist.getsimilar', artist, limit: 20 },
+    { includeUser: false, cacheKey, cacheTTL }
+  );
 
-  // Cache het volledige resultaat
-  setCache(cacheKey, similar);
+  // Als dit een array is (cache-hit), return slice ervan
+  // Als dit een object is (API-response), extract de artist array
+  const similarArray = Array.isArray(similar) ? similar : (similar.similarartists?.artist || []);
 
   // Return alleen wat de caller nodig heeft
-  return similar.slice(0, limit);
+  return similarArray.slice(0, limit);
 }
 
 module.exports = { lfm, getSimilarArtists };
