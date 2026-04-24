@@ -246,31 +246,30 @@
 .trackrec-link:hover { text-decoration: underline; }
 
 /* ── Nieuwe Releases ── */
-.releases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--grid-card-min), 1fr)); gap: var(--grid-gap); margin-top: 12px; }
+.releases-grid { display: grid; grid-template-columns: repeat(auto-fill, 160px); justify-content: start; gap: 16px; margin-top: 12px; }
 .rel-card {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border: none; border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
-  transition: box-shadow 0.22s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
-  animation: fadeUpBounce 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: border-color 0.18s;
 }
-.rel-card:hover { box-shadow: none; transform: none; border-color: transparent; }
+.rel-card:hover { border-color: var(--border-hover); }
 .rel-card-new { border-left: 3px solid var(--red); }
 .rel-cover { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface2); }
 .rel-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rel-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: var(--muted); }
-.rel-info { padding: 10px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.rel-type-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.04em; width: fit-content; }
+.rel-info { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.rel-type-badge { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.04em; width: fit-content; }
 .rel-type-album  { background: rgba(108,92,231,0.15); color: var(--new); }
 .rel-type-single { background: rgba(0,184,148,0.12); color: var(--green); }
 .rel-type-ep     { background: rgba(229,160,13,0.12); color: var(--plex); }
-.rel-album { font-size: 14px; font-weight: 600; line-height: 1.3; margin-top: 2px; }
+.rel-album { font-size: 13px; font-weight: 600; line-height: 1.3; margin-top: 2px; }
 .rel-artist { font-size: 12px; color: var(--muted2); cursor: pointer; }
 .rel-artist:hover { color: var(--text); }
 .rel-date { font-size: 12px; color: var(--muted); }
 .rel-date-rel { font-size: 11px; color: var(--muted); opacity: 0.8; }
-.rel-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.rel-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .rel-deezer-link { font-size: 11px; color: var(--red); text-decoration: none; }
 .rel-deezer-link:hover { text-decoration: underline; }
 
