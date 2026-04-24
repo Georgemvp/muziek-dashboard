@@ -1,5 +1,5 @@
 import { apiFetch } from '../api.js';
-import { getCached, setCached } from '../cache.js';
+import { getCached, setCache, invalidate } from '../cache.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, countryFlag,
   albumCard, showLoading, showError, proxyImg, p, plexBadge, downloadBtn
@@ -45,7 +45,7 @@ function renderToolbar() {
     showLoading();
     try {
       await apiFetch('/api/gaps/refresh', { method: 'POST' });
-      setCached('gaps', null);
+      invalidate('gaps');
       gapsData = null;
       expandedArtists.clear();
       await renderGaps();
