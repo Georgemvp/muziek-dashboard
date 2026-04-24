@@ -985,6 +985,161 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
+   LIVE RADIO BAR
+   ══════════════════════════════════════════════════════════════════ */
+
+.live-radio-bar {
+  height: 48px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.live-radio-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.live-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e53935;
+  flex-shrink: 0;
+  animation: radio-pulse 2s ease-in-out infinite;
+}
+
+@keyframes radio-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.live-radio-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.live-radio-info {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-radio-more {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.live-radio-more:hover { text-decoration: underline; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   ACTIVITY MATRIX — Recent listening widget
+   ══════════════════════════════════════════════════════════════════ */
+
+.activity-matrix-card {
+  padding: 20px 24px;
+}
+
+/* Unified grid: 1 label/bar column + 7 day columns, used for both header and rows */
+.activity-grid {
+  display: grid;
+  grid-template-columns: 100px repeat(7, 1fr);
+  gap: 10px 8px;
+  align-items: center;
+}
+
+.activity-grid-label-header {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.activity-day-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+/* Spacer row between header labels and data rows */
+.activity-grid-label-header,
+.activity-day-label {
+  margin-bottom: 4px;
+}
+
+.activity-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  min-width: 0;
+}
+
+.activity-bar {
+  height: 6px;
+  background: var(--accent);
+  border-radius: 3px;
+  flex-shrink: 0;
+  max-width: 52px;
+  min-width: 0;
+  transition: width 0.4s ease;
+}
+
+.activity-bar-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.activity-dot-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+
+.activity-dot {
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease;
+}
+
+@media (max-width: 640px) {
+  .activity-grid { grid-template-columns: 60px repeat(7, 1fr); gap: 8px 4px; }
+  .activity-bar { max-width: 30px; }
+  .activity-bar-label { font-size: 10px; }
+  .live-radio-bar { padding: 0 14px; gap: 10px; }
+  .live-radio-info { display: none; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
    SKELETON LOADERS
    ══════════════════════════════════════════════════════════════════ */
 

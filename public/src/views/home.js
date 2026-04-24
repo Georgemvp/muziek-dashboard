@@ -92,6 +92,110 @@ function renderGreeting(username, libData) {
     </div>`;
 }
 
+// ── Live Radio Bar ────────────────────────────────────────────────────────
+
+function renderLiveRadioBar() {
+  return `
+    <div class="live-radio-bar">
+      <div class="live-radio-badge">
+        <span class="live-radio-dot"></span>
+        <span class="live-radio-name">NPO Radio 2</span>
+      </div>
+      <div class="live-radio-info">NPO Radio 2 — Hilversum, Netherlands, 92.6 FM</div>
+      <a href="#" class="live-radio-more" onclick="return false">More live radio</a>
+    </div>`;
+}
+
+// ── Activity Matrix helpers ───────────────────────────────────────────────
+
+function fmtDuration(minutes) {
+  if (!minutes || minutes < 1) return '0m';
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ── Section: Recent Listening activity matrix ─────────────────────────────
+
+function renderActivityMatrix(recentTracks) {
+  // Group tracks by calendar day (YYYY-MM-DD)
+  const dayMap = {};
+  for (const t of (recentTracks || [])) {
+    const uts = t.date?.uts;
+    if (!uts) continue; // skip "now playing" tracks without timestamp
+    const date = new Date(parseInt(uts, 10) * 1000);
+    const key = date.toISOString().slice(0, 10);
+    dayMap[key] = (dayMap[key] || 0) + 3.5; // ~3.5 min per track
+  }
+
+  // Build 4 weeks (Mon–Sun), most recent first
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((dow + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+
+  const weeks = [];
+  for (let w = 0; w < 4; w++) {
+    const weekStart = new Date(monday);
+    weekStart.setDate(monday.getDate() - w * 7);
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart);
+      day.setDate(weekStart.getDate() + d);
+      const key = day.toISOString().slice(0, 10);
+      days.push({ key, minutes: dayMap[key] || 0 });
+    }
+    weeks.push({ days, totalMinutes: days.reduce((s, d) => s + d.minutes, 0) });
+  }
+
+  const maxWeekMin = Math.max(...weeks.map(w => w.totalMinutes), 1);
+  const maxDayMin  = Math.max(...weeks.flatMap(w => w.days.map(d => d.minutes)), 1);
+
+  function dotStyle(minutes) {
+    if (!minutes) return 'width:6px;height:6px;background:#e0e0e0;';
+    const r = minutes / maxDayMin;
+    if (r < 0.25) return 'width:10px;height:10px;background:var(--accent);opacity:0.4;';
+    if (r < 0.6)  return 'width:16px;height:16px;background:var(--accent);opacity:0.7;';
+    return 'width:24px;height:24px;background:var(--accent);opacity:1;';
+  }
+
+  // Each week renders as: 1 bar-wrap cell + 7 dot cells (all direct grid children)
+  const rowsHtml = weeks.map(week => {
+    const barPct = week.totalMinutes > 0
+      ? Math.round(week.totalMinutes / maxWeekMin * 100)
+      : 0;
+    const dotsHtml = week.days.map(d =>
+      `<div class="activity-dot-cell"><div class="activity-dot" style="${dotStyle(d.minutes)}" title="${d.key}: ${Math.round(d.minutes)}min"></div></div>`
+    ).join('');
+    return `
+      <div class="activity-bar-wrap">
+        <div class="activity-bar" style="width:${barPct}%"></div>
+        <span class="activity-bar-label">${fmtDuration(week.totalMinutes)}</span>
+      </div>
+      ${dotsHtml}`;
+  }).join('');
+
+  const dayLabels = ['M','T','W','T','F','S','S'].map(l =>
+    `<div class="activity-day-label">${l}</div>`
+  ).join('');
+
+  return `
+    <div class="home-wylbt-card activity-matrix-card">
+      <div class="home-wylbt-card-header" style="margin-bottom:16px">
+        <div class="home-wylbt-card-title">Recent listening</div>
+      </div>
+      <div class="activity-grid">
+        <!-- Header row -->
+        <div class="activity-grid-label-header">Last 4 weeks</div>
+        ${dayLabels}
+        <!-- Week rows -->
+        ${rowsHtml}
+      </div>
+    </div>`;
+}
+
 // ── Section 2: Recent Activity ────────────────────────────────────────────
 
 function recentCoversHtml(tracks) {
@@ -742,7 +846,7 @@ export async function loadHome() {
   ] = await Promise.all([
     resolveUsername().catch(() => null),
     apiFetch('/api/plex/status').catch(() => null),
-    apiFetch('/api/recent').catch(() => null),
+    apiFetch('/api/recent?limit=200').catch(() => null),
     apiFetch('/api/wishlist').catch(() => null),
     apiFetch('/api/topartists?period=7day').catch(() => null),
     apiFetch('/api/toptracks?period=7day').catch(() => null),
@@ -761,6 +865,12 @@ export async function loadHome() {
 
       <!-- 1. Greeting + Stats -->
       ${renderGreeting(username, libData)}
+
+      <!-- 1b. Live Radio Bar -->
+      ${renderLiveRadioBar()}
+
+      <!-- 1c. Recent Listening Activity Matrix -->
+      ${renderActivityMatrix(tracks)}
 
       <!-- 2. Recent Activity -->
       ${renderRecentActivity(tracks)}
