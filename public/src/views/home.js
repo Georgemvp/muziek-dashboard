@@ -967,13 +967,28 @@ async function reloadAllWidgetsForPeriod(period) {
 
   // Herlaad Activity Matrix
   try {
+    let dailyPlays = null;
+    let recentTracks = [];
+    // Probeer Plex
     const statsData = await apiFetch(`/api/plex/stats?period=${period}`);
-    const dailyPlays = statsData?.dailyPlays || null;
-    const recentTracks = statsData?.recentTracks || [];
-
+    if (statsData?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0)) {
+      dailyPlays = statsData.dailyPlays;
+      recentTracks = statsData.recentTracks || [];
+    } else {
+      // Probeer gecombineerd endpoint
+      const activityData = await apiFetch(`/api/activity?period=${period}`);
+      if (activityData?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0)) {
+        dailyPlays = activityData.dailyPlays;
+        recentTracks = activityData.recentTracks || [];
+      }
+    }
     const matrixEl = document.querySelector('.activity-matrix-card');
     if (matrixEl) {
-      matrixEl.innerHTML = renderActivityMatrix(recentTracks, dailyPlays);
+      // renderActivityMatrix verwacht Last.fm-genormaliseerde tracks als fallback
+      const normalizedTracks = recentTracks.length
+        ? normalizePlexRecent(recentTracks)
+        : [];
+      matrixEl.outerHTML = renderActivityMatrix(normalizedTracks, dailyPlays);
     }
   } catch (e) {
     console.warn('Activity matrix herlaad mislukt:', e);
@@ -1147,26 +1162,33 @@ export async function loadHome() {
   const releases  = releasesRaw;
   const genreData = buildGenreData(topArtistsRaw);
 
-  // ── Activity Matrix: Check of Plex data daadwerkelijk nuttig is ──────────
-  const plexHasData = plexStatsRaw?.source === 'plex'
-    && plexStatsRaw?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0);
-
-  // Als Plex data leeg is, gebruik Last.fm fallback voor Activity Matrix
+  // ── Activity Matrix: waterfall fallback ──────────────────────────────────
   let activityMatrixTracks = tracks;
   let activityMatrixDailyPlays = null;
-
+  // Stap 1: Check Plex stats
+  const plexHasData = plexStatsRaw?.source === 'plex'
+    && plexStatsRaw?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0);
   if (plexHasData) {
-    // Plex data is nuttig, gebruik het
     activityMatrixDailyPlays = plexStatsRaw.dailyPlays;
-  } else if (plexStatsRaw?.source === 'plex') {
-    // Plex data is leeg, fetch Last.fm recent tracks als fallback
+  } else {
+    // Stap 2: Probeer het gecombineerde /api/activity endpoint
     try {
-      const lastfmRecent = await apiFetch('/api/recent?limit=200');
-      activityMatrixTracks = lastfmRecent?.recenttracks?.track || tracks;
-      activityMatrixDailyPlays = null;
+      const activityData = await apiFetch('/api/activity?period=7day');
+      if (activityData?.dailyPlays?.some(d => d.minutes > 0 || d.count > 0)) {
+        activityMatrixDailyPlays = activityData.dailyPlays;
+        // Gebruik ook de recentTracks als die er zijn
+        if (activityData.recentTracks?.length) {
+          activityMatrixTracks = normalizePlexRecent(activityData.recentTracks);
+        }
+      }
     } catch {
-      // Fallback mislukt, gebruik bestaande tracks
-      activityMatrixDailyPlays = null;
+      // Stap 3: Pure Last.fm fallback
+      try {
+        const lastfmRecent = await apiFetch('/api/recent?limit=200');
+        activityMatrixTracks = lastfmRecent?.recenttracks?.track || tracks;
+      } catch {
+        // Gebruik bestaande tracks als alles faalt
+      }
     }
   }
 
