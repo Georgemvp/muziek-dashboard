@@ -6,7 +6,7 @@ module.exports = function(app, deps) {
   const {
     proxyImage, getDiscover, refreshDiscover, getGaps, refreshGaps, getReleases,
     refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache,
-    getCacheAge, getPlexStatus
+    getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN
   } = deps;
 
   // ── /api/discover, /api/gaps, /api/releases ───────────────────────────────
@@ -55,8 +55,15 @@ module.exports = function(app, deps) {
   // Fallback: redirect naar de originele URL als sharp faalt (bijv. SVG).
 
   app.get('/api/img', async (req, res) => {
-    const url = (req.query.url || '').trim();
+    let url = (req.query.url || '').trim();
     if (!url) return res.status(400).json({ error: 'url parameter is verplicht' });
+
+    // Relatieve Plex-paden (bijv. /library/metadata/.../thumb/...)
+    // omzetten naar volledige URL met Plex token
+    if (url.startsWith('/') && !url.startsWith('//') && PLEX_URL && PLEX_TOKEN) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${PLEX_URL}${url}${sep}X-Plex-Token=${PLEX_TOKEN}`;
+    }
 
     // Basisvalidatie: sta alleen http(s)-URLs toe
     if (!/^https?:\/\//i.test(url)) {
