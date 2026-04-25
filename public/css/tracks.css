@@ -1,0 +1,400 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tracks View - Tabel met Plex + Last.fm tracks
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Toolbar ────────────────────────────────────────────────────────────────── */
+
+.tracks-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.tracks-toolbar .toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tracks-toolbar .toolbar-input,
+.tracks-toolbar .toolbar-select {
+  padding: 8px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: var(--font-body);
+  transition: all var(--transition-fast);
+}
+
+.tracks-toolbar .toolbar-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.tracks-toolbar .toolbar-input:focus,
+.tracks-toolbar .toolbar-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface1);
+}
+
+.tracks-toolbar .toolbar-badge {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface2);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* ── Table Container ────────────────────────────────────────────────────────── */
+
+.tracks-table-container {
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--surface2);
+  background: var(--surface1);
+}
+
+/* ── Table Styling ──────────────────────────────────────────────────────────── */
+
+.tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tracks-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--surface3);
+  z-index: 10;
+}
+
+.tracks-table th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  height: 44px;
+  line-height: 1;
+}
+
+.tracks-table th:first-child {
+  width: 30px;
+  text-align: center;
+}
+
+.tracks-table th:nth-child(2) {
+  min-width: 200px;
+}
+
+.tracks-table th:nth-child(3) {
+  min-width: 150px;
+}
+
+.tracks-table th:nth-child(4) {
+  min-width: 150px;
+}
+
+.tracks-table th:nth-child(5) {
+  width: 60px;
+  text-align: center;
+}
+
+.tracks-table th:nth-child(6) {
+  width: 80px;
+  text-align: center;
+}
+
+.tracks-table th:last-child {
+  width: 40px;
+  text-align: center;
+}
+
+/* ── Table Body Rows ────────────────────────────────────────────────────────── */
+
+.tracks-table tbody tr {
+  border-bottom: 1px solid var(--surface2);
+  transition: background-color var(--transition-fast);
+}
+
+.tracks-table tbody tr:hover {
+  background-color: var(--surface2);
+}
+
+.tracks-table td {
+  padding: 10px 8px;
+  height: 44px;
+  line-height: 1.4;
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.tracks-table td:first-child {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 30px;
+}
+
+.tracks-table td:nth-child(2) {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracks-table td:nth-child(3),
+.tracks-table td:nth-child(4) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.tracks-table td:nth-child(5) {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 60px;
+}
+
+.tracks-table td:nth-child(6) {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 80px;
+}
+
+.tracks-table td:nth-child(6) strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tracks-table td:last-child {
+  text-align: center;
+  width: 40px;
+}
+
+/* ── Plex Badge ─────────────────────────────────────────────────────────────── */
+
+.tracks-table .plex-badge {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  color: white;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.tracks-table .music-note {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* ── Play Button ────────────────────────────────────────────────────────────── */
+
+.track-play-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.track-play-btn:hover {
+  background: var(--surface2);
+  color: var(--accent);
+}
+
+.track-play-btn:active {
+  transform: scale(0.95);
+}
+
+.track-play-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Download Button ────────────────────────────────────────────────────────── */
+
+.track-download-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-download-btn:hover {
+  background: var(--surface2);
+  color: var(--accent);
+}
+
+/* ── Empty State ────────────────────────────────────────────────────────────── */
+
+.tracks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  text-align: center;
+  min-height: 300px;
+}
+
+.tracks-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.tracks-empty-message {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.tracks-empty-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ── Responsive Design ──────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .tracks-table th:nth-child(4) {
+    min-width: 120px;
+  }
+
+  .tracks-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tracks-toolbar .toolbar-group {
+    width: 100%;
+  }
+
+  .tracks-toolbar .toolbar-input {
+    flex: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .tracks-table {
+    font-size: 12px;
+  }
+
+  .tracks-table th,
+  .tracks-table td {
+    padding: 8px 6px;
+    height: 40px;
+  }
+
+  .tracks-table th:nth-child(2) {
+    min-width: 150px;
+  }
+
+  .tracks-table th:nth-child(3),
+  .tracks-table th:nth-child(4) {
+    min-width: 100px;
+  }
+
+  .track-play-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tracks-table-container {
+    border: none;
+    border-radius: 0;
+  }
+
+  .tracks-table {
+    font-size: 11px;
+  }
+
+  .tracks-table th,
+  .tracks-table td {
+    padding: 6px 4px;
+    height: 36px;
+  }
+
+  .tracks-table th {
+    font-size: 10px;
+  }
+
+  .tracks-table th:nth-child(2) {
+    min-width: 120px;
+  }
+
+  .tracks-table th:nth-child(3) {
+    display: none;
+  }
+
+  .tracks-table td:nth-child(3) {
+    display: none;
+  }
+
+  .tracks-table th:nth-child(4) {
+    display: none;
+  }
+
+  .tracks-table td:nth-child(4) {
+    display: none;
+  }
+
+  .tracks-table th:nth-child(5) {
+    width: 50px;
+    font-size: 9px;
+  }
+
+  .tracks-table th:nth-child(6) {
+    width: 50px;
+    font-size: 9px;
+  }
+
+  .track-play-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+}

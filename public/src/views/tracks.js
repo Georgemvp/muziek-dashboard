@@ -132,23 +132,25 @@ function renderToolbar() {
   const lastfmCount = tracksData?.lastfm?.length || 0;
 
   toolbar.innerHTML = `
-    <div class="toolbar-group">
-      <input type="text" id="tracks-search" placeholder="Zoek tracks..." class="toolbar-input" value="${esc(tracksSearchTerm)}">
-      <select id="tracks-sort" class="toolbar-select">
-        <option value="name" ${tracksSort === 'name' ? 'selected' : ''}>Naam</option>
-        <option value="artist" ${tracksSort === 'artist' ? 'selected' : ''}>Artiest</option>
-        <option value="album" ${tracksSort === 'album' ? 'selected' : ''}>Album</option>
-        <option value="plays" ${tracksSort === 'plays' ? 'selected' : ''}>Meest beluisterd</option>
-        <option value="duration" ${tracksSort === 'duration' ? 'selected' : ''}>Duur</option>
-      </select>
-      <select id="tracks-filter" class="toolbar-select">
-        <option value="all" ${tracksFilter === 'all' ? 'selected' : ''}>Alles (${totalTracks})</option>
-        <option value="plex-only" ${tracksFilter === 'plex-only' ? 'selected' : ''}>Alleen Plex (${plexCount})</option>
-        <option value="lastfm-only" ${tracksFilter === 'lastfm-only' ? 'selected' : ''}>Alleen Last.fm (${lastfmCount})</option>
-      </select>
-    </div>
-    <div class="toolbar-group">
-      <span class="toolbar-badge">${totalTracks} nummers</span>
+    <div class="tracks-toolbar">
+      <div class="toolbar-group">
+        <input type="text" id="tracks-search" placeholder="Zoek tracks..." class="toolbar-input" value="${esc(tracksSearchTerm)}">
+        <select id="tracks-sort" class="toolbar-select">
+          <option value="name" ${tracksSort === 'name' ? 'selected' : ''}>Naam</option>
+          <option value="artist" ${tracksSort === 'artist' ? 'selected' : ''}>Artiest</option>
+          <option value="album" ${tracksSort === 'album' ? 'selected' : ''}>Album</option>
+          <option value="plays" ${tracksSort === 'plays' ? 'selected' : ''}>Meest beluisterd</option>
+          <option value="duration" ${tracksSort === 'duration' ? 'selected' : ''}>Duur</option>
+        </select>
+        <select id="tracks-filter" class="toolbar-select">
+          <option value="all" ${tracksFilter === 'all' ? 'selected' : ''}>Alles (${totalTracks})</option>
+          <option value="plex-only" ${tracksFilter === 'plex-only' ? 'selected' : ''}>Alleen Plex (${plexCount})</option>
+          <option value="lastfm-only" ${tracksFilter === 'lastfm-only' ? 'selected' : ''}>Alleen Last.fm (${lastfmCount})</option>
+        </select>
+      </div>
+      <div class="toolbar-group">
+        <span class="toolbar-badge">${totalTracks} nummers</span>
+      </div>
     </div>
   `;
 
@@ -178,45 +180,45 @@ async function renderTracks() {
   const filtered = filterAndSort(tracksData.all);
   const zone = getSelectedZone();
 
+  if (filtered.length === 0) {
+    content.innerHTML = `
+      <div class="tracks-empty">
+        <div class="tracks-empty-icon">♪</div>
+        <div class="tracks-empty-message">Geen sporen gevonden</div>
+        <div class="tracks-empty-hint">Probeer andere zoekopdracht of filters</div>
+      </div>
+    `;
+    return;
+  }
+
   content.innerHTML = `
-    <div style="overflow-x: auto; height: 100%;">
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-        <thead style="position: sticky; top: 0; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); z-index: 10;">
+    <div class="tracks-table-container">
+      <table class="tracks-table">
+        <thead>
           <tr>
-            <th style="width: 30px; padding: 8px; text-align: center;"></th>
-            <th style="padding: 8px; text-align: left; min-width: 200px;">Nummer</th>
-            <th style="padding: 8px; text-align: left; min-width: 150px;">Artiest</th>
-            <th style="padding: 8px; text-align: left; min-width: 150px;">Album</th>
-            <th style="width: 60px; padding: 8px; text-align: center;">Duur</th>
-            <th style="width: 80px; padding: 8px; text-align: center;">Plays</th>
-            <th style="width: 40px; padding: 8px;"></th>
+            <th></th>
+            <th>Nummer</th>
+            <th>Artiest</th>
+            <th>Album</th>
+            <th>Duur</th>
+            <th>Plays</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="tracks-tbody">
           ${filtered.map((track, idx) => `
-            <tr style="border-bottom: 1px solid var(--border-color); hover-row: true;" data-idx="${idx}" data-rating-key="${track.ratingKey || ''}">
-              <td style="padding: 8px; text-align: center; color: var(--text-muted);">
-                ${track.inPlex ? plexBadge() : '<span style="font-size: 10px;">♪</span>'}
+            <tr data-idx="${idx}" data-rating-key="${track.ratingKey || ''}">
+              <td>
+                ${track.inPlex ? `<span class="plex-badge">P</span>` : '<span class="music-note">♪</span>'}
               </td>
-              <td style="padding: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <strong>${esc(track.title)}</strong>
-              </td>
-              <td style="padding: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                ${esc(track.artist)}
-              </td>
-              <td style="padding: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                ${esc(track.album)}
-              </td>
-              <td style="padding: 8px; text-align: center; color: var(--text-muted);">
-                ${formatSeconds(track.duration)}
-              </td>
-              <td style="padding: 8px; text-align: center; color: var(--text-muted);">
-                ${track.plays > 0 ? `<strong>${track.plays}</strong>` : '—'}
-              </td>
-              <td style="padding: 8px; text-align: center;">
+              <td>${esc(track.title)}</td>
+              <td>${esc(track.artist)}</td>
+              <td>${esc(track.album)}</td>
+              <td>${formatSeconds(track.duration)}</td>
+              <td>${track.plays > 0 ? `<strong>${track.plays}</strong>` : '—'}</td>
+              <td>
                 ${track.ratingKey ? `
-                  <button class="track-play-btn" data-rating-key="${track.ratingKey}" data-zone="${zone?.id || ''}"
-                    style="background: none; border: none; cursor: pointer; font-size: 14px; padding: 0; color: var(--text-muted);">▶</button>
+                  <button class="track-play-btn" data-rating-key="${track.ratingKey}" data-zone="${zone?.id || ''}">▶</button>
                 ` : ''}
               </td>
             </tr>
@@ -287,6 +289,6 @@ export async function loadTracks() {
   const content = getContent();
   if (!content) return;
 
-  content.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%;">Sporen worden geladen…</div>`;
+  showLoading();
   await loadTracksData();
 }
