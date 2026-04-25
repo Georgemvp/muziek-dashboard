@@ -106,7 +106,8 @@
 /* ── A-Z Navigation Rail ──────────────────────────────────────────────────── */
 .albums-az-rail {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 4px;
   padding: 12px 8px;
   background: var(--surface1);
@@ -115,14 +116,17 @@
   min-width: 40px;
   max-width: 60px;
   overflow-y: auto;
+  position: sticky;
+  top: 0;
+  align-self: start;
 }
 
 .albums-az-btn {
   width: 22px;
-  height: 22px;
+  height: 18px;
   padding: 0;
   background: var(--surface2);
-  border: 1px solid var(--border);
+  border: none;
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -361,10 +365,7 @@
 /* Mobile (< 480px): A-Z rail adjustments */
 @media (max-width: 479px) {
   .albums-az-rail {
-    max-width: none;
-    flex-direction: row;
-    border-left: none;
-    border-top: 1px solid var(--border);
+    display: none;
   }
 }
 
