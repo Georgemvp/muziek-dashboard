@@ -246,14 +246,34 @@ async function renderArtistsGrid() {
       // Fetch Plex library
       let plexArtists = [];
       try {
-        const plexRes = await apiFetch('/api/plex/library');
-        if (plexRes && Array.isArray(plexRes)) {
-          plexArtists = plexRes.map(a => ({
-            name: a.title,
-            thumb: a.thumb,
-            addedAt: a.addedAt || 0,
-            playcount: 0  // Will be merged with Last.fm data
-          }));
+        const plexRes = await apiFetch('/api/plex/library/all');
+        if (plexRes?.library && Array.isArray(plexRes.library)) {
+          // Extract unique artists from album tuples [artist, album, ratingKey, thumb, addedAt]
+          const artistMap = new Map();
+          plexRes.library.forEach(item => {
+            const name = item[0] || '';
+            const key = name.toLowerCase();
+            if (!artistMap.has(key)) {
+              artistMap.set(key, {
+                name: name,
+                thumb: item[3] || '',
+                addedAt: item[4] || 0,
+                playcount: 0,
+                albumCount: 1
+              });
+            } else {
+              artistMap.get(key).albumCount++;
+              // Use newest addedAt
+              if ((item[4] || 0) > artistMap.get(key).addedAt) {
+                artistMap.get(key).addedAt = item[4] || 0;
+              }
+              // Use first available thumb
+              if (!artistMap.get(key).thumb && item[3]) {
+                artistMap.get(key).thumb = item[3];
+              }
+            }
+          });
+          plexArtists = Array.from(artistMap.values());
         }
       } catch (e) {
         console.error('Error loading Plex library:', e);

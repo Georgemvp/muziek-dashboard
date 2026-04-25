@@ -22,11 +22,12 @@ function getContent() {
   return document.getElementById('content');
 }
 
-function formatSeconds(secs) {
-  if (!secs) return '-';
-  const mins = Math.floor(secs / 1000);
-  const secsRem = Math.floor((secs % 1000) / 1000);
-  return `${mins}:${secsRem.toString().padStart(2, '0')}`;
+function formatDuration(ms) {
+  if (!ms) return '-';
+  const totalSecs = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 function normalizeTrackName(name) {
@@ -39,8 +40,9 @@ function normalizeTrackName(name) {
 function mergeTrackData(plexTracks, lastfmTracks) {
   const lastfmMap = new Map();
   (lastfmTracks || []).forEach(t => {
-    const key = normalizeTrackName(`${t.name}|${t.artist}`);
-    lastfmMap.set(key, t);
+    const artistName = typeof t.artist === 'object' ? t.artist.name : t.artist;
+    const key = normalizeTrackName(`${t.name}|${artistName}`);
+    lastfmMap.set(key, { ...t, artist: artistName });
   });
 
   // Enriched Plex tracks
@@ -59,24 +61,27 @@ function mergeTrackData(plexTracks, lastfmTracks) {
   // Last.fm-only tracks (not in Plex)
   const lastfmOnly = (lastfmTracks || [])
     .filter(t => {
-      const key = normalizeTrackName(`${t.name}|${t.artist}`);
-      return !lastfmMap.get(key) || !plexTracks.find(p =>
+      const artistName = typeof t.artist === 'object' ? t.artist.name : t.artist;
+      return !plexTracks.find(p =>
         normalizeTrackName(p.title) === normalizeTrackName(t.name) &&
-        normalizeTrackName(p.artist) === normalizeTrackName(t.artist)
+        normalizeTrackName(p.artist) === normalizeTrackName(artistName)
       );
     })
-    .map(t => ({
-      ratingKey: null,
-      title: t.name,
-      artist: t.artist,
-      album: t.album || '',
-      duration: 0,
-      thumb: null,
-      source: 'lastfm',
-      plays: t.playcount,
-      url: t.url,
-      inPlex: false
-    }));
+    .map(t => {
+      const artistName = typeof t.artist === 'object' ? t.artist.name : t.artist;
+      return {
+        ratingKey: null,
+        title: t.name,
+        artist: artistName,
+        album: t.album || '',
+        duration: 0,
+        thumb: null,
+        source: 'lastfm',
+        plays: t.playcount,
+        url: t.url,
+        inPlex: false
+      };
+    });
 
   return {
     plex: enriched,
@@ -214,7 +219,7 @@ async function renderTracks() {
               <td>${esc(track.title)}</td>
               <td>${esc(track.artist)}</td>
               <td>${esc(track.album)}</td>
-              <td>${formatSeconds(track.duration)}</td>
+              <td>${formatDuration(track.duration)}</td>
               <td>${track.plays > 0 ? `<strong>${track.plays}</strong>` : '—'}</td>
               <td>
                 ${track.ratingKey ? `
@@ -233,15 +238,9 @@ async function renderTracks() {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       const ratingKey = btn.getAttribute('data-rating-key');
-      const zoneId = btn.getAttribute('data-zone');
-
-      if (!zoneId) {
-        showError('Selecteer eerst een afspeelzone');
-        return;
-      }
 
       try {
-        await playOnZone(zoneId, ratingKey, 'music');
+        await playOnZone(ratingKey, 'music');
         btn.textContent = '⏸';
         setTimeout(() => { btn.textContent = '▶'; }, 2000);
       } catch (err) {
@@ -263,7 +262,9 @@ async function loadTracksData() {
     ]);
 
     const plexTracks = plexRes.status === 'fulfilled' ? plexRes.value.tracks || [] : [];
-    const lastfmTracks = lastfmRes.status === 'fulfilled' ? lastfmRes.value.track || [] : [];
+    const lastfmTracks = lastfmRes.status === 'fulfilled'
+      ? lastfmRes.value?.toptracks?.track || lastfmRes.value?.track || []
+      : [];
 
     // Merge data
     tracksData = mergeTrackData(plexTracks, lastfmTracks);

@@ -181,18 +181,12 @@ function bindDetailViewEvents(item, tracks) {
   const plexBtn = content.querySelector('.album-detail-plex-btn');
   if (playBtn) {
     playBtn.addEventListener('click', async () => {
-      const zone = getSelectedZone();
-      if (zone) {
-        await playOnZone(item.ratingKey, 'music');
-      }
+      await playOnZone(item.ratingKey, 'music');
     });
   }
   if (plexBtn) {
     plexBtn.addEventListener('click', async () => {
-      const zone = getSelectedZone();
-      if (zone) {
-        await playOnZone(item.ratingKey, 'music');
-      }
+      await playOnZone(item.ratingKey, 'music');
     });
   }
 }
@@ -667,9 +661,10 @@ export async function handleAlbumsClick(e) {
     if (card) {
       e.stopPropagation();
       const ratingKey = card.dataset.ratingKey;
-      const zone = getSelectedZone();
-      if (zone) {
+      try {
         await playOnZone(ratingKey, 'music');
+      } catch (err) {
+        console.error('Error playing album:', err);
       }
     }
     return true;
@@ -702,7 +697,11 @@ export async function handleAlbumsClick(e) {
     if (trackEl) {
       e.stopPropagation();
       const ratingKey = trackEl.dataset.ratingKey;
-      await playOnZone(ratingKey, 'music');
+      try {
+        await playOnZone(ratingKey, 'music');
+      } catch (err) {
+        console.error('Error playing track:', err);
+      }
     }
     return true;
   }
