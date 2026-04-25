@@ -5,6 +5,19 @@
    Gebruikt uitsluitend tokens uit base.css.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ── Legacy token-aliassen voor mediasage-playlist.js inline styles ──────────
+   De wizard-view injecteert dynamisch CSS die --color-* tokens gebruikt.
+   Deze aliassen bridgen die naar de echte base.css tokens, zodat de inline
+   stijlen correct renderen zonder het JS-bestand te herstructureren. */
+:root {
+  --color-accent:         var(--accent);
+  --color-bg:             var(--bg-primary);
+  --color-card:           var(--card-bg);
+  --color-text:           var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border:         var(--border);
+}
+
 
 /* ══════════════════════════════════════════════════════════════════
    1. LANDING PAGE  (.ms-landing)

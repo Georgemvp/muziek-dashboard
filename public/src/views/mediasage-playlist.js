@@ -303,7 +303,7 @@ function injectStyles() {
     .ms-btn:disabled { opacity: .4; cursor: not-allowed; }
     .ms-btn:not(:disabled):hover { opacity: .82; }
     .ms-btn:not(:disabled):active { transform: scale(.97); }
-    .ms-btn-primary   { background: var(--color-accent); color: #fff; }
+    .ms-btn-primary   { background: var(--accent); color: #fff; }
     .ms-btn-secondary {
       background: var(--color-card);
       color: var(--color-text);
