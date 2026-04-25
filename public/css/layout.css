@@ -37,6 +37,7 @@
   padding: 20px 16px 16px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   font-size: 16px;
   font-weight: 700;
   color: #222;
@@ -44,10 +45,37 @@
   letter-spacing: 0.3px;
 }
 
+.brand-name {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+}
+
 .sidebar-brand-icon {
   width: 28px;
   height: 28px;
   flex-shrink: 0;
+}
+
+.sidebar-settings-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-settings-btn:hover {
+  color: var(--text-primary);
+  background: #f0f0f0;
 }
 
 /* Navigatiecontainer */
@@ -63,16 +91,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 0;
   border: none;
   background: transparent;
   color: #555;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   font-family: var(--font-body);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   width: 100%;
   text-align: left;
   text-decoration: none;
@@ -80,13 +108,13 @@
 }
 
 .nav-item:hover {
-  background: #f0f0f0;
-  color: #333;
+  background: transparent;
+  color: var(--accent);
 }
 
 .nav-item.active {
-  background: #f3f0ff;
-  color: #7c3aed;
+  background: transparent;
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -128,13 +156,46 @@
 
 /* Sectie-titel (uppercase label) */
 .sidebar-section-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: #aaa;
-  padding: 12px 16px 6px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  padding: 24px 16px 8px;
   flex-shrink: 0;
+}
+
+/* Sectie-titel met action button (voor playlists) */
+.sidebar-section-title-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  padding: 24px 16px 8px;
+  flex-shrink: 0;
+}
+
+.sidebar-add-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 300;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-add-btn:hover {
+  color: var(--accent);
 }
 
 /* Footer (onderaan sidebar, pushed by margin-top: auto) */

@@ -11,6 +11,16 @@ const viewMeta = {
   gaps:        { title: 'Muziek · Gaps' },
   downloads:   { title: 'Muziek · Downloads' },
   nu:          { title: 'Muziek · Nu Bezig' },
+  genres:      { title: 'Muziek · Genres' },
+  radio:       { title: 'Muziek · Live Radio' },
+  'listen-later': { title: 'Muziek · Listen Later' },
+  tags:        { title: 'Muziek · Tags' },
+  history:     { title: 'Muziek · History' },
+  albums:      { title: 'Muziek · Albums' },
+  artists:     { title: 'Muziek · Artists' },
+  tracks:      { title: 'Muziek · Tracks' },
+  composers:   { title: 'Muziek · Composers' },
+  folders:     { title: 'Muziek · Folders' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -21,6 +31,16 @@ const viewLoaders = {
   gaps:        () => import('./views/gaps.js'),
   downloads:   () => import('./views/downloads.js'),
   nu:          () => import('./views/nu.js'),
+  genres:      () => import('./views/genres.js'),
+  radio:       () => import('./views/radio.js'),
+  'listen-later': () => import('./views/listen-later.js'),
+  tags:        () => import('./views/tags.js'),
+  history:     () => import('./views/history.js'),
+  albums:      () => import('./views/albums.js'),
+  artists:     () => import('./views/artists.js'),
+  tracks:      () => import('./views/tracks.js'),
+  composers:   () => import('./views/composers.js'),
+  folders:     () => import('./views/folders.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -79,6 +99,16 @@ export async function switchView(viewName) {
       viewName === 'ontdek'      ? viewModule.loadOntdek :
       viewName === 'downloads'   ? viewModule.loadDownloads :
       viewName === 'nu'          ? viewModule.loadNu :
+      viewName === 'genres'      ? viewModule.loadGenres :
+      viewName === 'radio'       ? viewModule.loadRadio :
+      viewName === 'listen-later' ? viewModule.loadListenLater :
+      viewName === 'tags'        ? viewModule.loadTags :
+      viewName === 'history'     ? viewModule.loadHistory :
+      viewName === 'albums'      ? viewModule.loadAlbums :
+      viewName === 'artists'     ? viewModule.loadArtists :
+      viewName === 'tracks'      ? viewModule.loadTracks :
+      viewName === 'composers'   ? viewModule.loadComposers :
+      viewName === 'folders'     ? viewModule.loadFolders :
       null;
 
     if (renderFn) {

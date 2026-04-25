@@ -25,10 +25,18 @@
   <aside class="sidebar" id="sidebar" data-collapsed="false" aria-label="Hoofdnavigatie">
 
     <div class="sidebar-brand" aria-label="Muziek app">
-      <span class="brand-name">Muziek</span>
+      <span class="brand-name">muziek</span>
+      <button class="sidebar-settings-btn" title="Instellingen" aria-label="Instellingen openen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24"/><path d="M1 12h6m6 0h6"/><path d="M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+        </svg>
+      </button>
     </div>
 
     <nav class="sidebar-nav" aria-label="Navigatieonderdelen">
+
+      <!-- ═══════ BROWSE ═══════ -->
+      <div class="sidebar-section-title">Browse</div>
 
       <button class="nav-item active" data-view="home" aria-label="Home" aria-current="page">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -40,47 +48,99 @@
         <span class="nav-label">Home</span>
       </button>
 
-      <button class="nav-item" data-view="bibliotheek" aria-label="Bibliotheek">
+      <button class="nav-item" data-view="genres" aria-label="Genres">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+          <path d="M3 21v-5h5"/>
+        </svg>
+        <span class="nav-label">Genres</span>
+      </button>
+
+      <button class="nav-item" data-view="radio" aria-label="Live Radio">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M12 9v3m4.22-8.22A9 9 0 1 0 20.22 15.78"/>
+        </svg>
+        <span class="nav-label">Live Radio</span>
+      </button>
+
+      <button class="nav-item" data-view="listen-later" aria-label="Listen Later">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="nav-label">Listen Later</span>
+      </button>
+
+      <button class="nav-item" data-view="tags" aria-label="Tags">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 2H2v10a10 10 0 0 0 20 0V2H12z"/><path d="M12 12v6"/>
+        </svg>
+        <span class="nav-label">Tags</span>
+      </button>
+
+      <button class="nav-item" data-view="history" aria-label="History">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="nav-label">History</span>
+      </button>
+
+      <!-- ═══════ MY LIBRARY ═══════ -->
+      <div class="sidebar-section-title">My Library</div>
+
+      <button class="nav-item" data-view="albums" aria-label="Albums">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><circle cx="12" cy="12" r="4"/>
+        </svg>
+        <span class="nav-label">Albums</span>
+      </button>
+
+      <button class="nav-item" data-view="artists" aria-label="Artists">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span class="nav-label">Artists</span>
+      </button>
+
+      <button class="nav-item" data-view="tracks" aria-label="Tracks">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M9 18V5l12-2v13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-2a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z"/>
+        </svg>
+        <span class="nav-label">Tracks</span>
+      </button>
+
+      <button class="nav-item" data-view="composers" aria-label="Composers">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 14h6v6H9z"/>
+        </svg>
+        <span class="nav-label">Composers</span>
+      </button>
+
+      <button class="nav-item" data-view="folders" aria-label="Folders">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              aria-hidden="true">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
-        <span class="nav-label">Bibliotheek</span>
-      </button>
-
-      <button class="nav-item" data-view="ontdek" aria-label="Ontdek nieuwe muziek">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/>
-          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-        </svg>
-        <span class="nav-label">Ontdek</span>
-        <span class="nav-badge" id="badge-releases" style="display:none" aria-label="Nieuwe releases">0</span>
-      </button>
-
-      <button class="nav-item" data-view="gaps" aria-label="Ontbrekende albums (Gaps)">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="m21 21-4.35-4.35"/>
-        </svg>
-        <span class="nav-label">Gaps</span>
-        <span class="nav-badge" id="badge-gaps" aria-label="Aantal gaps">?</span>
-      </button>
-
-      <button class="nav-item" data-view="downloads" aria-label="Downloads en download-queue">
-        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span class="nav-label">Downloads</span>
-        <span class="nav-badge" id="badge-tidarr-queue" style="display:none" aria-label="Items in download-queue">0</span>
+        <span class="nav-label">Folders</span>
       </button>
 
     </nav>
@@ -89,7 +149,10 @@
 
     <!-- Plex afspeellijsten (dynamisch gevuld door JS) -->
     <div class="sidebar-section">
-      <div class="sidebar-section-title" aria-label="Afspeellijsten sectie">Afspeellijsten</div>
+      <div class="sidebar-section-title-with-action">
+        <span>Playlists</span>
+        <button class="sidebar-add-btn" title="Afspeellijst toevoegen" aria-label="Afspeellijst toevoegen">+</button>
+      </div>
       <div id="sidebar-playlists" role="list" aria-label="Plex afspeellijsten"></div>
     </div>
 
@@ -121,14 +184,6 @@
         </select>
       </label>
 
-      <div class="sidebar-status" aria-label="Plex verbindingsstatus">
-        <span class="status-dot" id="plex-dot" aria-hidden="true"></span>
-        <span id="plex-status-text">Plex</span>
-      </div>
-      <div class="sidebar-status" aria-label="Tidarr verbindingsstatus">
-        <span class="status-dot" id="tidarr-dot" aria-hidden="true"></span>
-        <span id="tidarr-status-text">Tidarr</span>
-      </div>
       <button class="sidebar-btn" id="theme-toggle" title="Wissel thema" aria-label="Wissel tussen licht en donker thema">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
       </button>
