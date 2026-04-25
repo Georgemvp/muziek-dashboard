@@ -17,7 +17,7 @@ const express    = require('express');
 const compression = require('compression');
 const path       = require('path');
 const rateLimit  = require('express-rate-limit');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const app        = express();
 const PORT    = process.env.PORT || 80;
 
@@ -32,15 +32,26 @@ const MEDIASAGE_BASE = (process.env.MEDIASAGE_URL || 'http://localhost:5765').re
 logger.info({ mediasageUrl: MEDIASAGE_BASE }, 'MediaSage proxy configured');
 
 app.use('/mediasage', createProxyMiddleware({
-  target:       MEDIASAGE_BASE,
-  changeOrigin: true,
-  pathRewrite:  { '^/mediasage': '' },
+  target:              MEDIASAGE_BASE,
+  changeOrigin:        true,
+  pathRewrite:         { '^/mediasage': '' },
+  selfHandleResponse:  true,
   on: {
-    proxyRes: (proxyRes) => {
+    // Herschrijf HTML-responses: /static/ → /mediasage/static/
+    // MediaSage's index.html gebruikt absolute paden (/static/style.css) die de
+    // browser anders direct bij Express opvraagt i.p.v. via de proxy.
+    proxyRes: responseInterceptor(async (buffer, proxyRes, req, res) => {
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['x-content-type-options'];
-    },
+
+      const ct = (proxyRes.headers['content-type'] || '');
+      if (ct.includes('text/html')) {
+        return buffer.toString('utf8')
+          .replace(/(['"\s(])\/static\//g, '$1/mediasage/static/');
+      }
+      return buffer;
+    }),
     error: (err, req, res) => {
       logger.error({
         err: err.message,
