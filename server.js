@@ -37,19 +37,30 @@ app.use('/mediasage', createProxyMiddleware({
   pathRewrite:         { '^/mediasage': '' },
   selfHandleResponse:  true,
   on: {
-    // Herschrijf HTML-responses: /static/ → /mediasage/static/
-    // MediaSage's index.html gebruikt absolute paden (/static/style.css) die de
-    // browser anders direct bij Express opvraagt i.p.v. via de proxy.
+    // Herschrijf responses zodat absolute paden via de proxy lopen.
+    // MediaSage's index.html + app.js gebruiken /static/ en /api/ als absolute
+    // paden — de browser stuurt die anders rechtstreeks naar Express root.
     proxyRes: responseInterceptor(async (buffer, proxyRes, req, res) => {
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['x-content-type-options'];
 
       const ct = (proxyRes.headers['content-type'] || '');
+
       if (ct.includes('text/html')) {
+        // HTML: herschrijf /static/ en /api/ verwijzingen
         return buffer.toString('utf8')
-          .replace(/(['"\s(])\/static\//g, '$1/mediasage/static/');
+          .replace(/(['"\s(])\/static\//g, '$1/mediasage/static/')
+          .replace(/(['"\s(])\/api\//g,    '$1/mediasage/api/');
       }
+
+      if (ct.includes('javascript')) {
+        // JS-bundle: herschrijf fetch/XHR-paden naar /api/
+        // Geciteerde strings ("/api/... of '/api/... of `/api/...) zijn API-calls
+        return buffer.toString('utf8')
+          .replace(/(['"`])\/api\//g, '$1/mediasage/api/');
+      }
+
       return buffer;
     }),
     error: (err, req, res) => {
