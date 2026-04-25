@@ -10,14 +10,14 @@
    ══════════════════════════════════════════════════════════════════ */
 .app-shell {
   display: grid;
-  grid-template-columns: 0 1fr;
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
   height: 100dvh;
   overflow: hidden;
   transition: grid-template-columns var(--transition-normal);
 }
 
 .app-shell.sidebar-open {
-  grid-template-columns: 0 1fr;
+  grid-template-columns: var(--sidebar-width) 1fr;
 }
 
 
@@ -27,23 +27,18 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 0;
+  width: var(--sidebar-collapsed);
   height: 100dvh;
-  overflow: hidden;
+  overflow-y: auto;
   background: #f8f8f8;
   border-right: 1px solid #e5e5e5;
   transition: width var(--transition-normal);
   z-index: 100;
   flex-shrink: 0;
-  position: fixed;
-  top: 0;
-  left: 0;
 }
 
 .app-shell.sidebar-open .sidebar {
   width: var(--sidebar-width);
-  z-index: 200;
-  box-shadow: 2px 0 12px rgba(0,0,0,0.15);
 }
 
 /* Brand / logo balk */
@@ -327,22 +322,20 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
-   SIDEBAR OVERLAY — desktop + mobiel achtergrond dim
+   SIDEBAR OVERLAY — mobiel achtergrond dim
    ══════════════════════════════════════════════════════════════════ */
 .sidebar-overlay {
-  display: block;
+  display: none;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 199;
   opacity: 0;
-  pointer-events: none;
   transition: opacity var(--transition-normal);
 }
 
 .sidebar-overlay.visible {
   opacity: 1;
-  pointer-events: auto;
 }
 
 

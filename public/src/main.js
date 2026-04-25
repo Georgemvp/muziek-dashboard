@@ -25,6 +25,36 @@ import {
 import { getCached, setCache } from './cache.js';
 import { p } from './helpers.js';
 
+// ── Theme initialization ────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.title = theme === 'dark' ? 'Schakel naar licht' : 'Schakel naar donker';
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  applyTheme(saved || 'light');
+}
+
+document.getElementById('theme-toggle')?.addEventListener('click', () => {
+  const current = document.documentElement.dataset.theme;
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem('theme', next);
+});
+
+// ── Download quality initialization ────────────────────────────────────────
+function initDownloadQuality() {
+  const saved = localStorage.getItem('downloadQuality') || 'high';
+  const sel = document.getElementById('download-quality');
+  if (sel && state.VALID_QUALITIES.includes(saved)) sel.value = saved;
+}
+
+document.getElementById('download-quality')?.addEventListener('change', e => {
+  localStorage.setItem('downloadQuality', e.target.value);
+});
+
 // ── Reduce motion ──────────────────────────────────────────────────────────
 if (prefersReducedMotion) {
   document.documentElement.setAttribute('data-reduce-motion', 'true');
@@ -57,6 +87,10 @@ function prefetchBackgroundData() {
 
 // ── Bootstrap application ──────────────────────────────────────────────────
 async function start() {
+  // Initialize state and storage
+  initTheme();
+  initDownloadQuality();
+
   // Initialize components
   initSidebar();
   initRouter();
