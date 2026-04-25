@@ -286,8 +286,8 @@ module.exports = function(app, deps) {
     }
 
     try {
-      // ── Parallel fetch: artist info, wikipedia, similar artists, gaps ──────────
-      const [infoR, wikiR, similarR, gapsR] = await Promise.allSettled([
+      // ── Parallel fetch: artist info, wikipedia, similar artists, gaps, top tracks ──────────
+      const [infoR, wikiR, similarR, gapsR, tracksR] = await Promise.allSettled([
         // Artist info: Deezer image + Last.fm albums + MusicBrainz metadata
         (async () => {
           const [deezerR, albumsR, mbzR] = await Promise.allSettled([
@@ -364,7 +364,27 @@ module.exports = function(app, deps) {
         getSimilarArtists(name, 6),
 
         // Artist-specific gaps
-        getArtistGaps(name)
+        getArtistGaps(name),
+
+        // Top tracks
+        (async () => {
+          try {
+            const tracksData = await lfm({ method: 'artist.gettoptracks', artist: name, limit: 10 }, { includeUser: false });
+            const tracks = (tracksData?.toptracks?.track || [])
+              .filter(t => t.name && t.name !== '(null)' && t.name !== '[unknown]')
+              .slice(0, 10)
+              .map(t => ({
+                name: t.name,
+                playcount: parseInt(t.playcount) || 0,
+                listeners: parseInt(t.listeners) || 0,
+                url: t.url || null
+              }));
+            return tracks;
+          } catch (e) {
+            console.warn(`Top tracks API failed for "${name}":`, e.message);
+            return [];
+          }
+        })()
       ]);
 
       // ── Extract results ───────────────────────────────────────────────────
@@ -395,6 +415,12 @@ module.exports = function(app, deps) {
         gaps = { error: gapsR.reason.message, owned: [], missing: [] };
       }
 
+      // ── Get top tracks data ────────────────────────────────────────────────
+      let topTracks = [];
+      if (tracksR.status === 'fulfilled' && tracksR.value) {
+        topTracks = tracksR.value;
+      }
+
       // ── Combine all results ───────────────────────────────────────────────
       const result = {
         name,
@@ -404,7 +430,8 @@ module.exports = function(app, deps) {
           artists: similar,
           count: similar.length
         },
-        gaps
+        gaps,
+        topTracks
       };
 
       // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
@@ -420,7 +447,8 @@ module.exports = function(app, deps) {
         info: { image: null, imageXl: null, albums: [], inPlex: false, country: null, startYear: null, tags: [], mbid: null },
         wikipedia: null,
         similar: { artists: [], count: 0 },
-        gaps: { status: 'error', message: e.message }
+        gaps: { status: 'error', message: e.message },
+        topTracks: []
       });
     }
   });

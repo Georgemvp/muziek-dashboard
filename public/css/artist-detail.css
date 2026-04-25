@@ -307,6 +307,102 @@
   margin-top: 0.25rem;
 }
 
+/* ── Top Tracks List ────────────────────────────────────────────────────────── */
+
+.detail-tracks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--surface2);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--surface2);
+  background: var(--surface1);
+  transition: background 0.2s;
+}
+
+.track-row:last-child {
+  border-bottom: none;
+}
+
+.track-row:hover {
+  background: var(--surface2);
+}
+
+.track-rank {
+  flex-shrink: 0;
+  width: 2rem;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.track-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.track-name {
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.track-playcount {
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.track-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.track-play-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.track-play-btn:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.track-play-btn:active {
+  transform: scale(0.95);
+}
+
+.track-play-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Similar Artists Row ─────────────────────────────────────────────────────── */
 
 .detail-similar-row {

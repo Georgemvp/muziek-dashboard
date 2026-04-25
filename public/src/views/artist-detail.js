@@ -48,7 +48,7 @@ export async function loadArtistDetail() {
  */
 function renderArtistDetail(data) {
   const content = document.getElementById('content');
-  const { name, info, wikipedia, similar, gaps } = data;
+  const { name, info, wikipedia, similar, gaps, topTracks } = data;
 
   // ────────────────────────────────────────────────────────────────────────
   // 1. HERO SECTION
@@ -129,7 +129,26 @@ function renderArtistDetail(data) {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // 3. ALBUMS SECTION (albums in je Plex)
+  // 3. TOP TRACKS SECTION
+  // ────────────────────────────────────────────────────────────────────────
+
+  let tracksHtml = '';
+  if (topTracks && topTracks.length > 0) {
+    tracksHtml = `
+      <section class="detail-section">
+        <div class="section-header">
+          <h2>Populairste nummers</h2>
+          <span class="section-count">${topTracks.length}</span>
+        </div>
+        <div class="detail-tracks-list">
+          ${topTracks.map((t, idx) => renderTrackRow(name, t, idx + 1)).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 4. ALBUMS SECTION (albums in je Plex)
   // ────────────────────────────────────────────────────────────────────────
 
   let albumsHtml = '';
@@ -151,7 +170,7 @@ function renderArtistDetail(data) {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // 4. GAPS SECTION (missing albums)
+  // 5. GAPS SECTION (missing albums)
   // ────────────────────────────────────────────────────────────────────────
 
   let gapsHtml = '';
@@ -174,7 +193,7 @@ function renderArtistDetail(data) {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // 5. SIMILAR ARTISTS SECTION
+  // 6. SIMILAR ARTISTS SECTION
   // ────────────────────────────────────────────────────────────────────────
 
   let similarHtml = '';
@@ -204,6 +223,7 @@ function renderArtistDetail(data) {
       ${heroHtml}
       <div class="detail-content">
         ${wikiHtml}
+        ${tracksHtml}
         ${albumsHtml}
         ${gapsHtml}
         ${similarHtml}
@@ -218,9 +238,9 @@ function renderArtistDetail(data) {
   // ────────────────────────────────────────────────────────────────────────
 
   // Back button
-  const backBtn = content.querySelector('.detail-back-btn');
-  if (backBtn) {
-    backBtn.addEventListener('click', async e => {
+  const backBtnEl = content.querySelector('.detail-back-btn');
+  if (backBtnEl) {
+    backBtnEl.addEventListener('click', async e => {
       e.preventDefault();
       const prevView = state.previousView || 'home';
       await switchView(prevView);
@@ -319,6 +339,34 @@ function renderGapCard(artistName, gap) {
       <div class="album-info">
         <div class="album-name">${esc(gap.name)}</div>
         <div class="album-meta">${typeLabel} ${yearHtml.trim()}</div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render a track row in the top tracks list
+ */
+function renderTrackRow(artistName, track, position) {
+  const playcountHtml = track.playcount > 0
+    ? `<span class="track-playcount" title="${track.playcount} keer beluisterd">${fmt(track.playcount)} × ♪</span>`
+    : '';
+
+  const playBtn = `
+    <button class="track-play-btn" data-artist="${esc(artistName)}" data-track="${esc(track.name)}" title="Speel voorbeeld af">
+      ▶
+    </button>
+  `;
+
+  return `
+    <div class="track-row">
+      <div class="track-rank">${position}</div>
+      <div class="track-info">
+        <div class="track-name">${esc(track.name)}</div>
+        ${playcountHtml}
+      </div>
+      <div class="track-actions">
+        ${playBtn}
       </div>
     </div>
   `;
