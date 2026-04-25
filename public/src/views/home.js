@@ -7,7 +7,6 @@ import { apiFetch, plexFirstFetch } from '../api.js';
 import { switchView } from '../router.js';
 import { esc, proxyImg, gradientFor } from '../helpers.js';
 import { state } from '../state.js';
-import { openArtistPanel } from '../components/panel.js';
 
 // ── Kleuren voor genre donut (blauw-paars spectrum) ───────────────────────
 const GENRE_COLORS = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb', '#9fa8da'];
@@ -1233,7 +1232,7 @@ async function reloadStats(period) {
 
   // Klik-handlers voor artiesten opnieuw koppelen
   artistsList?.querySelectorAll('[data-artist]').forEach(item => {
-    item.addEventListener('click', () => openArtistPanel(item.dataset.artist));
+    item.addEventListener('click', () => switchView('artist-detail', { name: item.dataset.artist }));
   });
 
   // Blok 1: Genres (async, update chart + legend)
@@ -1348,7 +1347,7 @@ async function reloadAllWidgetsForPeriod(period) {
         artistsWrapper.querySelectorAll('.home-artist-circle-item').forEach(item => {
           item.addEventListener('click', () => {
             const name = item.dataset.artist;
-            if (name) openArtistPanel(name);
+            if (name) switchView('artist-detail', { name });
           });
         });
       }
@@ -1579,7 +1578,7 @@ export async function loadHome() {
 
   // Top-artists in WYLBT → open artiest panel
   content.querySelectorAll('#home-wylbt-artists-list [data-artist]').forEach(item => {
-    item.addEventListener('click', () => openArtistPanel(item.dataset.artist));
+    item.addEventListener('click', () => switchView('artist-detail', { name: item.dataset.artist }));
   });
 
   // Recent "MORE" knop
@@ -1649,11 +1648,11 @@ export async function loadHome() {
     });
   });
 
-  // Artiest cirkels → open artiest panel
+  // Artiest cirkels → open artist detail view
   content.querySelectorAll('.home-artist-circle-item').forEach(item => {
     item.addEventListener('click', () => {
       const name = item.dataset.artist;
-      if (name) openArtistPanel(name);
+      if (name) switchView('artist-detail', { name });
     });
   });
 
@@ -1711,7 +1710,7 @@ export async function loadHome() {
   content.querySelectorAll('.home-rec-artist').forEach(item => {
     item.addEventListener('click', () => {
       const name = item.dataset.artist;
-      if (name) openArtistPanel(name);
+      if (name) switchView('artist-detail', { name });
     });
   });
 

@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { esc, fmt, proxyImg, showLoading, showError } from '../helpers.js';
 import { playOnZone, getSelectedZone } from '../components/plexRemote.js';
-import { openArtistPanel } from '../components/panel.js';
+import { switchView } from '../router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module-level state
@@ -432,7 +432,7 @@ async function handleRowClick(e) {
   if (artistLink) {
     e.stopPropagation();
     const artist = artistLink.getAttribute('data-artist');
-    if (artist) openArtistPanel(artist);
+    if (artist) switchView('artist-detail', { name: artist });
     return;
   }
 

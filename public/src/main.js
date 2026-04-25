@@ -10,7 +10,6 @@ import { initRouter, switchView } from './router.js';
 import { initPlayer } from './components/player.js';
 import { initZonePicker, playOnZone, getSelectedZone } from './components/plexRemote.js';
 import { loadWishlistState, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
-import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { playPreview } from './components/player.js';
 import './components/search.js';  // Standalone event listeners
 import './events.js';  // Global event delegation

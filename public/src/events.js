@@ -3,7 +3,6 @@ import { state } from './state.js';
 import { invalidate } from './cache.js';
 import { p } from './helpers.js';
 import { loadNu, loadRecent, clearDashboardPolling } from './views/nu.js';
-import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { loadPlexStatus } from './api.js';
 import { contentEl, runWithSection } from './helpers.js';
@@ -190,9 +189,6 @@ document.addEventListener('input', e => {
   }, 400);
 });
 
-// ── Panel sluiten ─────────────────────────────────────────────────────────
-document.getElementById('panel-close')?.addEventListener('click', closeArtistPanel);
-
 // ── Globale event delegation (klikken) ────────────────────────────────────
 // Bevat ALLEEN handlers voor cross-view events:
 // - Albums clicks (albums-specifiek: kaarten, play, artist, back)
@@ -230,23 +226,18 @@ document.addEventListener('click', async e => {
   // NOTE: Discover toggle handlers (.disc-toggle-btn) zitten nu in ontdek.js
   // ────────────────────────────────────────────────────────────────────────────
 
-  // Artist detail view (opens full artist page)
-  const detailLink = e.target.closest('[data-artist-detail]');
-  if (detailLink?.dataset.artistDetail) {
-    e.preventDefault();
-    switchView('artist-detail', { name: detailLink.dataset.artistDetail });
-    return;
-  }
-
-  // Artiest-link → open panel
-  const link = e.target.closest('[data-artist]');
-  if (link?.dataset.artist && !link.classList.contains('bookmark-btn')) {
-    if (link.classList.contains('search-result-item')) {
-      document.getElementById('search-results').classList.remove('open');
-      document.getElementById('search-input').value = '';
+  // Artiest-link → open artist detail view
+  const link = e.target.closest('[data-artist], [data-artist-detail]');
+  if (link && !link.classList.contains('bookmark-btn')) {
+    const artistName = link.dataset.artist || link.dataset.artistDetail;
+    if (artistName) {
+      if (link.classList.contains('search-result-item')) {
+        document.getElementById('search-results').classList.remove('open');
+        document.getElementById('search-input').value = '';
+      }
+      switchView('artist-detail', { name: artistName });
+      return;
     }
-    openArtistPanel(link.dataset.artist);
-    return;
   }
 
   // Bookmark toggle
@@ -272,10 +263,6 @@ document.addEventListener('click', async e => {
     loadWishlist();
     return;
   }
-
-  // Soortgelijke artiest chip
-  const chip = e.target.closest('.panel-similar-chip[data-artist]');
-  if (chip) { openArtistPanel(chip.dataset.artist); return; }
 
   // Download-knop
   const dlBtn = e.target.closest('.download-btn, .tidal-dl-btn');
@@ -378,17 +365,12 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  // Panel overlay backdrop
-  if (e.target === document.getElementById('panel-overlay')) {
-    closeArtistPanel();
-    return;
-  }
 });
+
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────
 document.addEventListener('keydown', async e => {
   if (e.key === 'Escape') {
-    closeArtistPanel();
     document.getElementById('search-results').classList.remove('open');
     return;
   }

@@ -7,6 +7,7 @@ import {
   esc, fmt, initials, gradientFor, tagsHtml, proxyImg,
   bookmarkBtn, showLoading, showError
 } from '../helpers.js';
+import { switchView } from '../router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module state
@@ -15,8 +16,6 @@ import {
 let artistsData = null;        // combined data from Plex + Last.fm
 let artistsSearchTerm = '';    // search filter
 let artistsSort = 'name';      // sort mode: name, playcount, recent
-let detailViewData = null;     // current artist detail view data
-let scrollPosition = 0;        // saved scroll position
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Helper functions
@@ -135,103 +134,6 @@ function filterAndSort(artists) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Detail view
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function showArtistDetail(artist) {
-  detailViewData = artist;
-  const content = getContent();
-  if (!content) return;
-
-  // Save scroll position
-  scrollPosition = content.scrollTop || 0;
-
-  // Render detail view
-  await renderArtistDetailView();
-}
-
-function hideArtistDetail() {
-  detailViewData = null;
-  const content = getContent();
-  if (content) {
-    // Restore grid view
-    const filtered = filterAndSort(artistsData || []);
-    renderArtistsGrid().then(() => {
-      // Restore scroll position
-      setTimeout(() => {
-        content.scrollTop = scrollPosition;
-      }, 0);
-    });
-  }
-}
-
-async function renderArtistDetailView() {
-  const content = getContent();
-  if (!content || !detailViewData) return;
-
-  const artist = detailViewData;
-  const coverSrc = artist.thumb ? proxyImg(artist.thumb, 320) : null;
-
-  // Try to load artist info from Last.fm
-  let artistInfo = { genres: artist.genres || [], bio: '' };
-  try {
-    const res = await apiFetch(`/api/artist/${encodeURIComponent(artist.name)}/info`);
-    if (res) {
-      artistInfo = {
-        genres: res.genres || artist.genres || [],
-        bio: res.bio || '',
-        playcount: res.playcount || artist.playcount || 0
-      };
-    }
-  } catch (e) {
-    console.warn('Error loading artist info:', e);
-  }
-
-  const bioHtml = artistInfo.bio
-    ? `<div class="artist-detail-bio" style="margin: 24px 0; font-size: 14px; line-height: 1.6; color: var(--text-secondary);">
-         ${esc(artistInfo.bio.substring(0, 300))}${artistInfo.bio.length > 300 ? '...' : ''}
-       </div>`
-    : '';
-
-  const genresHtml = artistInfo.genres && artistInfo.genres.length > 0
-    ? `<div style="margin: 12px 0;">${tagsHtml(artistInfo.genres.slice(0, 5), 5)}</div>`
-    : '';
-
-  content.innerHTML = `
-    <div class="artist-detail-view">
-      <!-- Header: Back button -->
-      <button class="artist-detail-back" title="Terug naar artiesten">← Alle artiesten</button>
-
-      <!-- Hero Section -->
-      <div class="artist-detail-hero">
-        <div class="artist-detail-cover-wrapper">
-          ${coverSrc
-            ? `<img src="${esc(coverSrc)}" alt="${esc(artist.name)}" class="artist-detail-cover">`
-            : `<div class="artist-detail-cover-ph" style="background:${gradientFor(artist.name)}">${initials(artist.name)}</div>`
-          }
-        </div>
-        <div class="artist-detail-info">
-          <h1>${esc(artist.name)}</h1>
-          ${genresHtml}
-          <div class="artist-detail-stats">
-            ${artistInfo.playcount ? `<span>${fmt(artistInfo.playcount)} plays</span>` : ''}
-          </div>
-          <div class="artist-detail-actions">
-            ${bookmarkBtn('artist', artist.name, artist.name, artist.thumb || '')}
-          </div>
-        </div>
-      </div>
-
-      <!-- Bio -->
-      ${bioHtml}
-    </div>
-  `;
-
-  // Attach back button listener
-  content.querySelector('.artist-detail-back')?.addEventListener('click', hideArtistDetail);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Render grid
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -331,8 +233,7 @@ async function renderArtistsGrid() {
         const card = btn.closest('.artist-card');
         const artistName = card?.dataset.artistName;
         if (artistName) {
-          const artist = artistsData.find(a => a.name === artistName);
-          if (artist) showArtistDetail(artist);
+          switchView('artist-detail', { name: artistName });
         }
       });
     });
@@ -342,8 +243,7 @@ async function renderArtistsGrid() {
         if (e.target.closest('.artist-actions, .artist-detail-btn')) return;
         const artistName = card.dataset.artistName;
         if (artistName) {
-          const artist = artistsData.find(a => a.name === artistName);
-          if (artist) showArtistDetail(artist);
+          switchView('artist-detail', { name: artistName });
         }
       });
     });
@@ -363,7 +263,6 @@ export async function loadArtists() {
   // Reset state
   artistsSearchTerm = '';
   artistsSort = 'name';
-  detailViewData = null;
 
   // Try to load from cache first
   const cached = getCached('artists', 30 * 60 * 1000);
