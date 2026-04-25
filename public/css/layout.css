@@ -10,13 +10,14 @@
    ══════════════════════════════════════════════════════════════════ */
 .app-shell {
   display: grid;
-  grid-template-columns: 0 1fr;
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
   height: 100dvh;
   overflow: hidden;
+  transition: grid-template-columns var(--transition-normal);
 }
 
 .app-shell.sidebar-open {
-  grid-template-columns: 0 1fr;
+  grid-template-columns: var(--sidebar-width) 1fr;
 }
 
 
@@ -26,22 +27,18 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 0;
+  width: var(--sidebar-collapsed);
   height: 100dvh;
-  overflow: hidden;
+  overflow-y: auto;
   background: #f8f8f8;
   border-right: 1px solid #e5e5e5;
   transition: width var(--transition-normal);
-  z-index: 200;
+  z-index: 100;
   flex-shrink: 0;
 }
 
 .app-shell.sidebar-open .sidebar {
   width: var(--sidebar-width);
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Brand / logo balk */
@@ -328,19 +325,17 @@
    SIDEBAR OVERLAY — mobiel achtergrond dim
    ══════════════════════════════════════════════════════════════════ */
 .sidebar-overlay {
-  display: block;
+  display: none;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 199;
   opacity: 0;
-  pointer-events: none;
   transition: opacity var(--transition-normal);
 }
 
 .sidebar-overlay.visible {
   opacity: 1;
-  pointer-events: auto;
 }
 
 
@@ -779,13 +774,17 @@
     grid-template-columns: 1fr;
   }
 
-  /* Sidebar off-canvas links op mobiel — gebruik transform ipv width */
+  /* Sidebar off-canvas links op mobiel */
   .sidebar {
-    width: var(--sidebar-width) !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
     transform: translateX(-100%);
+    z-index: 200;
     box-shadow: none;
+    width: var(--sidebar-width) !important;
     transition: transform var(--transition-normal);
-    overflow-y: auto;
   }
 
   /* Open state op mobiel */
@@ -794,7 +793,10 @@
     box-shadow: var(--shadow-lg);
   }
 
-  /* Overlay blijft altijd display:block (al ingesteld in de basis) */
+  /* Overlay zichtbaar op mobiel (JS toggled) */
+  .sidebar-overlay {
+    display: block;
+  }
 
   /* On mobile, show all labels even when "collapsed" because it's off-canvas */
   .nav-label,
