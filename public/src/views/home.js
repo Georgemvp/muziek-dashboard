@@ -97,9 +97,9 @@ function coverImg(url, size = 120) {
   return proxyImg(url, size);
 }
 
-// ── Section 1: Greeting + Stats ───────────────────────────────────────────
+// ── Section 1: Greeting + Stats + Last.fm Status ──────────────────────────
 
-function renderGreeting(username, libData) {
+function renderGreeting(username, libData, lastFmStatus) {
   const displayName = username || 'Muzikant';
 
   const artists   = libData?.artists   ?? libData?.artistCount   ?? '…';
@@ -112,9 +112,14 @@ function renderGreeting(username, libData) {
   const iconTrack  = `<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
   const iconComp   = `<svg viewBox="0 0 24 24"><path d="M9 12h6M9 8h6M9 16h4"/><rect x="3" y="4" width="18" height="16" rx="2"/></svg>`;
 
+  // Last.fm status indicator
+  const lfmStatusDot = lastFmStatus?.ok
+    ? `<span style="width: 8px; height: 8px; background: #4caf50; border-radius: 50%; display: inline-block; margin-left: 8px; title='Last.fm connected'"></span>`
+    : `<span style="width: 8px; height: 8px; background: #f44336; border-radius: 50%; display: inline-block; margin-left: 8px;" title='Last.fm unavailable'></span>`;
+
   return `
     <div class="home-greeting">
-      <div class="home-greeting-text">Hi, ${esc(displayName)}</div>
+      <div class="home-greeting-text">Hi, ${esc(displayName)}${lfmStatusDot}</div>
 
       <div class="home-stat-cards">
         <div class="home-stat-card">
@@ -317,6 +322,45 @@ function renderRecentActivity(tracks) {
           </div>
         </div>
         <button class="home-recent-nav" id="home-recent-next" aria-label="Volgende">&#8250;</button>
+      </div>
+    </div>`;
+}
+
+// ── Section 2b: Loved Tracks (Last.fm) ────────────────────────────────────
+
+function renderLovedTracks(lovedTracks) {
+  const items = (lovedTracks || []).slice(0, 8);
+  if (!items.length) {
+    return '';
+  }
+
+  const coversHtml = items.map(t => {
+    const imgUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
+    const img = imgUrl ? coverImg(imgUrl, 140) : null;
+    const imgEl = img
+      ? `<img src="${esc(img)}" alt="${esc(t.name)}" loading="lazy">`
+      : `<div class="home-recent-cover-ph">♥</div>`;
+
+    return `
+      <div class="home-recent-cover">
+        ${imgEl}
+        <div class="home-recent-cover-title" title="${esc(t.name)}">${esc(t.name)}</div>
+        <div class="home-recent-cover-artist" title="${esc(t.artist?.['#text'] || t.artist || '')}">${esc(t.artist?.['#text'] || t.artist || '')}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="home-recent-banner">
+      <div class="home-recent-header">
+        <div class="home-recent-title">Loved Tracks</div>
+        <button class="home-recent-more" id="home-loved-more">MORE</button>
+      </div>
+      <div class="home-recent-row">
+        <div class="home-recent-covers-wrap">
+          <div class="home-recent-covers" id="home-loved-covers">
+            ${coversHtml}
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -1375,12 +1419,14 @@ export async function loadHome() {
 
   // ── Parallel data fetching ─────────────────────────────────────────────
   // Plex stats ophalen (primaire bron)
-  const [username, libRaw, plexStatsRaw, wishlistRaw, releasesRaw] = await Promise.all([
+  const [username, libRaw, plexStatsRaw, wishlistRaw, releasesRaw, lastfmStatusRaw, lovedTracksRaw] = await Promise.all([
     resolveUsername().catch(() => null),
     apiFetch('/api/plex/status').catch(() => null),
     apiFetch('/api/plex/stats?period=7day').catch(() => null),
     apiFetch('/api/wishlist').catch(() => null),
     apiFetch('/api/releases').catch(() => null),
+    apiFetch('/api/user').catch(() => null),  // For Last.fm status
+    apiFetch('/api/loved').catch(() => null),  // For loved tracks
   ]);
 
   // Fallback naar Last.fm als Plex stats niet beschikbaar zijn
@@ -1398,10 +1444,17 @@ export async function loadHome() {
     ]);
   }
 
+  // Determine Last.fm status (check if API returned data without _stale flag)
+  const lastFmStatus = {
+    ok: lastfmStatusRaw && !lastfmStatusRaw._stale,
+    user: lastfmStatusRaw?.user?.name || null
+  };
+
   const libData   = normalizeLibStats(libRaw);
   const tracks    = recentRaw?.recenttracks?.track || [];
   const wishlist  = wishlistRaw?.wishlist || wishlistRaw || [];
   const releases  = releasesRaw;
+  const lovedTracks = lovedTracksRaw?.lovedtracks?.track || [];
   const genreData = buildGenreData(topArtistsRaw);
 
   // Featured Artist Banner rendering
@@ -1447,8 +1500,8 @@ export async function loadHome() {
   content.innerHTML = `
     <div class="home-page">
 
-      <!-- 1. Greeting + Stats -->
-      ${renderGreeting(username, libData)}
+      <!-- 1. Greeting + Stats + Last.fm Status -->
+      ${renderGreeting(username, libData, lastFmStatus)}
 
       <!-- 1b. Live Radio Bar -->
       ${renderLiveRadioBar()}
@@ -1459,7 +1512,10 @@ export async function loadHome() {
       <!-- 2. Recent Activity -->
       ${renderRecentActivity(tracks)}
 
-      <!-- 2b. Featured Artist Banner -->
+      <!-- 2b. Loved Tracks -->
+      ${renderLovedTracks(lovedTracks)}
+
+      <!-- 2c. Featured Artist Banner -->
       ${featuredArtistHtml}
 
       <!-- 3. Listen Later -->
@@ -1529,6 +1585,11 @@ export async function loadHome() {
   // Recent "MORE" knop
   document.getElementById('home-recent-more')?.addEventListener('click', () => {
     switchView('albums');
+  });
+
+  // Loved "MORE" knop
+  document.getElementById('home-loved-more')?.addEventListener('click', () => {
+    switchView('listen-later');
   });
 
   // Genre kaarten → switchView('ontdek')

@@ -153,6 +153,39 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
   });
 
+  // ── /api/top/albums ────────────────────────────────────────────────────────
+  app.get('/api/top/albums', async (req, res) => {
+    try {
+      const period = req.query.period || 'overall';
+      const cacheKey = `api:top:albums:${period}`;
+      const cached = getCache(cacheKey, 600_000);
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=600');
+        return res.json(cached);
+      }
+
+      const data = await lfm(
+        { method: 'user.gettopalbums', period, limit: 50 },
+        { cacheKey, cacheTTL: 600_000 }
+      );
+      markLastFmUp();
+
+      // Transform to simpler format
+      const albums = (data.topalbums?.album || []).map(a => ({
+        name: a.name,
+        artist: a.artist?.name || a.artist || '',
+        playcount: parseInt(a.playcount, 10) || 0,
+        url: a.url,
+        image: a.image
+      }));
+
+      const result = { topalbums: { album: albums } };
+      setCache(cacheKey, result);
+      res.set('Cache-Control', 'private, max-age=600');
+      res.json(result);
+    } catch (e) { staleOrError(`api:top:albums:${req.query.period || 'overall'}`, e, res, deps); }
+  });
+
   // ── /api/loved ─────────────────────────────────────────────────────────────
   app.get('/api/loved', async (req, res) => {
     try {

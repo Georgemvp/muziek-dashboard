@@ -247,24 +247,51 @@ function filterAndSort(data) {
 async function loadData() {
   if (albumsData) return albumsData;
   try {
-    const res = await apiFetch('/api/plex/library/all');
-    if (!res || !res.library) {
-      console.warn('Albums API response is null/undefined:', res);
+    // Load Plex albums
+    const plexRes = await apiFetch('/api/plex/library/all');
+    if (!plexRes || !plexRes.library) {
+      console.warn('Albums API response is null/undefined:', plexRes);
       return [];
     }
-    if (!Array.isArray(res.library)) {
-      console.warn('Library is not an array:', res.library);
+    if (!Array.isArray(plexRes.library)) {
+      console.warn('Library is not an array:', plexRes.library);
       return [];
     }
-    if (!res.library.length) return [];
+    if (!plexRes.library.length) return [];
 
-    albumsData = res.library.map(([artist, album, ratingKey, thumb, addedAt]) => ({
+    const plexAlbums = plexRes.library.map(([artist, album, ratingKey, thumb, addedAt]) => ({
       artist: artist || '',
       album: album || '',
       ratingKey: ratingKey || '',
       thumb: thumb || '',
-      addedAt: addedAt || 0
+      addedAt: addedAt || 0,
+      playcount: 0  // Will be enriched with Last.fm data
     }));
+
+    // Load Last.fm top albums for enrichment
+    let lastfmMap = {};
+    try {
+      const lastfmRes = await apiFetch('/api/top/albums?period=overall');
+      if (lastfmRes?.topalbums?.album) {
+        lastfmRes.topalbums.album.forEach(a => {
+          const key = `${(a.artist || '').toLowerCase()}|${(a.name || '').toLowerCase()}`;
+          lastfmMap[key] = { playcount: a.playcount || 0 };
+        });
+      }
+    } catch (e) {
+      console.warn('Error loading Last.fm albums:', e);
+    }
+
+    // Merge Last.fm data into Plex albums
+    albumsData = plexAlbums.map(album => {
+      const key = `${album.artist.toLowerCase()}|${album.album.toLowerCase()}`;
+      const lfmData = lastfmMap[key];
+      return {
+        ...album,
+        playcount: lfmData?.playcount || 0
+      };
+    });
+
     return albumsData;
   } catch (e) {
     console.error('Error loading albums:', e);
@@ -295,6 +322,11 @@ function albumCard(item) {
        <div class="albums-cover-ph" style="display:none;background:${gradientFor(item.album)}">${initials(item.album)}</div>`
     : `<div class="albums-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`;
 
+  // Last.fm playcount badge (if available)
+  const playcountBadge = item.playcount && item.playcount > 0
+    ? `<span class="album-playcount-badge" style="position:absolute;top:8px;right:8px;background:var(--accent);color:white;font-size:11px;padding:4px 8px;border-radius:4px;font-weight:600;">${item.playcount}</span>`
+    : '';
+
   return `<div class="albums-album"
     data-rating-key="${esc(item.ratingKey)}"
     data-album="${esc(item.album)}"
@@ -302,6 +334,7 @@ function albumCard(item) {
     data-thumb="${esc(item.thumb || '')}">
     <div class="albums-cover">
       ${img}
+      ${playcountBadge}
       <div class="albums-play-overlay"><button class="albums-play-btn" title="Play">▶</button></div>
     </div>
     <div class="albums-album-title" title="${esc(item.album)}">${esc(item.album)}</div>
