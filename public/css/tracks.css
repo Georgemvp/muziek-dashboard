@@ -124,7 +124,7 @@
 }
 
 .tracks-roon-thead th {
-  padding: 12px 12px;
+  padding: 12px;
   text-align: left;
   font-weight: 500;
   color: var(--text-secondary);
@@ -132,11 +132,10 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   height: 44px;
+  line-height: 20px;
   white-space: nowrap;
   user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  vertical-align: middle;
 }
 
 /* Column widths */
@@ -190,13 +189,17 @@
 .tracks-search-icon {
   font-size: 14px;
   opacity: 0.5;
-  margin-left: auto;
+  margin-left: 8px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .tracks-sort-arrow {
   font-size: 12px;
   color: var(--accent);
   margin-left: 4px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* ── Table Body & Rows ──────────────────────────────────────────────────────── */
