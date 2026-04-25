@@ -77,9 +77,7 @@ function normalizePlexRecent(plexRecentTracks) {
 
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
-  return String(n);
+  return Number(n).toLocaleString('nl-NL');
 }
 
 function ageLabel(dateStr) {
@@ -117,17 +115,6 @@ function renderGreeting(username, libData) {
   return `
     <div class="home-greeting">
       <div class="home-greeting-text">Hi, ${esc(displayName)}</div>
-
-      <!-- Globale periode-selector -->
-      <div class="home-period-selector">
-        <span class="home-period-label">Period:</span>
-        <div class="home-period-pills">
-          <button class="home-period-pill" data-period="today">Today</button>
-          <button class="home-period-pill" data-period="7day" data-default="true">Last week</button>
-          <button class="home-period-pill" data-period="1month">Last month</button>
-          <button class="home-period-pill" data-period="12month">Last year</button>
-        </div>
-      </div>
 
       <div class="home-stat-cards">
         <div class="home-stat-card">
