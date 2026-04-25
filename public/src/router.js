@@ -25,6 +25,7 @@ const viewMeta = {
   mediasage:               { title: 'Muziek · MediaSage' },
   'mediasage-playlist':    { title: 'Muziek · AI Playlist Generator' },
   'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
+  'mediasage-iframe':      { title: 'Muziek · MediaSage (iframe versie)' },
   tidarr:             { title: 'Muziek · Tidarr' },
 };
 
@@ -50,6 +51,7 @@ const viewLoaders = {
   mediasage:               () => import('./views/mediasage.js'),
   'mediasage-playlist':    () => import('./views/mediasage-playlist.js'),
   'mediasage-recommend':   () => import('./views/mediasage-recommend.js'),
+  'mediasage-iframe':      () => import('./views/mediasage-iframe.js'),
   tidarr:               () => import('./views/downloads.js'),
 };
 
@@ -105,10 +107,12 @@ export async function switchView(viewName, params = null) {
   state.sectionContainerEl = null;
 
   // ── Verberg iframe wraps bij view-wissel (tenzij de view ze zelf toont) ──
-  const tidarrWrap = document.getElementById('tidarr-ui-wrap');
-  const contentEl  = document.getElementById('content');
-  if (tidarrWrap) tidarrWrap.style.display = 'none';
-  if (contentEl)  contentEl.style.display  = '';
+  const tidarrWrap     = document.getElementById('tidarr-ui-wrap');
+  const mediasageWrap  = document.getElementById('mediasage-iframe-wrap');
+  const contentEl      = document.getElementById('content');
+  if (tidarrWrap)    tidarrWrap.style.display    = 'none';
+  if (mediasageWrap) mediasageWrap.style.display = 'none';
+  if (contentEl)     contentEl.style.display     = '';
 
   // ── Clear toolbar ──────────────────────────────────────────────────────
   const toolbar = document.getElementById('view-toolbar');
@@ -140,6 +144,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'mediasage'             ? viewModule.loadMediaSage :
       viewName === 'mediasage-playlist'   ? viewModule.loadMediaSagePlaylist :
       viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :
+      viewName === 'mediasage-iframe'     ? viewModule.loadMediaSageIframe :
       viewName === 'tidarr'              ? viewModule.loadDownloads :
       null;
 

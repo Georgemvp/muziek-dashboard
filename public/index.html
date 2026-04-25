@@ -169,6 +169,16 @@
         <span class="nav-label">MediaSage</span>
       </button>
 
+      <button class="nav-item" data-view="mediasage-iframe" aria-label="MediaSage iframe versie (tijdelijk)">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>
+          <path d="M9 21V9"/>
+        </svg>
+        <span class="nav-label">MediaSage (iframe)</span>
+      </button>
+
       <button class="nav-item" data-view="tidarr" aria-label="Tidarr muziek downloaden">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -275,6 +285,22 @@
       <div class="loading" role="status" aria-label="Laden">
         <div class="spinner" aria-hidden="true"></div>Laden…
       </div>
+    </div>
+
+    <!-- MediaSage iframe container (tijdelijke fallback, getoond/verborgen door JS) -->
+    <div id="mediasage-iframe-wrap" style="display:none; flex-direction:column; flex:1; overflow:hidden; min-height:0;" aria-label="MediaSage iframe interface">
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:var(--color-warning-bg,#2d2200); border-bottom:1px solid var(--color-warning-border,#7a5500); font-size:12px; color:var(--color-warning-text,#f0b040); flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <strong>iframe versie (tijdelijk)</strong> — SSE streaming wordt hier gebufferd; gebruik de echte MediaSage-view zodra de proxy-fix actief is.
+      </div>
+      <iframe
+        id="mediasage-iframe"
+        src=""
+        data-src="/mediasage/"
+        style="width:100%; flex:1; border:none;"
+        allow="autoplay"
+        title="MediaSage — iframe fallback">
+      </iframe>
     </div>
 
     <!-- Tidarr iframe container (getoond/verborgen door JS) -->
