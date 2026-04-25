@@ -934,7 +934,7 @@ async def _set_cover_art_from_research(rec, rd, research_client) -> None:
             rd.earliest_release_mbid, release_group_mbid=rd.musicbrainz_id,
         )
         if art_url:
-            rec.art_url = f"/api/external-art?url={quote(art_url, safe='')}"
+            rec.art_url = f"/mediasage/api/external-art?url={quote(art_url, safe='')}"
 
 
 def _apply_year_override(rec, rd):
