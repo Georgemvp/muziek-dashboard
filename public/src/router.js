@@ -22,8 +22,9 @@ const viewMeta = {
   folders:     { title: 'Muziek · Folders' },
   'artist-detail': { title: 'Muziek · Artiest' },
   stats:           { title: 'Muziek · Statistieken' },
-  mediasage:          { title: 'Muziek · MediaSage' },
-  'mediasage-playlist': { title: 'Muziek · AI Playlist Generator' },
+  mediasage:               { title: 'Muziek · MediaSage' },
+  'mediasage-playlist':    { title: 'Muziek · AI Playlist Generator' },
+  'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
   tidarr:             { title: 'Muziek · Tidarr' },
 };
 
@@ -46,8 +47,9 @@ const viewLoaders = {
   folders:     () => import('./views/folders.js'),
   'artist-detail': () => import('./views/artist-detail.js'),
   stats:           () => import('./views/stats.js'),
-  mediasage:            () => import('./views/mediasage.js'),
-  'mediasage-playlist': () => import('./views/mediasage-playlist.js'),
+  mediasage:               () => import('./views/mediasage.js'),
+  'mediasage-playlist':    () => import('./views/mediasage-playlist.js'),
+  'mediasage-recommend':   () => import('./views/mediasage-recommend.js'),
   tidarr:               () => import('./views/downloads.js'),
 };
 
@@ -137,8 +139,9 @@ export async function switchView(viewName, params = null) {
       viewName === 'folders'     ? viewModule.loadFolders :
       viewName === 'artist-detail' ? viewModule.loadArtistDetail :
       viewName === 'stats'         ? viewModule.loadStats :
-      viewName === 'mediasage'            ? viewModule.loadMediaSage :
-      viewName === 'mediasage-playlist'  ? viewModule.loadMediaSagePlaylist :
+      viewName === 'mediasage'             ? viewModule.loadMediaSage :
+      viewName === 'mediasage-playlist'   ? viewModule.loadMediaSagePlaylist :
+      viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :
       viewName === 'tidarr'              ? viewModule.loadDownloads :
       null;
 
