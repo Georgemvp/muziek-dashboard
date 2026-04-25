@@ -65,7 +65,7 @@ const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, 
 const { getMBZArtist }                                              = require('./services/musicbrainz');
 const { getDeezerImage }                                            = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
-const { getGaps, refreshGaps, initGaps }                           = require('./services/gaps');
+const { getGaps, refreshGaps, initGaps, getArtistGaps }            = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
 const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus, TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
@@ -240,6 +240,7 @@ const deps = {
   getDiscover,
   refreshDiscover,
   getGaps,
+  getArtistGaps,
   refreshGaps,
   getReleases,
   refreshReleases,

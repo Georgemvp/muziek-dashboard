@@ -144,4 +144,76 @@ function initGaps() {
   }, 15_000);
 }
 
-module.exports = { getGaps, refreshGaps, initGaps };
+// ═══════════════════════════════════════════════════════════════════════════
+// Per-artiest gaps functie voor individuele artist detail pages
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Haalt gaps voor een specifieke artiest op.
+ * @param {string} artistName - Artiestnaam
+ * @returns {Promise<Object>} { owned, missing, ownedCount, totalCount, completeness }
+ */
+async function getArtistGaps(artistName) {
+  const cacheKey = `gaps:artist:${artistName.toLowerCase()}`;
+  const ARTIST_CACHE_TTL = 3_600_000; // 1 uur
+
+  // Check cache eerst
+  const cached = getCache(cacheKey);
+  const cacheAge = getCacheAge(cacheKey);
+  if (cached && cacheAge < ARTIST_CACHE_TTL) {
+    return cached;
+  }
+
+  try {
+    // Check of artiest in Plex staat
+    if (!artistInPlex(artistName)) {
+      return { owned: [], missing: [], ownedCount: 0, totalCount: 0, completeness: 0, notInPlex: true };
+    }
+
+    // Haal MusicBrainz MBID op
+    const mbz = await getMBZArtist(artistName);
+    if (!mbz || !mbz.mbid) {
+      logger.warn({ artist: artistName }, 'MusicBrainz MBID niet gevonden');
+      return { owned: [], missing: [], ownedCount: 0, totalCount: 0, completeness: 0, mbidNotFound: true };
+    }
+
+    // Haal alle albums op van MusicBrainz
+    const allAlbums = await getMBZAlbums(mbz.mbid);
+
+    // Check per album of het in Plex staat (parallel processing met limit van 8)
+    const albumTasks = allAlbums.map(album => async () => {
+      const inPlex = albumInPlex(artistName, album.title);
+      return { ...album, inPlex };
+    });
+
+    const results = await limitConcurrency(albumTasks, 8);
+    const checkedAlbums = results
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value);
+
+    // Verdeel in owned en missing
+    const owned = checkedAlbums.filter(a => a.inPlex);
+    const missing = checkedAlbums.filter(a => !a.inPlex);
+
+    const result = {
+      owned,
+      missing,
+      ownedCount: owned.length,
+      totalCount: checkedAlbums.length,
+      completeness: checkedAlbums.length > 0
+        ? Math.round((owned.length / checkedAlbums.length) * 100)
+        : 0
+    };
+
+    // Cache het resultaat
+    setCache(cacheKey, result);
+    logger.debug({ artist: artistName, owned: owned.length, missing: missing.length }, 'Artist gaps opgehaald');
+
+    return result;
+  } catch (err) {
+    logger.error({ err, artist: artistName }, 'Fout bij ophalen artist gaps');
+    throw err;
+  }
+}
+
+module.exports = { getGaps, refreshGaps, initGaps, getArtistGaps };

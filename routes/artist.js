@@ -1,7 +1,7 @@
 // ── Artist API Routes ─────────────────────────────────────────────────────────
 
 module.exports = function(app, deps) {
-  const { lfm, getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre, getWikipediaExtract, getGaps } = deps;
+  const { lfm, getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre, getWikipediaExtract, getGaps, getArtistGaps } = deps;
 
   // ── /api/artist/:name/info ────────────────────────────────────────────────
   app.get('/api/artist/:name/info', async (req, res) => {
@@ -278,6 +278,38 @@ module.exports = function(app, deps) {
         wikipedia: null,
         similar: { artists: [], count: 0 },
         gaps: { status: 'error', message: e.message }
+      });
+    }
+  });
+
+  // ── /api/gaps/:artist ─────────────────────────────────────────────────────
+  // Haalt gaps (missing albums) op voor een specifieke artiest
+  app.get('/api/gaps/:artist', async (req, res) => {
+    const artistName = decodeURIComponent(req.params.artist);
+    const { getArtistGaps } = deps;
+
+    if (!getArtistGaps) {
+      return res.status(500).json({ error: 'getArtistGaps service niet beschikbaar' });
+    }
+
+    try {
+      const gaps = await getArtistGaps(artistName);
+
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.json({
+        artist: artistName,
+        ...gaps
+      });
+    } catch (e) {
+      console.error(`Gaps API error for "${artistName}":`, e.message);
+      res.status(500).json({
+        error: e.message,
+        artist: artistName,
+        owned: [],
+        missing: [],
+        ownedCount: 0,
+        totalCount: 0,
+        completeness: 0
       });
     }
   });
