@@ -7,7 +7,7 @@ import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, countryFlag,
   albumCard, showLoading, showError, proxyImg, p, downloadBtn
 } from '../helpers.js';
-import { playOnZone } from './plexRemote.js';
+import { playOnZone } from '../components/plexRemote.js';
 import { switchView } from '../router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
