@@ -1,9 +1,9 @@
 // ── Discover service ─────────────────────────────────────────────────────────
 const logger = require('../logger');
-const { lfm, getSimilarArtists }           = require('./lastfm');
+const { lfm }                              = require('./lastfm');
+const { getSimilarArtists, getDeezerImage } = require('./deezer');
 const { syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus } = require('./plex');
 const { getMBZArtist, getMBZAlbums }       = require('./musicbrainz');
-const { getDeezerImage }                   = require('./deezer');
 const { getCache, setCache, getCacheAge }  = require('../db');
 
 const CACHE_TTL = 86_400_000; // 24 uur

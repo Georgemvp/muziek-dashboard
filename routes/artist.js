@@ -1,7 +1,34 @@
 // ── Artist API Routes ─────────────────────────────────────────────────────────
 
 module.exports = function(app, deps) {
-  const { lfm, getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre, getWikipediaExtract, getGaps, getArtistGaps } = deps;
+  const { getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre, getWikipediaExtract, getGaps, getArtistGaps, getDeezerArtist, getDeezerArtistAlbums, getDeezerArtistTopTracks } = deps;
+
+  // ── Helper: bouw albumlijst op basis van Deezer albumdata ─────────────────
+  // Filtert studio-albums en singles, mapt naar het interne formaat.
+  async function buildAlbumList(artistName, deezerArtistId, limit = 5) {
+    if (!deezerArtistId) return [];
+    try {
+      const albums = await getDeezerArtistAlbums(deezerArtistId);
+      // Geef voorkeur aan studio-albums boven singles/compilaties
+      const filtered = albums
+        .filter(a => a.title && a.title !== '(null)' && a.title !== '[unknown]')
+        .filter(a => !a.record_type || ['album', 'ep'].includes(a.record_type))
+        .slice(0, limit);
+
+      return filtered.map(a => {
+        const inPlex = albumInPlex(artistName, a.title);
+        return {
+          name:      a.title,
+          image:     a.cover_medium || null,
+          playcount: 0,
+          inPlex,
+          ratingKey: inPlex ? getAlbumRatingKey(artistName, a.title) : null
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
 
   // ── /api/artist/:name/info ────────────────────────────────────────────────
   app.get('/api/artist/:name/info', async (req, res) => {
@@ -16,61 +43,27 @@ module.exports = function(app, deps) {
     }
 
     try {
-      const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
-        lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
+      // Haal Deezer artiest op (bevat ID voor verdere calls) en MusicBrainz parallel
+      const [deezerR, mbzR] = await Promise.allSettled([
+        getDeezerArtist(name),
         getMBZArtist(name)
       ]);
 
-      let image = null;
-      let imageXl = null;
-      if (deezerR.status === 'fulfilled') {
-        const results = deezerR.value?.data || [];
-        const best    = results[0];
-        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
-          image = best.picture_medium;
-          imageXl = best.picture_xl || best.picture_medium;
+      let image    = null;
+      let imageXl  = null;
+      let deezerId = null;
+
+      if (deezerR.status === 'fulfilled' && deezerR.value) {
+        const d = deezerR.value;
+        if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
+          image   = d.picture_medium;
+          imageXl = d.picture_xl || d.picture_medium;
         }
+        deezerId = d.id || null;
       }
 
-      // Helper: fetch album cover van Deezer als fallback
-      const getDeezerAlbumCover = async (albumName) => {
-        try {
-          const q = `artist:"${name}" album:"${albumName}"`;
-          const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
-          const album = res?.data?.[0];
-          return album?.cover_medium || null;
-        } catch {
-          return null;
-        }
-      };
-
-      let albums = [];
-      if (albumsR.status === 'fulfilled') {
-        const albumList = (albumsR.value.topalbums?.album || [])
-          .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-          .slice(0, 5);
-
-        // Parallel fetch images voor albums zonder cover
-        albums = await Promise.all(albumList.map(async a => {
-          let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-
-          // Fallback: als Last.fm image placeholder is, probeer Deezer
-          if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-            img = await getDeezerAlbumCover(a.name);
-          }
-
-          const inPlex = albumInPlex(name, a.name);
-          return {
-            name:      a.name,
-            image:     img,
-            playcount: parseInt(a.playcount) || 0,
-            inPlex,
-            ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-          };
-        }));
-      }
+      // Haal albums op via Deezer (geen Last.fm meer nodig)
+      const albums = await buildAlbumList(name, deezerId, 5);
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
@@ -107,61 +100,27 @@ module.exports = function(app, deps) {
     }
 
     try {
-      const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
-        lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
+      // Haal Deezer artiest op (bevat ID voor verdere calls) en MusicBrainz parallel
+      const [deezerR, mbzR] = await Promise.allSettled([
+        getDeezerArtist(name),
         getMBZArtist(name)
       ]);
 
-      let image = null;
-      let imageXl = null;
-      if (deezerR.status === 'fulfilled') {
-        const results = deezerR.value?.data || [];
-        const best    = results[0];
-        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
-          image = best.picture_medium;
-          imageXl = best.picture_xl || best.picture_medium;
+      let image    = null;
+      let imageXl  = null;
+      let deezerId = null;
+
+      if (deezerR.status === 'fulfilled' && deezerR.value) {
+        const d = deezerR.value;
+        if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
+          image   = d.picture_medium;
+          imageXl = d.picture_xl || d.picture_medium;
         }
+        deezerId = d.id || null;
       }
 
-      // Helper: fetch album cover van Deezer als fallback
-      const getDeezerAlbumCover = async (albumName) => {
-        try {
-          const q = `artist:"${name}" album:"${albumName}"`;
-          const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
-          const album = res?.data?.[0];
-          return album?.cover_medium || null;
-        } catch {
-          return null;
-        }
-      };
-
-      let albums = [];
-      if (albumsR.status === 'fulfilled') {
-        const albumList = (albumsR.value.topalbums?.album || [])
-          .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-          .slice(0, 5);
-
-        // Parallel fetch images voor albums zonder cover
-        albums = await Promise.all(albumList.map(async a => {
-          let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-
-          // Fallback: als Last.fm image placeholder is, probeer Deezer
-          if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-            img = await getDeezerAlbumCover(a.name);
-          }
-
-          const inPlex = albumInPlex(name, a.name);
-          return {
-            name:      a.name,
-            image:     img,
-            playcount: parseInt(a.playcount) || 0,
-            inPlex,
-            ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-          };
-        }));
-      }
+      // Haal albums op via Deezer (geen Last.fm meer nodig)
+      const albums = await buildAlbumList(name, deezerId, 5);
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
@@ -186,20 +145,20 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/artist/:name/similar ──────────────────────────────────────────────
-  // Retourneert gelijkaardige artiesten voor een gegeven artiestnaam.
-  // Probeert eerst Last.fm API → fallback naar Plex genres als Last.fm faalt.
+  // Retourneert gelijkaardige artiesten via Deezer related artists.
+  // Fallback naar Plex genres als Deezer geen resultaten oplevert.
   app.get('/api/artist/:name/similar', async (req, res) => {
     const name = decodeURIComponent(req.params.name);
     const { getSimilarArtists, getPlexArtistsByGenre } = deps;
 
     let similar = [];
-    let source = 'lastfm';
+    let source = 'deezer';
 
     try {
-      // PRIMAIR: Probeer Last.fm similar artists (met 8 sec timeout inbegrepen in lfm())
+      // PRIMAIR: Deezer related artists (snel, geen API-key, geen throttle)
       similar = await getSimilarArtists(name, 6);
 
-      // Als Last.fm 0 resultaten oplevert, probeer Plex-fallback
+      // Als Deezer 0 resultaten oplevert, probeer Plex-fallback
       if (!similar || similar.length === 0) {
         try {
           // FALLBACK: Zoek artiesten met dezelfde genres in Plex
@@ -220,14 +179,13 @@ module.exports = function(app, deps) {
         count: (similar || []).length
       });
     } catch (e) {
-      // Last.fm API faalt geheel → retourneer lege lijst + error flag
-      console.warn(`Similar artists API faalt voor "${name}":`, e.message);
+      // Deezer faalt geheel → retourneer lege lijst + error flag
+      console.warn(`Similar artists (Deezer) faalt voor "${name}":`, e.message);
       res.set('Cache-Control', 'private, max-age=60');
       res.json({
         similar: [],
         source: 'error',
-        error: e.message,
-        _lfmDown: true
+        error: e.message
       });
     }
   });
@@ -288,63 +246,28 @@ module.exports = function(app, deps) {
     try {
       // ── Parallel fetch: artist info, wikipedia, similar artists, gaps, top tracks ──────────
       const [infoR, wikiR, similarR, gapsR, tracksR] = await Promise.allSettled([
-        // Artist info: Deezer image + Last.fm albums + MusicBrainz metadata
+        // Artist info: Deezer image + Deezer albums + MusicBrainz metadata
         (async () => {
-          const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-            fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
-            lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
+          const [deezerR, mbzR] = await Promise.allSettled([
+            getDeezerArtist(name),
             getMBZArtist(name)
           ]);
 
-          let image = null;
-          let imageXl = null;
-          if (deezerR.status === 'fulfilled') {
-            const results = deezerR.value?.data || [];
-            const best    = results[0];
-            if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
-              image = best.picture_medium;
-              imageXl = best.picture_xl || best.picture_medium;
+          let image    = null;
+          let imageXl  = null;
+          let deezerId = null;
+
+          if (deezerR.status === 'fulfilled' && deezerR.value) {
+            const d = deezerR.value;
+            if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
+              image   = d.picture_medium;
+              imageXl = d.picture_xl || d.picture_medium;
             }
+            deezerId = d.id || null;
           }
 
-          // Helper: fetch album cover van Deezer als fallback
-          const getDeezerAlbumCover = async (albumName) => {
-            try {
-              const q = `artist:"${name}" album:"${albumName}"`;
-              const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
-              const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
-              const album = res?.data?.[0];
-              return album?.cover_medium || null;
-            } catch {
-              return null;
-            }
-          };
-
-          let albums = [];
-          if (albumsR.status === 'fulfilled') {
-            const albumList = (albumsR.value.topalbums?.album || [])
-              .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-              .slice(0, 5);
-
-            // Parallel fetch images voor albums zonder cover
-            albums = await Promise.all(albumList.map(async a => {
-              let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-
-              // Fallback: als Last.fm image placeholder is, probeer Deezer
-              if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-                img = await getDeezerAlbumCover(a.name);
-              }
-
-              const inPlex = albumInPlex(name, a.name);
-              return {
-                name:      a.name,
-                image:     img,
-                playcount: parseInt(a.playcount) || 0,
-                inPlex,
-                ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-              };
-            }));
-          }
+          // Haal albums op via Deezer
+          const albums = await buildAlbumList(name, deezerId, 5);
 
           const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
           return {
@@ -360,28 +283,29 @@ module.exports = function(app, deps) {
         // Wikipedia extract
         getWikipediaExtract(name),
 
-        // Similar artists
+        // Gerelateerde artiesten via Deezer (vervangt Last.fm artist.getsimilar)
         getSimilarArtists(name, 6),
 
         // Artist-specific gaps
         getArtistGaps(name),
 
-        // Top tracks
+        // Top tracks via Deezer (vervangt Last.fm artist.gettoptracks)
         (async () => {
           try {
-            const tracksData = await lfm({ method: 'artist.gettoptracks', artist: name, limit: 10 }, { includeUser: false });
-            const tracks = (tracksData?.toptracks?.track || [])
-              .filter(t => t.name && t.name !== '(null)' && t.name !== '[unknown]')
-              .slice(0, 10)
+            const deezerArtist = await getDeezerArtist(name);
+            if (!deezerArtist?.id) return [];
+
+            const tracks = await getDeezerArtistTopTracks(deezerArtist.id);
+            return tracks
+              .filter(t => t.title && t.title !== '(null)')
               .map(t => ({
-                name: t.name,
-                playcount: parseInt(t.playcount) || 0,
-                listeners: parseInt(t.listeners) || 0,
-                url: t.url || null
+                name:      t.title,
+                playcount: t.rank || 0,   // Deezer rank als vervanger van playcount
+                listeners: 0,             // Deezer geeft geen listeners-telling
+                url:       null
               }));
-            return tracks;
           } catch (e) {
-            console.warn(`Top tracks API failed for "${name}":`, e.message);
+            console.warn(`Deezer top tracks mislukt voor "${name}":`, e.message);
             return [];
           }
         })()
@@ -469,26 +393,31 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/artist/:name/tracks ──────────────────────────────────────────────
-  // Haalt top tracks op voor een artiest
+  // Haalt top tracks op voor een artiest via Deezer (vervangt Last.fm artist.gettoptracks)
   app.get('/api/artist/:name/tracks', async (req, res) => {
     const name = decodeURIComponent(req.params.name);
 
     try {
-      const tracksData = await lfm({ method: 'artist.gettoptracks', artist: name, limit: 10 }, { includeUser: false });
-      const tracks = (tracksData?.toptracks?.track || [])
-        .filter(t => t.name && t.name !== '(null)' && t.name !== '[unknown]')
-        .slice(0, 10)
+      const deezerArtist = await getDeezerArtist(name);
+      if (!deezerArtist?.id) {
+        res.set('Cache-Control', 'private, max-age=3600');
+        return res.json([]);
+      }
+
+      const tracks = await getDeezerArtistTopTracks(deezerArtist.id);
+      const result = tracks
+        .filter(t => t.title && t.title !== '(null)')
         .map(t => ({
-          name: t.name,
-          playcount: parseInt(t.playcount) || 0,
-          listeners: parseInt(t.listeners) || 0,
-          url: t.url || null
+          name:      t.title,
+          playcount: t.rank || 0,
+          listeners: 0,
+          url:       null
         }));
 
       res.set('Cache-Control', 'private, max-age=3600');
-      res.json(tracks);
+      res.json(result);
     } catch (e) {
-      console.warn(`Top tracks API failed for "${name}":`, e.message);
+      console.warn(`Deezer top tracks mislukt voor "${name}":`, e.message);
       res.set('Cache-Control', 'private, max-age=60');
       res.json([]);
     }

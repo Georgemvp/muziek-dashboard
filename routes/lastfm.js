@@ -29,7 +29,7 @@ function staleOrError(cacheKey, err, res, { getCache }) {
 }
 
 module.exports = function(app, deps) {
-  const { lfm, getSimilarArtists, getCache, setCache } = deps;
+  const { lfm, getSimilarArtists, getCache, setCache, getMBZArtist, getDeezerArtist, getDeezerArtistAlbums, getDeezerArtistTopTracks, searchDeezerArtist } = deps;
 
   // ── /api/user ──────────────────────────────────────────────────────────────
   app.get('/api/user', async (req, res) => {
@@ -76,6 +76,7 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/top/artists — artiesten + topTag voor genre donut ───────────────
+  // Tags worden nu opgehaald via MusicBrainz (vervangt Last.fm artist.gettoptags)
   app.get('/api/top/artists', async (req, res) => {
     try {
       const period   = req.query.period || '7day';
@@ -103,21 +104,19 @@ module.exports = function(app, deps) {
 
       const artists = (artistData.topartists?.artist || []).slice(0, 20);
 
-      // Haal tags parallel op — 24-uurs cache per artiest
+      // Haal tags parallel op via MusicBrainz — 7-daags cache per artiest
+      // MusicBrainz is vrij van rate-limiting en geeft genre-tags terug
       const tagResults = await Promise.allSettled(
-        artists.map(a => lfm(
-          { method: 'artist.gettoptags', artist: a.name },
-          { includeUser: false, cacheKey: `tags:${a.name.toLowerCase()}`, cacheTTL: 86_400_000 }
-        ))
+        artists.map(a => getMBZArtist(a.name))
       );
 
       const enriched = artists.map((a, i) => {
         let topTag = null;
         if (tagResults[i].status === 'fulfilled') {
-          const tags = tagResults[i].value?.toptags?.tag || [];
+          const tags = tagResults[i].value?.tags || [];
           for (const tag of tags) {
-            const name = (tag.name || '').toLowerCase().trim();
-            if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
+            const tagName = (tag.name || '').toLowerCase().trim();
+            if (tagName.length > 2 && !stopwords.has(tagName) && !/^\d+$/.test(tagName)) {
               topTag = tag.name;
               break;
             }
@@ -269,16 +268,15 @@ module.exports = function(app, deps) {
       const genreCount = {};
       const stopwords = new Set(['seen live', 'listened', 'favourite', 'favorites', 'love', 'loved', 'awesome', 'cool', 'good', 'great']);
 
-      // Helper: haal top-3 tags op met 24-uurs cache per artiest
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      // Helper: haal top-3 tags op via MusicBrainz (vervangt Last.fm artist.gettoptags)
+      // MusicBrainz heeft 7-daagse cache in getMBZArtist
       async function getArtistTags(artist) {
-        const tagCacheKey = `tags:${artist.toLowerCase()}`;
-        const result = await lfm(
-          { method: 'artist.gettoptags', artist },
-          { includeUser: false, cacheKey: tagCacheKey, cacheTTL: 86_400_000 } // 24 uur TTL
-        );
-        const tags = (result.toptags?.tag || []).slice(0, 3);
-        return tags;
+        try {
+          const mbz = await getMBZArtist(artist);
+          return (mbz?.tags || []).slice(0, 3);
+        } catch {
+          return [];
+        }
       }
 
       // Verzamel genres van seed artiesten (parallel)
@@ -288,7 +286,7 @@ module.exports = function(app, deps) {
       for (const result of seedGenreResults) {
         if (result.status === 'fulfilled') {
           for (const tag of result.value) {
-            const name = tag.name.toLowerCase().trim();
+            const name = (tag.name || '').toLowerCase().trim();
             if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
               genreCount[name] = (genreCount[name] || 0) + 1;
             }
@@ -296,7 +294,7 @@ module.exports = function(app, deps) {
         }
       }
 
-      // ── Artiest-aanbevelingen ──────────────────────────────────────────
+      // ── Artiest-aanbevelingen via Deezer related artists ──────────────────
       const simResults = await Promise.all(
         seedArtists.map(async artist => {
           try {
@@ -318,7 +316,7 @@ module.exports = function(app, deps) {
         }
       }
 
-      // ── 2. BATCH genre-tags: max 5 concurrent, 24h gecached ──────────────
+      // ── 2. BATCH genre-tags via MusicBrainz: max 5 concurrent ────────────
       const { limitConcurrency } = deps;
       const tagTasks   = candidates.map(c => () => getArtistTags(c.name));
       const tagResults = await limitConcurrency(tagTasks, 5);
@@ -334,7 +332,7 @@ module.exports = function(app, deps) {
           let commonGenreCount    = 0;
 
           for (const tag of tagResult.value) {
-            const name = tag.name.toLowerCase().trim();
+            const name = (tag.name || '').toLowerCase().trim();
             if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name)) {
               const count = genreCount[name] || 0;
               if (count < 3) {
@@ -359,45 +357,45 @@ module.exports = function(app, deps) {
       const topRecs = recs.slice(0, 30);
       const top8    = topRecs.slice(0, 8);
 
-      // ── 3. Album- én track-aanbevelingen PARALLEL ────────────────────────
+      // ── 3. Album- én track-aanbevelingen PARALLEL via Deezer ─────────────
+      // Vervangt Last.fm artist.gettopalbums en artist.gettoptracks
       const [albumResults, trackResults] = await Promise.all([
         Promise.allSettled(
           top8.map(async rec => {
             try {
-              // Cache per artiest (12 uur TTL)
-              const data = await lfm(
-                { method: 'artist.gettopalbums', artist: rec.name, limit: 3 },
-                { includeUser: false, cacheKey: `albums:${rec.name.toLowerCase()}`, cacheTTL: 43_200_000 }
-              );
-              return (data.topalbums?.album || [])
-                .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-                .map(a => {
-                  const img = a.image?.find(i => i.size === 'large')?.['#text'] || a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-                  return {
-                    album:  a.name,
-                    artist: rec.name,
-                    reason: rec.reason,
-                    image:  (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
-                    inPlex: albumInPlex(rec.name, a.name)
-                  };
-                });
+              // Zoek Deezer ID op en haal albums op
+              const deezerArtist = await getDeezerArtist(rec.name);
+              if (!deezerArtist?.id) return [];
+
+              const albums = await getDeezerArtistAlbums(deezerArtist.id);
+              return albums
+                .filter(a => a.title && a.title !== '(null)' && a.title !== '[unknown]')
+                .filter(a => !a.record_type || ['album', 'ep'].includes(a.record_type))
+                .slice(0, 3)
+                .map(a => ({
+                  album:  a.title,
+                  artist: rec.name,
+                  reason: rec.reason,
+                  image:  a.cover_medium || null,
+                  inPlex: albumInPlex(rec.name, a.title)
+                }));
             } catch { return []; }
           })
         ),
         Promise.allSettled(
           top8.map(async rec => {
             try {
-              // Cache per artiest (12 uur TTL)
-              const data = await lfm(
-                { method: 'artist.gettoptracks', artist: rec.name, limit: 3 },
-                { includeUser: false, cacheKey: `tracks:${rec.name.toLowerCase()}`, cacheTTL: 43_200_000 }
-              );
-              return (data.toptracks?.track || []).map(t => ({
-                track:     t.name,
+              // Zoek Deezer ID op en haal top tracks op
+              const deezerArtist = await getDeezerArtist(rec.name);
+              if (!deezerArtist?.id) return [];
+
+              const tracks = await getDeezerArtistTopTracks(deezerArtist.id);
+              return tracks.slice(0, 3).map(t => ({
+                track:     t.title,
                 artist:    rec.name,
                 reason:    rec.reason,
-                playcount: parseInt(t.playcount) || 0,
-                url:       t.url || null
+                playcount: t.rank || 0,
+                url:       null
               }));
             } catch { return []; }
           })
@@ -447,6 +445,7 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/search ────────────────────────────────────────────────────────────
+  // Gebruikt Deezer als primaire zoekbron (vervangt Last.fm artist.search)
   app.get('/api/search', async (req, res) => {
     const q = (req.query.q || '').trim();
     if (q.length < 2) {
@@ -454,39 +453,25 @@ module.exports = function(app, deps) {
       return res.json({ results: [] });
     }
     try {
-      // Cache per zoekterm (1 uur TTL)
-      const [searchR, deezerR] = await Promise.allSettled([
-        lfm(
-          { method: 'artist.search', artist: q, limit: 6 },
-          { includeUser: false, cacheKey: `search:${q.toLowerCase()}`, cacheTTL: 3_600_000 }
-        ),
-        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(q)}&limit=6`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json())
-      ]);
-      const artists = searchR.status === 'fulfilled'
-        ? (searchR.value.results?.artistmatches?.artist || []).slice(0, 6)
-        : [];
-      const deezerMap = {};
-      if (deezerR.status === 'fulfilled') {
-        for (const d of (deezerR.value?.data || [])) {
-          if (d.picture_medium && !d.picture_medium.includes('/artist//'))
-            deezerMap[d.name.toLowerCase()] = d.picture_medium;
-        }
-      }
-      const results = artists.map(a => ({
-        name: a.name,
-        listeners: parseInt(a.listeners) || 0,
-        image: deezerMap[a.name.toLowerCase()] || null
+      // Gebruik alleen Deezer voor zoeken — sneller, geen API-key, geen throttle
+      const deezerArtists = await searchDeezerArtist(q);
+
+      const results = deezerArtists.map(a => ({
+        name:      a.name,
+        listeners: a.nb_fan || 0,   // Deezer nb_fan als vervanger van Last.fm listeners
+        image:     a.picture_medium || null
       }));
+
       res.set('Cache-Control', 'private, max-age=300');
       res.json({ results });
     } catch (e) {
-      // Zoeken werkt gedeeltelijk zonder Last.fm (alleen Deezer-afbeeldingen)
       res.set('Cache-Control', 'private, max-age=300');
-      res.json({ results: [], _lfmDown: true, error: e.message });
+      res.json({ results: [], error: e.message });
     }
   });
 
   // ── /api/stats ─────────────────────────────────────────────────────────────
+  // Genre-verdeling via MusicBrainz tags (vervangt Last.fm artist.gettoptags)
   app.get('/api/stats', async (req, res) => {
     try {
       // Cache-check gebeurt nu in lfm() zelf (voor throttle)
@@ -524,18 +509,16 @@ module.exports = function(app, deps) {
           }))
         : [];
 
-      // Genre-verdeling via artiest-tags
+      // Genre-verdeling via MusicBrainz tags (vervangt Last.fm artist.gettoptags)
       const stopwords = new Set(['seen live','listened','favourite','favorites','love','loved','awesome','cool','good','great']);
       const tagCounts = {};
       const tagResults = await Promise.allSettled(
-        topArtists.slice(0, 8).map(a =>
-          lfm({ method: 'artist.gettoptags', artist: a.name }, { includeUser: false })
-        )
+        topArtists.slice(0, 8).map(a => getMBZArtist(a.name))
       );
       for (const r of tagResults) {
         if (r.status !== 'fulfilled') continue;
-        for (const tag of (r.value.toptags?.tag || []).slice(0, 3)) {
-          const name = tag.name.toLowerCase().trim();
+        for (const tag of (r.value?.tags || []).slice(0, 3)) {
+          const name = (tag.name || '').toLowerCase().trim();
           if (name.length > 2 && !stopwords.has(name) && !/^\d+$/.test(name))
             tagCounts[name] = (tagCounts[name] || 0) + 1;
         }
@@ -546,7 +529,6 @@ module.exports = function(app, deps) {
 
       const result = { dailyScrobbles, topArtists, genres };
       markLastFmUp();
-      // Individual API calls zijn nu gecached in lfm() (voor throttle)
       res.set('Cache-Control', 'private, max-age=900');
       res.json(result);
     } catch (e) { staleOrError('stats', e, res, deps); }

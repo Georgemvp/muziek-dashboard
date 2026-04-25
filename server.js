@@ -60,10 +60,10 @@ app.use(compression());
 
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
-const { lfm, getSimilarArtists }                                    = require('./services/lastfm');
+const { lfm }                                                       = require('./services/lastfm');
 const { plexGet, plexPost, plexPut, syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus, getPlexArtistNames, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient, pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks, getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex, getPlexArtistsByGenre, periodToTimestamp } = require('./services/plex');
 const { getMBZArtist }                                              = require('./services/musicbrainz');
-const { getDeezerImage }                                            = require('./services/deezer');
+const { getDeezerImage, getDeezerArtist, getDeezerArtistAlbums, getDeezerArtistTopTracks, searchDeezerArtist, getSimilarArtists } = require('./services/deezer');
 const { getDiscover, refreshDiscover, initDiscover }               = require('./services/discover');
 const { getGaps, refreshGaps, initGaps, getArtistGaps }            = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
@@ -181,7 +181,14 @@ const lastfmFuncs = lastfmRouteModule(app, {
   albumInPlex,
   getAlbumRatingKey,
   limitConcurrency,
-  getPlexStatus
+  getPlexStatus,
+  // MusicBrainz voor genre-tags (vervangt Last.fm artist.gettoptags)
+  getMBZArtist,
+  // Deezer voor zoeken, albums en tracks
+  getDeezerArtist,
+  getDeezerArtistAlbums,
+  getDeezerArtistTopTracks,
+  searchDeezerArtist
 });
 
 // Store lastfm status functions for use in other modules and health endpoint
@@ -189,8 +196,9 @@ const lastFmStatusFuncs = lastfmFuncs;
 
 // Common dependencies shared by all route modules
 const deps = {
-  // Last.fm
+  // Last.fm (alleen persoonlijke scrobble-data)
   lfm,
+  // Deezer getSimilarArtists vervangt Last.fm artist.getsimilar
   getSimilarArtists,
   getCache,
   setCache,
@@ -235,6 +243,10 @@ const deps = {
 
   // Deezer
   getDeezerImage,
+  getDeezerArtist,
+  getDeezerArtistAlbums,
+  getDeezerArtistTopTracks,
+  searchDeezerArtist,
 
   // Discovery
   getDiscover,
