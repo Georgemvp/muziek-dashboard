@@ -9,7 +9,6 @@ import { loadPlexStatus } from './api.js';
 import { contentEl, runWithSection } from './helpers.js';
 
 let ontdekModulePromise;
-let bibliotheekModulePromise;
 let downloadsModulePromise;
 let playerModulePromise;
 let gapsModulePromise;
@@ -18,11 +17,6 @@ let albumsModulePromise;
 function loadOntdekModule() {
   if (!ontdekModulePromise) ontdekModulePromise = import('./views/ontdek.js');
   return ontdekModulePromise;
-}
-
-function loadBibliotheekModule() {
-  if (!bibliotheekModulePromise) bibliotheekModulePromise = import('./views/bibliotheek.js');
-  return bibliotheekModulePromise;
 }
 
 function loadDownloadsModule() {
@@ -50,7 +44,6 @@ export const tabLoaders = {
   // Hoofd-tabs
   nu:          () => loadNu(),
   ontdek:      async () => (await loadOntdekModule()).loadOntdek(),
-  bibliotheek: async () => (await loadBibliotheekModule()).loadBibliotheek(),
   downloads:   async () => (await loadDownloadsModule()).loadDownloads(),
   albums:      async () => (await loadAlbumsModule()).loadAlbums(),
   // Backward-compat voor keyboard shortcuts en sub-tab loaders
@@ -59,12 +52,7 @@ export const tabLoaders = {
   recent:      () => loadRecent(),
   recs:        async () => (await loadOntdekModule()).loadRecs(),
   releases:    async () => (await loadOntdekModule()).loadReleases(),
-  topartists:  async () => (await loadBibliotheekModule()).loadTopArtists(state.currentPeriod),
-  toptracks:   async () => (await loadBibliotheekModule()).loadTopTracks(state.currentPeriod),
-  loved:       async () => (await loadBibliotheekModule()).loadLoved(),
-  stats:       async () => (await loadBibliotheekModule()).loadStats(),
   wishlist:    () => loadWishlist(),
-  plexlib:     async () => (await loadBibliotheekModule()).loadPlexLibrary(),
   tidal:       async () => (await loadDownloadsModule()).loadTidal(),
 };
 
@@ -167,14 +155,6 @@ document.getElementById('btn-refresh-gaps')?.addEventListener('click', async () 
   (await loadGapsModule()).loadGaps();
 });
 
-// ── Plex lib zoeken (externe toolbar) ────────────────────────────────────
-document.getElementById('plib-search')?.addEventListener('input', e => {
-  if (!state.plexLibData || state.activeView !== 'bibliotheek') return;
-  loadBibliotheekModule().then(m => {
-    contentEl.innerHTML = m.buildPlexLibraryHtml(state.plexLibData, e.target.value);
-  });
-});
-
 document.getElementById('btn-sync-plex')?.addEventListener('click', async () => {
   const btn = document.getElementById('btn-sync-plex');
   const orig = btn.textContent;
@@ -183,7 +163,6 @@ document.getElementById('btn-sync-plex')?.addEventListener('click', async () => 
     try { await p('/api/plex/refresh', { method: 'POST' }); } catch (e) { if (e.name !== 'AbortError') throw e; }
     await loadPlexStatus();
     state.plexLibData = null;
-    if (state.activeView === 'bibliotheek') await (await loadBibliotheekModule()).loadPlexLibrary();
   } catch {}
   finally { btn.disabled = false; btn.textContent = orig; }
 });
@@ -237,9 +216,6 @@ document.addEventListener('click', async e => {
     const { handleAlbumsClick } = await loadAlbumsModule();
     if (await handleAlbumsClick(e)) return;
   }
-
-  // Plex bibliotheek knoppen (▶ play + artiest-header collapse)
-  if ((await loadBibliotheekModule()).handlePlexLibraryClick(e)) return;
 
   // Play-knop → audio preview
   const playBtn = e.target.closest('.play-btn');
@@ -414,9 +390,8 @@ document.addEventListener('keydown', async e => {
     return;
   }
   if (e.key === 'r' && !inInput) {
-    if (state.activeView === 'ontdek')           (await loadOntdekModule()).loadOntdek();
-    else if (state.activeView === 'bibliotheek') (await loadBibliotheekModule()).loadBibliotheek();
-    else if (state.activeView === 'gaps')        (await loadGapsModule()).loadGaps();
+    if (state.activeView === 'ontdek')    (await loadOntdekModule()).loadOntdek();
+    else if (state.activeView === 'gaps') (await loadGapsModule()).loadGaps();
     else await tabLoaders[state.activeView]?.();
     return;
   }

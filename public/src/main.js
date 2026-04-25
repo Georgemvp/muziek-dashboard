@@ -110,16 +110,6 @@ async function start() {
   // Navigate to first view (niet blokkeren)
   switchView('home');
 
-  // Load sidebar playlists
-  try {
-    const bibliotheek = await import('./views/bibliotheek.js');
-    if (bibliotheek?.loadSidebarPlaylists) {
-      await bibliotheek.loadSidebarPlaylists();
-    }
-  } catch (err) {
-    console.error('Failed to load sidebar playlists:', err);
-  }
-
   // Background prefetch (non-blocking)
   prefetchBackgroundData();
 

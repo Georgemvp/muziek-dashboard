@@ -287,7 +287,7 @@ export function showLoading(msg) {
     topartists: 'grid', releases: 'grid', recs: 'grid',
     discover: 'grid', gaten: 'grid', stats: 'stats',
     lijst: 'grid', collectie: 'cards', tidal: 'cards',
-    nu: 'cards', ontdek: 'grid', bibliotheek: 'cards', downloads: 'cards'
+    nu: 'cards', ontdek: 'grid', downloads: 'cards'
   };
   const lookupTab = state.activeView;
   const skType = skeletonMap[lookupTab];

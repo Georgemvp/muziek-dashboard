@@ -6,7 +6,6 @@ import { state } from './state.js';
 // ── View metadata ──────────────────────────────────────────────────────────
 const viewMeta = {
   home:        { title: 'Muziek · Home' },
-  bibliotheek: { title: 'Muziek · Bibliotheek' },
   ontdek:      { title: 'Muziek · Ontdek' },
   gaps:        { title: 'Muziek · Gaps' },
   downloads:   { title: 'Muziek · Downloads' },
@@ -26,7 +25,6 @@ const viewMeta = {
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
 const viewLoaders = {
   home:        () => import('./views/home.js'),
-  bibliotheek: () => import('./views/bibliotheek.js'),
   ontdek:      () => import('./views/ontdek.js'),
   gaps:        () => import('./views/gaps.js'),
   downloads:   () => import('./views/downloads.js'),
@@ -64,7 +62,7 @@ async function loadViewModule(viewName) {
  * - Abort signal voor eerdere requests
  * - View title
  * - Content clearing en error handling
- * @param {string} viewName - View om in te laden (bibliotheek, ontdek, gaps, downloads, nu)
+ * @param {string} viewName - View om in te laden (home, ontdek, gaps, downloads, nu, etc.)
  */
 export async function switchView(viewName) {
   if (!viewLoaders[viewName]) return;
@@ -95,7 +93,6 @@ export async function switchView(viewName) {
     const renderFn =
       viewName === 'home'        ? viewModule.loadHome :
       viewName === 'gaps'        ? viewModule.loadGaps :
-      viewName === 'bibliotheek' ? viewModule.loadBibliotheek :
       viewName === 'ontdek'      ? viewModule.loadOntdek :
       viewName === 'downloads'   ? viewModule.loadDownloads :
       viewName === 'nu'          ? viewModule.loadNu :

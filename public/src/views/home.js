@@ -329,7 +329,7 @@ function renderListenLater(wishlist) {
     return `
       <div class="home-section-header">
         <div class="home-section-title" style="font-family:var(--font-display)">Listen Later</div>
-        <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+        <button class="home-more-btn" data-switch="albums">MORE</button>
       </div>
       <div class="home-listen-later-grid">
         <div class="home-listen-later-empty">Je wishlist is leeg. Voeg albums toe via de zoekfunctie.</div>
@@ -355,7 +355,7 @@ function renderListenLater(wishlist) {
   return `
     <div class="home-section-header">
       <div class="home-section-title" style="font-family:var(--font-display)">Listen Later</div>
-      <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+      <button class="home-more-btn" data-switch="albums">MORE</button>
     </div>
     <div class="home-listen-later-grid">${itemsHtml}</div>`;
 }
@@ -465,7 +465,7 @@ function renderRecentArtists(topArtists) {
         <button class="home-recent-artists-btn" id="home-artists-prev" aria-label="Vorige">&#8249;</button>
         <button class="home-recent-artists-btn" id="home-artists-next" aria-label="Volgende">&#8250;</button>
       </div>
-      <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+      <button class="home-more-btn" data-switch="albums">MORE</button>
     </div>
     <div class="home-recent-artists-wrap">
       <div class="home-recent-artists" id="home-recent-artists">${artistsHtml}</div>
@@ -624,7 +624,7 @@ async function renderPlaylistsSection() {
             <button class="home-playlist-nav-btn" id="home-playlists-prev" aria-label="Vorige">&#8249;</button>
             <button class="home-playlist-nav-btn" id="home-playlists-next" aria-label="Volgende">&#8250;</button>
           </div>
-          <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+          <button class="home-more-btn" data-switch="albums">MORE</button>
         </div>
         <div class="home-playlists" id="home-playlists">
           ${cardsHtml}
@@ -1108,7 +1108,7 @@ function renderListeningStats(topArtists, topTracks) {
       <div class="home-wylbt-card">
         <div class="home-wylbt-card-header">
           <div class="home-wylbt-card-title">Your top artists</div>
-          <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+          <button class="home-more-btn" data-switch="albums">MORE</button>
         </div>
         <div id="home-wylbt-artists-list">
           ${renderTopArtistsList(topArtists)}
@@ -1528,7 +1528,7 @@ export async function loadHome() {
 
   // Recent "MORE" knop
   document.getElementById('home-recent-more')?.addEventListener('click', () => {
-    switchView('bibliotheek');
+    switchView('albums');
   });
 
   // Genre kaarten → switchView('ontdek')
@@ -1689,11 +1689,11 @@ export async function loadHome() {
       const playlistName = card.dataset.playlistName;
       if (!playlistId) return;
 
-      // Sla de geselecteerde playlist op in state en ga naar bibliotheek
+      // Sla de geselecteerde playlist op in state en ga naar albums
       if (window.lastSelectedPlaylistId !== undefined) {
         state.selectedPlaylist = { id: playlistId, name: playlistName };
       }
-      switchView('bibliotheek');
+      switchView('albums');
     });
   });
 

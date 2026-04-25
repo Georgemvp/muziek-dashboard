@@ -3,6 +3,8 @@
 // Desktop: collapsed/open inline, Mobiel: off-canvas overlay
 
 import { state } from '../state.js';
+import { apiFetch } from '../api.js';
+import { esc } from '../helpers.js';
 
 const appShell = document.querySelector('.app-shell');
 const sidebar = document.getElementById('sidebar');
@@ -62,19 +64,58 @@ export function initSidebar() {
 
   // ── Listen for router close event ──────────────────────────────────────
   document.addEventListener('sidebar:close', () => setSidebarOpen(false));
+
+  // ── Load sidebar playlists ────────────────────────────────────────────
+  loadSidebarPlaylists().catch(err => {
+    console.error('Failed to load sidebar playlists:', err);
+  });
 }
 
 /**
- * Load sidebar playlists. Extracted from bibliotheek module.
- * Roep dit aan nadat bibliotheek module geladen is.
- * @param {Object} bibliotheekModule - De bibliotheek.js module
+ * Load Plex playlists directly from API and render them in the sidebar.
  */
-export async function loadSidebarPlaylists(bibliotheekModule) {
+export async function loadSidebarPlaylists() {
+  const sidebarEl = document.getElementById('sidebar-playlists');
+  if (!sidebarEl) return;
+
+  sidebarEl.innerHTML = `<div class="blib-sidebar-loading"><div class="spinner-sm"></div></div>`;
+
   try {
-    if (bibliotheekModule?.loadSidebarPlaylists) {
-      await bibliotheekModule.loadSidebarPlaylists();
+    const data = await apiFetch('/api/plex/playlists');
+    const playlists = data.playlists || data || [];
+
+    if (!playlists.length) {
+      sidebarEl.innerHTML = `<div class="sidebar-empty">Geen afspeellijsten</div>`;
+      return;
     }
+
+    sidebarEl.innerHTML = playlists.map(pl => {
+      const key = esc(pl.ratingKey || pl.key || '');
+      const title = esc(pl.title || 'Playlist');
+      const count = pl.leafCount || pl.trackCount || '';
+      return `<button class="sidebar-playlist-item" role="listitem"
+                data-playlist-key="${key}" data-playlist-title="${title}"
+                aria-label="Afspeellijst ${title}">
+        <svg class="sidebar-playlist-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="8" y1="6" x2="21" y2="6"/>
+          <line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        <span class="sidebar-playlist-name">${title}</span>
+        ${count ? `<span class="sidebar-playlist-count">${count}</span>` : ''}
+      </button>`;
+    }).join('');
+
+    // Note: Playlist click handling would need to be added if playlists should be clickable
+    // Currently, playlists are displayed for information only
+
   } catch (err) {
-    console.error('Failed to load sidebar playlists:', err);
+    if (err.name !== 'AbortError') {
+      sidebarEl.innerHTML = `<div class="sidebar-empty">Laden mislukt</div>`;
+    }
   }
 }

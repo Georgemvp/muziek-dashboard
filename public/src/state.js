@@ -3,8 +3,7 @@
 
 export const state = {
   // ── Navigatie ───────────────────────────────────────────────────────────
-  activeView:        'bibliotheek',
-  bibSubTab:        'collectie',
+  activeView:        'home',
   sectionContainerEl: null,
 
   // ── Filter / sort ───────────────────────────────────────────────────────
