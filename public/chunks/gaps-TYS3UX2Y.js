@@ -1,4 +1,4 @@
-import{p as C}from"./chunk-QYIK726V.js";import{A as L,B as v,D as h,e as b,i as p,l as f,m as w,n as $,p as y,u as m,w as u,x as d,z as I}from"./chunk-454H4WOQ.js";var n=null,r="missing",c="",o=new Set;function E(){let t=document.getElementById("view-toolbar"),a=n?new Set(n.gaps.map(e=>e.artistId)).size:0,i=n?n.gaps.length:0;t.innerHTML=`
+import{p as C}from"./chunk-2E4OGBCT.js";import{A as L,B as v,D as h,e as b,i as p,l as f,m as w,n as $,p as y,u as m,w as u,x as d,z as I}from"./chunk-XOZD6SLL.js";var n=null,r="missing",c="",o=new Set;function E(){let t=document.getElementById("view-toolbar"),a=n?new Set(n.gaps.map(e=>e.artistId)).size:0,i=n?n.gaps.length:0;t.innerHTML=`
     <div class="toolbar-group">
       <input type="text" id="gaps-search" placeholder="Filter artiesten..." class="toolbar-input" value="${p(c)}">
       <select id="gaps-sort" class="toolbar-select">

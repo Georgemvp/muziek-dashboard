@@ -585,6 +585,57 @@ async function renderRecommendedArtists(topArtistsRaw) {
   }
 }
 
+// ── Section 3b: Your Playlists (Roon-style carousel) ───────────────────────
+
+async function renderPlaylistsSection() {
+  try {
+    const data = await apiFetch('/api/plex/playlists');
+    const playlists = (data?.playlists || data || []).slice(0, 5);
+
+    if (!playlists.length) {
+      return ''; // geen playlists, skip sectie
+    }
+
+    const cardsHtml = playlists.map(p => {
+      // Probeer thumb gebruiken, of composite van eerste 4 albums
+      let bgImg = '';
+      let bgCss = '';
+
+      if (p.thumb) {
+        bgImg = proxyImg(p.thumb, 360);
+        bgCss = `background: url('${esc(bgImg)}'); background-size: cover; background-position: center;`;
+      } else {
+        // Fallback: gradient achtergrond
+        bgCss = `background: linear-gradient(135deg, rgba(40,60,140,0.8), rgba(60,30,100,0.8));`;
+      }
+
+      return `
+        <div class="home-playlist-card" data-playlist-id="${esc(p.key || p.id || '')}" data-playlist-name="${esc(p.title || '')}">
+          ${bgImg ? `<img class="home-playlist-card-img" src="${esc(bgImg)}" alt="${esc(p.title || '')}" loading="lazy">` : `<div class="home-playlist-card-ph">♫</div>`}
+          <div class="home-playlist-name">${esc(p.title || 'Playlist')}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="home-playlists-section">
+        <div class="home-playlists-header">
+          <div class="home-playlists-title">Your Playlists</div>
+          <div class="home-playlists-nav">
+            <button class="home-playlist-nav-btn" id="home-playlists-prev" aria-label="Vorige">&#8249;</button>
+            <button class="home-playlist-nav-btn" id="home-playlists-next" aria-label="Volgende">&#8250;</button>
+          </div>
+          <button class="home-more-btn" data-switch="bibliotheek">MORE</button>
+        </div>
+        <div class="home-playlists" id="home-playlists">
+          ${cardsHtml}
+        </div>
+      </div>`;
+  } catch (err) {
+    console.warn('Playlists render mislukt:', err);
+    return '';
+  }
+}
+
 // ── Section 4: Daily Mixes ────────────────────────────────────────────────
 
 function renderDailyMixes(topArtists) {
@@ -1359,6 +1410,9 @@ export async function loadHome() {
   // Recommended Artists rendering
   const recommendedArtistsHtml = await renderRecommendedArtists(topArtistsRaw).catch(() => '');
 
+  // Playlists rendering
+  const playlistsHtml = await renderPlaylistsSection().catch(() => '');
+
   // ── Activity Matrix: waterfall fallback ──────────────────────────────────
   let activityMatrixTracks = tracks;
   let activityMatrixDailyPlays = null;
@@ -1416,6 +1470,9 @@ export async function loadHome() {
 
       <!-- 3c. Recommended Artists -->
       <div>${recommendedArtistsHtml}</div>
+
+      <!-- 3d. Your Playlists -->
+      <div id="home-playlists-container">${playlistsHtml}</div>
 
       <!-- 4. Daily Mixes -->
       <div>${renderDailyMixes(topArtistsRaw)}</div>
@@ -1594,6 +1651,49 @@ export async function loadHome() {
     item.addEventListener('click', () => {
       const name = item.dataset.artist;
       if (name) openArtistPanel(name);
+    });
+  });
+
+  // Playlists: carousel navigation
+  const playlistsRow = document.getElementById('home-playlists');
+  if (playlistsRow) {
+    const PLAYLIST_STEP = 200; // 180px card + 20px gap
+    const prevBtn = document.getElementById('home-playlists-prev');
+    const nextBtn = document.getElementById('home-playlists-next');
+
+    const updateNavButtons = () => {
+      const isAtStart = playlistsRow.scrollLeft <= 0;
+      const isAtEnd = playlistsRow.scrollLeft >= playlistsRow.scrollWidth - playlistsRow.clientWidth - 10;
+      prevBtn?.toggleAttribute('disabled', isAtStart);
+      nextBtn?.toggleAttribute('disabled', isAtEnd);
+    };
+
+    prevBtn?.addEventListener('click', () => {
+      playlistsRow.scrollBy({ left: -PLAYLIST_STEP * 2, behavior: 'smooth' });
+      setTimeout(updateNavButtons, 400);
+    });
+
+    nextBtn?.addEventListener('click', () => {
+      playlistsRow.scrollBy({ left: PLAYLIST_STEP * 2, behavior: 'smooth' });
+      setTimeout(updateNavButtons, 400);
+    });
+
+    playlistsRow.addEventListener('scroll', updateNavButtons);
+    updateNavButtons(); // Initial state
+  }
+
+  // Playlists: click handlers
+  content.querySelectorAll('.home-playlist-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const playlistId = card.dataset.playlistId;
+      const playlistName = card.dataset.playlistName;
+      if (!playlistId) return;
+
+      // Sla de geselecteerde playlist op in state en ga naar bibliotheek
+      if (window.lastSelectedPlaylistId !== undefined) {
+        state.selectedPlaylist = { id: playlistId, name: playlistName };
+      }
+      switchView('bibliotheek');
     });
   });
 
