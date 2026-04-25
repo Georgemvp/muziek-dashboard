@@ -105,12 +105,10 @@ export async function switchView(viewName, params = null) {
   state.sectionContainerEl = null;
 
   // ── Verberg iframe wraps bij view-wissel (tenzij de view ze zelf toont) ──
-  const tidarrWrap    = document.getElementById('tidarr-ui-wrap');
-  const mediasageWrap = document.getElementById('mediasage-ui-wrap');
-  const contentEl     = document.getElementById('content');
-  if (tidarrWrap)    tidarrWrap.style.display    = 'none';
-  if (mediasageWrap) mediasageWrap.style.display = 'none';
-  if (contentEl)     contentEl.style.display     = '';
+  const tidarrWrap = document.getElementById('tidarr-ui-wrap');
+  const contentEl  = document.getElementById('content');
+  if (tidarrWrap) tidarrWrap.style.display = 'none';
+  if (contentEl)  contentEl.style.display  = '';
 
   // ── Clear toolbar ──────────────────────────────────────────────────────
   const toolbar = document.getElementById('view-toolbar');

@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="css/recent-tracks.css">
 <link rel="stylesheet" href="css/albums.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<link rel="modulepreload" href="src/modules/mediasage-api.js">
 </head>
 <body>
 
@@ -285,17 +286,6 @@
         style="width:100%; height:100%; border:none; min-height:600px;"
         allow="autoplay"
         title="Tidarr — volledige downloadinterface">
-      </iframe>
-    </div>
-
-    <!-- MediaSage iframe container (getoond/verborgen door JS) -->
-    <div id="mediasage-ui-wrap" style="display:none; flex:1; overflow:hidden; min-height:0;" aria-label="MediaSage interface">
-      <iframe
-        id="mediasage-iframe"
-        src=""
-        data-src="/mediasage/"
-        style="width:100%; height:100%; border:none; min-height:600px;"
-        title="MediaSage — AI muziekaanbevelingen">
       </iframe>
     </div>
 
