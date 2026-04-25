@@ -70,6 +70,7 @@ const { getReleases, refreshReleases, initReleases }               = require('./
 const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus, TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./services/spotify');
+const { getWikipediaExtract }                                      = require('./services/wikipedia');
 
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
@@ -270,6 +271,9 @@ const deps = {
   MOODS,
   searchArtistId,
   getRecommendations,
+
+  // Wikipedia
+  getWikipediaExtract,
 
   // Helpers
   limitConcurrency,
