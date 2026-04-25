@@ -1,0 +1,369 @@
+/* ── Artist Detail View Styles ─────────────────────────────────────────────── */
+
+.detail-page {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ── Hero Section ───────────────────────────────────────────────────────────── */
+
+.detail-hero {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.detail-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.7));
+  z-index: 1;
+}
+
+.detail-hero-content {
+  position: relative;
+  z-index: 2;
+  padding: 2rem;
+  width: 100%;
+  color: white;
+}
+
+.detail-artist-name {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  word-wrap: break-word;
+  hyphens: auto;
+}
+
+.detail-meta {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  margin-bottom: 1rem;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.detail-tags .tag {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+}
+
+.detail-hero-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.detail-hero-actions .bookmark-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.detail-hero-actions .bookmark-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.detail-hero-actions .bookmark-btn.saved {
+  background: rgba(255, 200, 0, 0.8);
+  border-color: rgba(255, 200, 0, 1);
+}
+
+/* ── Content area ───────────────────────────────────────────────────────────── */
+
+.detail-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────────── */
+
+.detail-section {
+  margin-bottom: 3rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--surface2);
+  padding-bottom: 0.75rem;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.section-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: var(--surface2);
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.wiki-lang-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.5rem;
+  background: var(--surface2);
+  border-radius: 0.25rem;
+}
+
+/* ── Biography ───────────────────────────────────────────────────────────────── */
+
+.detail-bio {
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.detail-bio p {
+  margin: 0 0 1rem 0;
+  text-align: justify;
+}
+
+.detail-bio p:last-child {
+  margin-bottom: 0;
+}
+
+.detail-link {
+  display: inline-block;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  margin-top: 1rem;
+  transition: opacity 0.2s;
+}
+
+.detail-link:hover {
+  opacity: 0.8;
+}
+
+/* ── Grid Layout ───────────────────────────────────────────────────────────── */
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1.5rem;
+}
+
+/* ── Album Card ─────────────────────────────────────────────────────────────── */
+
+.album-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.album-cover {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface2);
+}
+
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: linear-gradient(135deg, var(--surface1) 0%, var(--surface2) 100%);
+  color: var(--text-tertiary);
+}
+
+.album-cover button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.album-cover:hover button {
+  opacity: 1;
+}
+
+.album-cover button:active {
+  transform: scale(0.95);
+}
+
+.album-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.album-name {
+  font-weight: 500;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--text);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.album-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.album-year {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.album-playcount {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.album-card .download-btn,
+.album-card .tidal-dl-btn {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* ── Similar Artists Row ─────────────────────────────────────────────────────── */
+
+.detail-similar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.detail-similar-chip {
+  padding: 0.5rem 1rem;
+  background: var(--surface2);
+  border: 1px solid var(--surface3);
+  border-radius: 1rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.detail-similar-chip:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* ── Album Play Button ──────────────────────────────────────────────────────── */
+
+.detail-album-play-btn {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.detail-album-play-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.detail-album-play-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .detail-hero {
+    height: 200px;
+  }
+
+  .detail-hero-content {
+    padding: 1.5rem;
+  }
+
+  .detail-artist-name {
+    font-size: 1.5rem;
+  }
+
+  .detail-content {
+    padding: 1rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .detail-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .detail-hero {
+    height: 150px;
+  }
+
+  .detail-artist-name {
+    font-size: 1.2rem;
+  }
+
+  .detail-meta {
+    font-size: 0.8rem;
+  }
+
+  .detail-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+  }
+
+  .detail-content {
+    padding: 0.75rem;
+  }
+}

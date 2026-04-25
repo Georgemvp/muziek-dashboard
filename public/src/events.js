@@ -7,6 +7,7 @@ import { openArtistPanel, closeArtistPanel } from './components/panel.js';
 import { toggleWishlist, loadWishlist, updateWishlistBadge } from './components/wishlist.js';
 import { loadPlexStatus } from './api.js';
 import { contentEl, runWithSection } from './helpers.js';
+import { switchView } from './router.js';
 
 let ontdekModulePromise;
 let downloadsModulePromise;
@@ -228,6 +229,14 @@ document.addEventListener('click', async e => {
   // ────────────────────────────────────────────────────────────────────────────
   // NOTE: Discover toggle handlers (.disc-toggle-btn) zitten nu in ontdek.js
   // ────────────────────────────────────────────────────────────────────────────
+
+  // Artist detail view (opens full artist page)
+  const detailLink = e.target.closest('[data-artist-detail]');
+  if (detailLink?.dataset.artistDetail) {
+    e.preventDefault();
+    switchView('artist-detail', { name: detailLink.dataset.artistDetail });
+    return;
+  }
 
   // Artiest-link → open panel
   const link = e.target.closest('[data-artist]');

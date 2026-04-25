@@ -91,7 +91,7 @@ function renderArtistCard(artist) {
           : `<div class="artist-photo-ph" style="background:${bg}">${initials(artist.name)}</div>`
         }
         <div class="artist-overlay">
-          <button class="artist-detail-btn" title="Bekijk details">→</button>
+          <button class="artist-detail-btn" data-artist-detail="${esc(artist.name)}" title="Bekijk details">→</button>
         </div>
       </div>
       <div class="artist-info">

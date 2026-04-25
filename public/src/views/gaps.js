@@ -66,7 +66,7 @@ function renderArtistCard(artist) {
         <div class="gaps-artist-info">
           ${artist.thumb ? `<img src="${proxyImg(artist.thumb)}" class="gaps-artist-photo" alt="">` : `<div class="gaps-artist-photo" style="background:${gradientFor(artist.title)}"></div>`}
           <div class="gaps-artist-meta">
-            <h3><a href="#" class="artist-link" data-id="${artist.artistId}">${esc(artist.title)}</a></h3>
+            <h3><a href="#" class="artist-link" data-artist-detail="${esc(artist.title)}">${esc(artist.title)}</a></h3>
             <div class="gaps-artist-tags">${countryFlag(artist.country)} ${tagsHtml(artist.genres?.slice(0, 3) || [])}</div>
           </div>
         </div>
@@ -163,10 +163,7 @@ async function renderGaps() {
         expandedArtists.has(artistId) ? expandedArtists.delete(artistId) : expandedArtists.add(artistId);
         renderGaps();
       }
-      if (e.target.classList.contains('artist-link')) {
-        e.preventDefault();
-        window.showArtistPanel?.(e.target.dataset.id);
-      }
+      // Artist links now use global event delegation in events.js via data-artist-detail attribute
     });
 
   } catch (err) {

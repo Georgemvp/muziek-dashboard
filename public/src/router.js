@@ -20,6 +20,7 @@ const viewMeta = {
   tracks:      { title: 'Muziek · Tracks' },
   composers:   { title: 'Muziek · Composers' },
   folders:     { title: 'Muziek · Folders' },
+  'artist-detail': { title: 'Muziek · Artiest' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -39,6 +40,7 @@ const viewLoaders = {
   tracks:      () => import('./views/tracks.js'),
   composers:   () => import('./views/composers.js'),
   folders:     () => import('./views/folders.js'),
+  'artist-detail': () => import('./views/artist-detail.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -63,9 +65,15 @@ async function loadViewModule(viewName) {
  * - View title
  * - Content clearing en error handling
  * @param {string} viewName - View om in te laden (home, ontdek, gaps, downloads, nu, etc.)
+ * @param {object} params - Optional parameters voor de view (bijv. { name: 'Artist' } voor artist-detail)
  */
-export async function switchView(viewName) {
+export async function switchView(viewName, params = null) {
   if (!viewLoaders[viewName]) return;
+
+  // Store params in state if provided (artist-detail uses this)
+  if (params) {
+    state.viewParams = params;
+  }
 
   // ── Mark nav item as active ────────────────────────────────────────────
   document.querySelectorAll('.nav-item[data-view]').forEach(el => {
@@ -106,6 +114,7 @@ export async function switchView(viewName) {
       viewName === 'tracks'      ? viewModule.loadTracks :
       viewName === 'composers'   ? viewModule.loadComposers :
       viewName === 'folders'     ? viewModule.loadFolders :
+      viewName === 'artist-detail' ? viewModule.loadArtistDetail :
       null;
 
     if (renderFn) {
