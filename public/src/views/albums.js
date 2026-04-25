@@ -11,6 +11,9 @@ import { playOnZone, getSelectedZone } from '../components/plexRemote.js';
 
 let albumsData = null;        // raw library data
 let albumsScroller = null;    // virtual scroller instance
+let albumsSearchTerm = '';    // current search term
+let albumsSort = 'artist';    // sort mode: artist, artist-za, album, album-za, recent
+let albumsViewMode = 'grid';  // grid or list
 
 // Row dimensions for virtual scroller
 const ALBUMS_GRID_ROW_H = 210;
@@ -31,6 +34,51 @@ function getCols() {
   if (w >= 650) return 4;
   if (w >= 480) return 3;
   return 2;
+}
+
+// ── Filter & Sort ──────────────────────────────────────────────────────────
+
+function filterAndSort(data) {
+  let filtered = data;
+
+  // Filter op zoekterm (artist + album)
+  if (albumsSearchTerm.trim()) {
+    const query = albumsSearchTerm.toLowerCase();
+    filtered = filtered.filter(item =>
+      item.artist.toLowerCase().includes(query) ||
+      item.album.toLowerCase().includes(query)
+    );
+  }
+
+  // Sorteer
+  const sorted = [...filtered];
+
+  switch (albumsSort) {
+    case 'artist-za':
+      sorted.sort((a, b) => {
+        const artistCmp = b.artist.localeCompare(a.artist);
+        return artistCmp !== 0 ? artistCmp : b.album.localeCompare(a.album);
+      });
+      break;
+    case 'album':
+      sorted.sort((a, b) => a.album.localeCompare(b.album));
+      break;
+    case 'album-za':
+      sorted.sort((a, b) => b.album.localeCompare(a.album));
+      break;
+    case 'recent':
+      sorted.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+      break;
+    case 'artist':
+    default:
+      sorted.sort((a, b) => {
+        const artistCmp = a.artist.localeCompare(b.artist);
+        return artistCmp !== 0 ? artistCmp : a.album.localeCompare(b.album);
+      });
+      break;
+  }
+
+  return sorted;
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────
@@ -262,6 +310,19 @@ class AlbumsVirtualScroller {
 function renderAZRail(scroller) {
   const rail = document.getElementById('albums-az-rail');
   if (!rail) return;
+
+  // Toon A-Z rail alleen bij:
+  // - Grid view
+  // - Artist sort
+  // - Geen zoekterm
+  const showRail = albumsViewMode === 'grid' && albumsSort.startsWith('artist') && !albumsSearchTerm.trim();
+  rail.style.display = showRail ? 'flex' : 'none';
+
+  if (!showRail) {
+    rail.innerHTML = '';
+    return;
+  }
+
   const available = scroller.getAvailableLetters();
   rail.innerHTML = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('').map(l =>
     `<button class="albums-az-btn${available.has(l) ? '' : ' disabled'}" data-letter="${l}">${l}</button>`
@@ -279,28 +340,113 @@ function updateCount(n) {
   if (el) el.textContent = `${fmt(n)} albums`;
 }
 
+// ── Toolbar render (in #view-toolbar) ──────────────────────────────────────
+
+function renderToolbar() {
+  const toolbar = document.getElementById('view-toolbar');
+  if (!toolbar) return;
+
+  const count = filterAndSort(albumsData || []).length;
+
+  toolbar.innerHTML = `
+    <div class="albums-toolbar-header">
+      <div>
+        <h1 style="margin: 0 0 4px 0; font-family: Georgia, serif; font-size: 32px; font-weight: 400;">My Albums</h1>
+        <p style="margin: 0; font-size: 13px; color: var(--text-muted);" id="albums-count">${fmt(count)} albums</p>
+      </div>
+    </div>
+    <div class="albums-toolbar">
+      <input class="albums-search" id="albums-search" type="text"
+        placeholder="🔍 Zoek artiest of album…" autocomplete="off"
+        value="${esc(albumsSearchTerm)}">
+
+      <div class="albums-toolbar-sep"></div>
+
+      <div class="albums-view-toggle" role="group" aria-label="Weergavemodus">
+        <button class="albums-pill${albumsViewMode === 'grid' ? ' active' : ''}" id="albums-btn-grid"
+                title="Grid weergave" aria-pressed="${albumsViewMode === 'grid'}">⊞</button>
+        <button class="albums-pill${albumsViewMode === 'list' ? ' active' : ''}" id="albums-btn-list"
+                title="Lijst weergave" aria-pressed="${albumsViewMode === 'list'}">☰</button>
+      </div>
+
+      <select class="albums-sort-select" id="albums-sort-select" aria-label="Sortering">
+        <option value="artist"${albumsSort === 'artist' ? ' selected' : ''}>Artiest A–Z</option>
+        <option value="artist-za"${albumsSort === 'artist-za' ? ' selected' : ''}>Artiest Z–A</option>
+        <option value="album"${albumsSort === 'album' ? ' selected' : ''}>Album A–Z</option>
+        <option value="album-za"${albumsSort === 'album-za' ? ' selected' : ''}>Album Z–A</option>
+        <option value="recent"${albumsSort === 'recent' ? ' selected' : ''}>Recent toegevoegd</option>
+      </select>
+    </div>
+  `;
+
+  // Bind toolbar events
+  bindToolbarEvents();
+}
+
+// ── Toolbar event binding ──────────────────────────────────────────────────
+
+function bindToolbarEvents() {
+  // Search input
+  document.getElementById('albums-search')?.addEventListener('input', e => {
+    albumsSearchTerm = e.target.value;
+    rerender();
+  });
+
+  // Grid/list toggle
+  document.getElementById('albums-btn-grid')?.addEventListener('click', () => {
+    if (albumsViewMode === 'grid') return;
+    albumsViewMode = 'grid';
+    renderToolbar();
+    rerender();
+  });
+
+  document.getElementById('albums-btn-list')?.addEventListener('click', () => {
+    if (albumsViewMode === 'list') return;
+    albumsViewMode = 'list';
+    renderToolbar();
+    rerender();
+  });
+
+  // Sort select
+  document.getElementById('albums-sort-select')?.addEventListener('change', e => {
+    albumsSort = e.target.value;
+    renderToolbar();
+    rerender();
+  });
+}
+
+// ── Rerender albums ────────────────────────────────────────────────────────
+
+function rerender() {
+  const container = document.getElementById('albums-container');
+  if (container) {
+    const filtered = filterAndSort(albumsData || []);
+    render(container, filtered);
+  }
+}
+
 // ── Main render function ───────────────────────────────────────────────────
 
-async function render(container) {
+async function render(container, data) {
   if (albumsScroller) {
     albumsScroller.destroy();
     albumsScroller = null;
   }
 
-  const data = albumsData || [];
-  updateCount(data.length);
+  const displayData = data || filterAndSort(albumsData || []);
+  updateCount(displayData.length);
 
-  if (!data.length) {
+  if (!displayData.length) {
     container.innerHTML = `
       <div class="albums-empty">
         <div class="albums-empty-icon">🎵</div>
-        <h3>No albums found</h3>
-        <p>Plex library is empty or not yet synchronized.</p>
+        <h3>${albumsSearchTerm ? 'Geen resultaten gevonden' : 'No albums found'}</h3>
+        <p>${albumsSearchTerm ? 'Probeer een ander zoekterm' : 'Plex library is empty or not yet synchronized.'}</p>
       </div>`;
     return;
   }
 
-  albumsScroller = new AlbumsVirtualScroller(container, data);
+  albumsScroller = new AlbumsVirtualScroller(container, displayData);
   renderAZRail(albumsScroller);
 }
 
@@ -335,25 +481,33 @@ export async function loadAlbums() {
 
   document.title = 'Muziek · Albums';
 
-  // Show initial UI with count placeholder
+  // Load data first
+  const data = await loadData();
+
+  // Render toolbar in #view-toolbar
+  renderToolbar();
+
+  // Show album container and A-Z rail
   content.innerHTML = `
-    <div class="albums-toolbar">
-      <h2 style="margin: 0 0 8px 0;">Albums</h2>
-      <div style="color: var(--text-muted); font-size: 14px;" id="albums-count">Loading…</div>
-    </div>
-    <div style="display: flex; gap: 8px;">
+    <div style="display: flex; gap: 8px; flex: 1;">
       <div style="flex: 1;" id="albums-container"></div>
       <div id="albums-az-rail" class="albums-az-rail"></div>
     </div>
   `;
 
-  // Load data and render
-  const data = await loadData();
+  // Render albums
   if (data && data.length > 0) {
     const container = document.getElementById('albums-container');
     if (container) {
       await render(container);
     }
+  } else {
+    content.innerHTML = `
+      <div class="albums-empty">
+        <div class="albums-empty-icon">🎵</div>
+        <h3>No albums found</h3>
+        <p>Plex library is empty or not yet synchronized.</p>
+      </div>`;
   }
 
   setupEventHandlers();
