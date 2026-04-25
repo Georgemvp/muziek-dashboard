@@ -21,6 +21,7 @@ const viewMeta = {
   composers:   { title: 'Muziek · Composers' },
   folders:     { title: 'Muziek · Folders' },
   'artist-detail': { title: 'Muziek · Artiest' },
+  stats:           { title: 'Muziek · Statistieken' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -41,6 +42,7 @@ const viewLoaders = {
   composers:   () => import('./views/composers.js'),
   folders:     () => import('./views/folders.js'),
   'artist-detail': () => import('./views/artist-detail.js'),
+  stats:           () => import('./views/stats.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'composers'   ? viewModule.loadComposers :
       viewName === 'folders'     ? viewModule.loadFolders :
       viewName === 'artist-detail' ? viewModule.loadArtistDetail :
+      viewName === 'stats'         ? viewModule.loadStats :
       null;
 
     if (renderFn) {
