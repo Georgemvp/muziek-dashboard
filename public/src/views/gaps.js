@@ -110,6 +110,7 @@ function renderArtistCard(artist) {
         </div>
         <div class="gaps-artist-actions">
           ${bookmarkBtn('artist', artist.title, artist.title, artist.thumb || '')}
+          ${state.tidarrOk && gapCount > 0 ? `<button class="gaps-dl-all-btn download-btn" data-dlartist="${esc(artist.title)}" data-dl-all-gaps="true" title="Download alle ${gapCount} ontbrekende albums">⬇ Alles (${gapCount})</button>` : ''}
           <button class="gaps-toggle-btn" data-id="${artist.artistId}">
             ${isExpanded ? '▼' : '▶'} ${gapCount} ontbreken
           </button>
@@ -194,12 +195,44 @@ async function renderGaps() {
     });
 
     // Event delegation
-    container.addEventListener('click', e => {
+    container.addEventListener('click', async e => {
+      // Toggle artiest uitklappen
       if (e.target.classList.contains('gaps-toggle-btn')) {
         e.preventDefault();
         const artistId = e.target.dataset.id;
         expandedArtists.has(artistId) ? expandedArtists.delete(artistId) : expandedArtists.add(artistId);
         renderGaps();
+        return;
+      }
+
+      // Bulk-download alle ontbrekende albums van een artiest
+      if (e.target.dataset.dlAllGaps) {
+        e.stopPropagation();
+        const artistName = e.target.dataset.dlartist;
+        const artist = gapsData.gaps.find(g => g.title === artistName);
+        if (!artist || !artist.missing?.length) return;
+
+        const missing = artist.missing.filter(a => !a.inPlex);
+        if (!missing.length) return;
+
+        if (!confirm(`Download ${missing.length} ontbrekende album${missing.length !== 1 ? 's' : ''} van ${artistName}?`)) return;
+
+        const btn = e.target;
+        btn.disabled = true;
+        btn.textContent = 'Bezig…';
+
+        try {
+          const { triggerTidarrDownload } = await import('./downloads.js');
+          for (const album of missing) {
+            await triggerTidarrDownload(artistName, album.title, null);
+          }
+          btn.textContent = '✓ Klaar';
+        } catch (err) {
+          btn.textContent = '⚠ Fout';
+          btn.disabled = false;
+          console.error('Bulk download mislukt:', err);
+        }
+        return;
       }
       // Artist links now use global event delegation in events.js via data-artist-detail attribute
     });

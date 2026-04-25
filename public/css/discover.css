@@ -291,6 +291,24 @@
   border-color: var(--accent);
 }
 
+/* Bulk-download knop per artiest */
+.gaps-dl-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gaps-dl-all-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 /* Albums wrapper - collapsed by default */
 .gaps-albums-wrap {
   max-height: 0;
