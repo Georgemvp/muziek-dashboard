@@ -518,6 +518,12 @@ export function initPlayer() {
     const zone = getSelectedZone();
     const volume = parseInt(e.target.value);
 
+    // Update volume display number
+    const volumeNumber = document.getElementById('player-volume-number');
+    if (volumeNumber) {
+      volumeNumber.textContent = volume;
+    }
+
     if (zone?.machineId === '__web__') {
       // Set web player volume (0-100 scale)
       playerState.webPlayerAudio.volume = volume / 100;
@@ -546,24 +552,6 @@ export function initPlayer() {
     }
   });
 
-  // ── Shuffle button ──────────────────────────────────────────────
-  const shuffleBtn = document.getElementById('player-shuffle');
-  shuffleBtn?.addEventListener('click', () => {
-    const isEnabled = queueManager.toggleShuffle();
-    if (isEnabled) {
-      shuffleBtn.classList.add('active');
-      shuffleBtn.setAttribute('aria-pressed', 'true');
-    } else {
-      shuffleBtn.classList.remove('active');
-      shuffleBtn.setAttribute('aria-pressed', 'false');
-    }
-  });
-
-  // Initialize shuffle button state
-  if (shuffleBtn && queueManager.getShuffleEnabled()) {
-    shuffleBtn.classList.add('active');
-    shuffleBtn.setAttribute('aria-pressed', 'true');
-  }
 
   // ── Queue panel toggle ──────────────────────────────────────────
   const queueBtn = document.getElementById('player-queue-btn');

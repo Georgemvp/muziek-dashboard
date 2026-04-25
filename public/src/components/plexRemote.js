@@ -26,11 +26,16 @@ function setSelectedZone(zone) {
   _updateZoneUI();
 }
 
-/** Werk de zone-naam in de header bij. */
+/** Werk de zone-naam in de header en player bar bij. */
 function _updateZoneUI() {
   const zone   = getSelectedZone();
   const nameEl = document.getElementById('plex-zone-name');
   if (nameEl) nameEl.textContent = zone ? zone.name : '—';
+
+  // Also update player bar zone display
+  const playerZoneName = document.getElementById('plex-zone-name-player');
+  if (playerZoneName) playerZoneName.textContent = zone ? zone.name : '—';
+
   const btn = document.getElementById('plex-zone-btn');
   if (btn) btn.classList.toggle('has-zone', !!zone);
 }

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   player.css — Persistent Player Bar
+   player.css — Persistent Player Bar (Roon-stijl)
    Bevat styling voor de player-bar met track-info, controls, progress, volume
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -8,11 +8,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
+  gap: 24px;
   padding: 0 24px;
   height: 72px;
   position: relative;
-  background: var(--surface1);
+  background: var(--bg-primary);
   border-top: 1px solid var(--border);
   transition: all var(--transition-normal);
 }
@@ -41,21 +41,22 @@
 }
 
 
-/* ── Track Info Section ── */
-.player-track-info {
+/* ── Player Section Left: Album Art + Track Info ── */
+.player-section-left {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex: 1;
+  gap: 12px;
+  flex: 0 0 auto;
   min-width: 0;
+  max-width: 280px;
 }
 
 /* Album art container */
 .player-art {
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-sm);
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--surface2);
   display: flex;
@@ -71,26 +72,19 @@
   display: block;
 }
 
-/* Placeholder music note when no image */
-.player-art img[src=""],
-.player-art:not(:has(img[src])) {
-  position: relative;
-}
-
-
 /* Track text container */
 .player-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--space-1);
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
 
 .player-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -101,7 +95,7 @@
 
 #player-bar.active .player-title {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 #player-bar:not(.active) .player-title {
@@ -110,7 +104,7 @@
 }
 
 .player-artist {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -130,20 +124,27 @@
 }
 
 /* Default text when nothing playing */
-#player-bar:not(.active) .player-text {
-  display: flex;
-}
-
 #player-bar:not(.active) .player-artist {
   display: none;
 }
 
 
-/* ── Controls Section ── */
+/* ── Player Section Center: Controls + Progress ── */
+.player-section-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Controls Section */
 .player-controls {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: center;
+  gap: 20px;
   flex-shrink: 0;
 }
 
@@ -172,29 +173,52 @@
 
 .player-btn:hover {
   color: var(--text-primary);
-  background: rgba(255,255,255,0.05);
 }
 
 .player-btn:active {
   transform: scale(0.95);
 }
 
-/* Main play/pause button */
+/* Previous button */
+.player-btn-prev svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Main play/pause button — cirkel met border, niet gevuld */
 .player-btn-main {
-  background: var(--text-primary);
-  color: var(--bg);
-  width: 40px;
-  height: 40px;
+  background: transparent;
+  color: var(--text-primary);
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--text-primary);
   border-radius: 50%;
   transition: all var(--transition-fast);
 }
 
 .player-btn-main:hover {
-  background: var(--accent);
-  transform: none;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* Paused state: remove pulse */
+.player-btn-main svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Next button */
+.player-btn-next svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Queue button */
+.player-btn-queue svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Paused state */
 #player-bar.paused .player-btn-main {
   animation: none;
 }
@@ -204,16 +228,18 @@
 .player-progress-wrap {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  flex: 1.5;
+  gap: 8px;
+  flex: 1;
+  width: 100%;
+  max-width: 500px;
   min-width: 200px;
 }
 
 .player-time {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: var(--text-secondary);
   white-space: nowrap;
-  min-width: 30px;
+  min-width: 32px;
   text-align: center;
   font-weight: 400;
 }
@@ -232,26 +258,39 @@
 .player-progress {
   flex: 1;
   height: 3px;
-  background: var(--surface3);
+  background: var(--border);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   transition: height 0.15s ease;
 }
 
 .player-progress:hover {
   height: 5px;
-  background: var(--surface3);
 }
 
-/* Progress fill */
+/* Progress fill met witte dot */
 .player-progress-fill {
   height: 100%;
   background: var(--accent);
   border-radius: 2px;
   transition: width var(--transition-fast);
   width: 0%;
+  position: relative;
+}
+
+/* Witte dot op huidige positie */
+.player-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
 }
 
 #player-bar.active .player-progress-fill {
@@ -264,104 +303,66 @@
 }
 
 
-/* ── Extra Controls Section ── */
-.player-extra {
+/* ── Player Section Right: Zone Output + Volume ── */
+.player-section-right {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 20px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Zone display */
+.player-zone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-/* Queue button */
-#player-queue-btn {
-  background: none;
-  border: none;
+.player-zone svg {
+  width: 16px;
+  height: 16px;
   color: var(--text-secondary);
-  cursor: pointer;
-  padding: var(--space-2);
+  flex-shrink: 0;
+}
+
+#plex-zone-name-player {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
+
+/* Volume display (speaker icon + getal) */
+.player-volume-display {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-  font-size: 16px;
-  line-height: 1;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-#player-queue-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface2);
+.player-volume-display svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
-#player-queue-btn:active {
-  transform: scale(0.95);
+.player-volume-number {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-weight: 400;
+  min-width: 24px;
+  text-align: right;
 }
 
-/* Volume control */
+/* Volume control (hidden slider) */
 .player-volume {
-  width: 90px;
-  height: 3px;
-  cursor: pointer;
-  accent-color: var(--accent);
-  -webkit-appearance: slider-horizontal;
-  appearance: slider-horizontal;
-}
-
-/* Range input styling (webkit) */
-input[type="range"].player-volume {
-  -webkit-appearance: none;
-  width: 90px;
-  height: 3px;
-  background: var(--surface2);
-  outline: none;
-  border-radius: 2px;
-}
-
-input[type="range"].player-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  cursor: pointer;
-  border-radius: 50%;
-  transition: all var(--transition-fast);
-}
-
-input[type="range"].player-volume::-webkit-slider-thumb:hover {
-  background: var(--accent-hover);
-}
-
-input[type="range"].player-volume::-moz-range-thumb {
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  cursor: pointer;
-  border-radius: 50%;
-  border: none;
-  transition: all var(--transition-fast);
-}
-
-input[type="range"].player-volume::-moz-range-thumb:hover {
-  background: var(--accent-hover);
-}
-
-input[type="range"].player-volume::-moz-range-track {
-  background: transparent;
-  border: none;
-}
-
-#player-bar:not(.active) .player-volume {
-  opacity: 0.5;
-}
-
-/* ── Shuffle Button ── */
-#player-shuffle {
-  position: relative;
-}
-
-#player-shuffle.active {
-  color: var(--accent);
+  display: none;
 }
 
 /* ── Queue Badge ── */
@@ -388,14 +389,147 @@ input[type="range"].player-volume::-moz-range-track {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* Tablet: compress some spacing */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   #player-bar {
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
+    gap: 16px;
+    padding: 0 16px;
   }
 
-  .player-track-info {
-    gap: var(--space-2);
+  .player-section-left {
+    max-width: 220px;
+  }
+
+  .player-section-center {
+    gap: 8px;
+  }
+
+  .player-controls {
+    gap: 16px;
+  }
+
+  .player-progress-wrap {
+    gap: 6px;
+    max-width: 400px;
+  }
+
+  .player-time {
+    font-size: 11px;
+    min-width: 28px;
+  }
+
+  .player-section-right {
+    gap: 16px;
+  }
+}
+
+/* Small tablet */
+@media (max-width: 768px) {
+  #player-bar {
+    gap: 12px;
+    padding: 0 12px;
+    height: 66px;
+  }
+
+  .player-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  .player-section-left {
+    max-width: 180px;
+  }
+
+  .player-text {
+    gap: 0px;
+  }
+
+  .player-title {
+    font-size: 13px;
+  }
+
+  .player-artist {
+    font-size: 12px;
+  }
+
+  .player-controls {
+    gap: 12px;
+  }
+
+  .player-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .player-btn-main {
+    width: 32px;
+    height: 32px;
+    border-width: 1.5px;
+  }
+
+  .player-btn-main svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .player-progress-wrap {
+    gap: 4px;
+    max-width: 300px;
+  }
+
+  .player-time {
+    font-size: 10px;
+    min-width: 24px;
+  }
+
+  .player-zone {
+    gap: 6px;
+  }
+
+  .player-zone svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  #plex-zone-name-player {
+    font-size: 12px;
+  }
+
+  .player-volume-display {
+    gap: 4px;
+  }
+
+  .player-volume-display svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .player-volume-number {
+    font-size: 12px;
+    min-width: 20px;
+  }
+
+  .player-section-right {
+    gap: 12px;
+  }
+}
+
+/* Mobile: hide zone info */
+@media (max-width: 600px) {
+  .player-zone {
+    display: none;
+  }
+}
+
+/* Mobile: hide progress bar */
+@media (max-width: 480px) {
+  .player-progress-wrap {
+    display: none;
+  }
+
+  #player-bar {
+    gap: 8px;
+    padding: 0 8px;
+    height: 62px;
   }
 
   .player-art {
@@ -403,37 +537,60 @@ input[type="range"].player-volume::-moz-range-track {
     height: 44px;
   }
 
-  .player-progress-wrap {
-    min-width: 150px;
-    gap: var(--space-1);
+  .player-section-left {
+    max-width: 160px;
+    gap: 8px;
   }
 
-  .player-time {
-    font-size: 10px;
-    min-width: 25px;
+  .player-title {
+    font-size: 12px;
   }
 
-  .player-volume {
-    width: 80px;
-  }
-}
-
-/* Mobile: hide some elements */
-@media (max-width: 480px) {
-  .player-progress-wrap {
-    display: none;
-  }
-
-  .player-extra {
-    gap: var(--space-2);
-  }
-
-  .player-volume {
-    width: 60px;
+  .player-artist {
+    font-size: 11px;
   }
 
   .player-controls {
-    gap: 0;
+    gap: 8px;
+  }
+
+  .player-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .player-btn-main {
+    width: 28px;
+    height: 28px;
+    border-width: 1.5px;
+  }
+
+  .player-btn-main svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .player-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .player-volume-display {
+    gap: 3px;
+  }
+
+  .player-volume-display svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .player-volume-number {
+    font-size: 11px;
+    min-width: 18px;
+  }
+
+  .player-section-right {
+    gap: 8px;
   }
 }
 
