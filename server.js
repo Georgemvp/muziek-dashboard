@@ -26,6 +26,40 @@ const PORT    = process.env.PORT || 80;
 const TIDARR_BASE = (process.env.TIDARR_URL || 'http://tidarr:8484').replace(/\/$/, '');
 logger.info({ tidarrUrl: TIDARR_BASE }, 'Tidarr proxy configured');
 
+// ── MediaSage UI + API proxy ────────────────────────────────────────────────
+// Alle verzoeken naar /mediasage/ worden doorgestuurd naar de MediaSage FastAPI.
+const MEDIASAGE_BASE = (process.env.MEDIASAGE_URL || 'http://localhost:5765').replace(/\/$/, '');
+logger.info({ mediasageUrl: MEDIASAGE_BASE }, 'MediaSage proxy configured');
+
+app.use('/mediasage', createProxyMiddleware({
+  target:       MEDIASAGE_BASE,
+  changeOrigin: true,
+  pathRewrite:  { '^/mediasage': '' },
+  on: {
+    proxyRes: (proxyRes) => {
+      delete proxyRes.headers['x-frame-options'];
+      delete proxyRes.headers['content-security-policy'];
+      delete proxyRes.headers['x-content-type-options'];
+    },
+    error: (err, req, res) => {
+      logger.error({
+        err: err.message,
+        code: err.code,
+        target: MEDIASAGE_BASE,
+        path: req.path
+      }, 'MediaSage proxy error');
+      res.status(502).send(`
+        <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
+          <h2>⚠️ MediaSage niet bereikbaar</h2>
+          <p>MediaSage is nog niet opgestart of er is een fout opgetreden.</p>
+          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
+        </div>
+      `);
+    }
+  }
+}));
+
 app.use('/tidarr-ui', createProxyMiddleware({
   target:       TIDARR_BASE,
   changeOrigin: true,

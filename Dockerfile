@@ -78,6 +78,18 @@ RUN apk add --no-cache --virtual .pydeps python3-dev build-base && \
     python -m pip install --no-cache-dir -r /tidarr/docker/requirements.txt && \
     apk del .pydeps
 
+# ── MediaSage: Python-afhankelijkheden (FastAPI + LLM aanbevelingen) ─────────
+COPY mediasage/requirements.txt /mediasage/requirements.txt
+RUN apk add --no-cache --virtual .mediasage-pydeps \
+        python3-dev build-base libxml2-dev libxslt-dev libffi-dev openssl-dev && \
+    python -m pip install --no-cache-dir -r /mediasage/requirements.txt && \
+    apk del .mediasage-pydeps
+
+# ── MediaSage: broncode, frontend en persistente datamap ─────────────────────
+COPY mediasage/backend/  /mediasage/backend/
+COPY mediasage/frontend/ /mediasage/frontend/
+RUN mkdir -p /mediasage/data
+
 # ── Tidarr: gebouwde artefacten + statische bestanden ───────────────────────
 COPY --from=tidarr_builder /tidarr/api/dist       /tidarr/api/dist
 COPY --from=tidarr_builder /tidarr/app/dist        /tidarr/app/build

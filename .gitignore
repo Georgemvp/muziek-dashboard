@@ -21,3 +21,6 @@ data/
 # IDE bestanden
 .vscode/
 .idea/
+
+# MediaSage — nested git repo (handmatig gecloned, niet als submodule)
+mediasage/.git/
