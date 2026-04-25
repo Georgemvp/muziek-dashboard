@@ -1,10 +1,13 @@
 // ── Sidebar: Toggle, overlay, playlist handling ────────────────────────────
 // Beheert sidebar open/close state en event handling
+// Desktop: collapsed/open inline, Mobiel: off-canvas overlay
 
 import { state } from '../state.js';
 
+const appShell = document.querySelector('.app-shell');
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
+const SIDEBAR_KEY = 'sidebar-state';
 
 /**
  * Zorg dat sidebar overlay bestaat (voeg toe aan DOM als nodig).
@@ -28,10 +31,12 @@ const sidebarOverlay = ensureSidebarOverlay();
  * @param {boolean} open - True = open, false = closed
  */
 export function setSidebarOpen(open) {
-  if (!sidebar) return;
-  sidebar.dataset.open = open ? 'true' : 'false';
+  if (!appShell) return;
+  appShell.classList.toggle('sidebar-open', open);
   sidebarToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
   sidebarOverlay.classList.toggle('visible', open);
+  // Sla op in localStorage
+  localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
 }
 
 /**
@@ -39,10 +44,17 @@ export function setSidebarOpen(open) {
  * Roep dit eenmaal aan uit main.js
  */
 export function initSidebar() {
+  // ── Restore saved state of start (or default to closed) ──────────────
+  const saved = localStorage.getItem(SIDEBAR_KEY);
+  const shouldBeOpen = saved === 'open';
+  if (shouldBeOpen) {
+    setSidebarOpen(true);
+  }
+
   // ── Toggle button ──────────────────────────────────────────────────────
   sidebarToggle?.addEventListener('click', () => {
-    const open = sidebar?.dataset.open !== 'true';
-    setSidebarOpen(open);
+    const isOpen = appShell?.classList.contains('sidebar-open');
+    setSidebarOpen(!isOpen);
   });
 
   // ── Overlay click (close) ──────────────────────────────────────────────

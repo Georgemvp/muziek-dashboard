@@ -152,15 +152,15 @@
 /* ── Grid & List Views ────────────────────────────────────────────────────── */
 .albums-grid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, 1fr);
-  padding: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 20px 16px;
+  padding: 20px;
 }
 
 .albums-album {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
   transition: transform 0.2s ease;
 }
@@ -322,51 +322,9 @@
   line-height: 1.5;
 }
 
-/* ── Responsive Grid Columns ──────────────────────────────────────────────── */
+/* ── Responsive Adjustments ──────────────────────────────────────────────── */
 
-/* 480px - 649px: 3 columns */
-@media (min-width: 480px) and (max-width: 649px) {
-  .albums-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* 650px - 849px: 4 columns */
-@media (min-width: 650px) and (max-width: 849px) {
-  .albums-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-/* 850px - 1049px: 5 columns */
-@media (min-width: 850px) and (max-width: 1049px) {
-  .albums-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-/* 1050px - 1299px: 6 columns */
-@media (min-width: 1050px) and (max-width: 1299px) {
-  .albums-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
-}
-
-/* 1300px - 1599px: 7 columns */
-@media (min-width: 1300px) and (max-width: 1599px) {
-  .albums-grid {
-    grid-template-columns: repeat(7, 1fr);
-  }
-}
-
-/* 1600px+: 8 columns */
-@media (min-width: 1600px) {
-  .albums-grid {
-    grid-template-columns: repeat(8, 1fr);
-  }
-}
-
-/* Mobile (< 480px): A-Z rail adjustments */
+/* Mobile (< 480px): Hide A-Z rail */
 @media (max-width: 479px) {
   .albums-az-rail {
     display: none;

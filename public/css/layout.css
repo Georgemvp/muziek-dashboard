@@ -10,9 +10,14 @@
    ══════════════════════════════════════════════════════════════════ */
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
   height: 100dvh;
   overflow: hidden;
+  transition: grid-template-columns var(--transition-normal);
+}
+
+.app-shell.sidebar-open {
+  grid-template-columns: var(--sidebar-width) 1fr;
 }
 
 
@@ -22,14 +27,18 @@
 .sidebar {
   display: flex;
   flex-direction: column;
+  width: var(--sidebar-collapsed);
   height: 100dvh;
   overflow-y: auto;
   background: #f8f8f8;
   border-right: 1px solid #e5e5e5;
-  transition: width var(--transition-normal), left var(--transition-normal),
-              transform var(--transition-normal);
+  transition: width var(--transition-normal);
   z-index: 100;
   flex-shrink: 0;
+}
+
+.app-shell.sidebar-open .sidebar {
+  width: var(--sidebar-width);
 }
 
 /* Brand / logo balk */
@@ -37,12 +46,16 @@
   padding: 20px 16px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   font-size: 16px;
   font-weight: 700;
   color: #222;
   flex-shrink: 0;
   letter-spacing: 0.3px;
+}
+
+.app-shell.sidebar-open .sidebar-brand {
+  justify-content: space-between;
 }
 
 .brand-name {
@@ -51,6 +64,11 @@
   font-style: italic;
   font-size: 18px;
   letter-spacing: -0.5px;
+  display: none;
+}
+
+.app-shell.sidebar-open .brand-name {
+  display: block;
 }
 
 .sidebar-brand-icon {
@@ -90,6 +108,7 @@
 .nav-item {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   padding: 8px 16px;
   border-radius: 0;
@@ -105,6 +124,18 @@
   text-align: left;
   text-decoration: none;
   overflow: hidden;
+}
+
+.app-shell.sidebar-open .nav-item {
+  justify-content: flex-start;
+}
+
+.nav-label {
+  display: none;
+}
+
+.app-shell.sidebar-open .nav-label {
+  display: inline;
 }
 
 .nav-item:hover {
@@ -163,11 +194,16 @@
   color: var(--text-muted);
   padding: 24px 16px 8px;
   flex-shrink: 0;
+  display: none;
+}
+
+.app-shell.sidebar-open .sidebar-section-title {
+  display: block;
 }
 
 /* Sectie-titel met action button (voor playlists) */
 .sidebar-section-title-with-action {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   font-size: 10px;
@@ -179,10 +215,14 @@
   flex-shrink: 0;
 }
 
+.app-shell.sidebar-open .sidebar-section-title-with-action {
+  display: flex;
+}
+
 .sidebar-add-btn {
   width: 20px;
   height: 20px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   background: transparent;
@@ -194,8 +234,21 @@
   transition: color var(--transition-fast);
 }
 
+.app-shell.sidebar-open .sidebar-add-btn {
+  display: flex;
+}
+
 .sidebar-add-btn:hover {
   color: var(--accent);
+}
+
+/* Sidebar playlists container */
+#sidebar-playlists {
+  display: none;
+}
+
+.app-shell.sidebar-open #sidebar-playlists {
+  display: block;
 }
 
 /* Footer (onderaan sidebar, pushed by margin-top: auto) */
@@ -207,6 +260,14 @@
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.sidebar-footer label {
+  display: none;
+}
+
+.app-shell.sidebar-open .sidebar-footer label {
+  display: block;
 }
 
 /* Status-rij in footer */
@@ -336,9 +397,9 @@
   flex-shrink: 0;
 }
 
-/* Hamburgermenu (verborgen op desktop, zichtbaar op mobiel) */
+/* Hamburgermenu (altijd zichtbaar) */
 .sidebar-toggle {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
@@ -704,16 +765,16 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
-   RESPONSIVE — max-width: 768px
+   RESPONSIVE — max-width: 768px (mobiel: off-canvas overlay)
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
-  /* App shell wordt 1 kolom */
+  /* App shell wordt 1 kolom op mobiel */
   .app-shell {
     grid-template-columns: 1fr;
   }
 
-  /* Sidebar off-canvas links */
+  /* Sidebar off-canvas links op mobiel */
   .sidebar {
     position: fixed;
     top: 0;
@@ -723,9 +784,11 @@
     z-index: 200;
     box-shadow: none;
     width: var(--sidebar-width) !important;
+    transition: transform var(--transition-normal);
   }
 
-  .sidebar[data-open="true"] {
+  /* Open state op mobiel */
+  .app-shell.sidebar-open .sidebar {
     transform: translateX(0);
     box-shadow: var(--shadow-lg);
   }
@@ -735,9 +798,16 @@
     display: block;
   }
 
-  /* Hamburger zichtbaar op mobiel */
-  .sidebar-toggle {
-    display: flex;
+  /* On mobile, show all labels even when "collapsed" because it's off-canvas */
+  .nav-label,
+  .sidebar-section-title,
+  .sidebar-section-title-with-action,
+  .sidebar-add-btn {
+    display: block !important;
+  }
+
+  .brand-name {
+    display: block !important;
   }
 
   /* Player bar: toon alleen info + controls */
