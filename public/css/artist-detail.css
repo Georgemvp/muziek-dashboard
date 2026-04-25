@@ -84,6 +84,34 @@
   border-color: rgba(255, 200, 0, 1);
 }
 
+/* ── Back Button ────────────────────────────────────────────────────────────── */
+
+.detail-back-btn {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 3;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.detail-back-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.detail-back-btn:active {
+  transform: scale(0.95);
+}
+
 /* ── Content area ───────────────────────────────────────────────────────────── */
 
 .detail-content {
@@ -119,6 +147,16 @@
   background: var(--surface2);
   padding: 0.25rem 0.75rem;
   border-radius: 0.5rem;
+}
+
+.section-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.4rem;
+  margin-left: 0.5rem;
 }
 
 .wiki-lang-badge {

@@ -54,7 +54,8 @@ function renderArtistDetail(data) {
   // 1. HERO SECTION
   // ────────────────────────────────────────────────────────────────────────
 
-  const heroImg = proxyImg(info.image, 600) || info.image;
+  // Gebruiken picture_xl als beschikbaar, fallback naar picture_medium
+  const heroImg = proxyImg(info.imageXl || info.image, 600) || (info.imageXl || info.image);
   const heroBg = heroImg
     ? `background-image: url('${esc(heroImg)}'); background-size: cover; background-position: center;`
     : `background: ${gradientFor(name)};`;
@@ -76,9 +77,17 @@ function renderArtistDetail(data) {
     tagHtml = `<div class="detail-tags">${tagsHtml(info.tags, 8)}</div>`;
   }
 
+  // Back button
+  const backBtn = state.previousView ? `
+    <button class="detail-back-btn" data-previous-view="${esc(state.previousView)}" title="Terug">
+      ← Terug
+    </button>
+  ` : '';
+
   const heroHtml = `
     <div class="detail-hero" style="${heroBg}">
       <div class="detail-hero-overlay"></div>
+      ${backBtn}
       <div class="detail-hero-content">
         <h1 class="detail-artist-name">${esc(name)}</h1>
         ${metaHtml}
@@ -146,21 +155,22 @@ function renderArtistDetail(data) {
   // ────────────────────────────────────────────────────────────────────────
 
   let gapsHtml = '';
-  if (gaps && gaps.gaps && gaps.gaps.length > 0) {
-    const artistGaps = gaps.gaps.filter(g => g.artistName && g.artistName.toLowerCase() === name.toLowerCase());
-    if (artistGaps.length > 0) {
-      gapsHtml = `
-        <section class="detail-section">
-          <div class="section-header">
-            <h2>Ontbrekende albums</h2>
-            <span class="section-count">${artistGaps.length}</span>
-          </div>
-          <div class="detail-grid">
-            ${artistGaps.map(g => renderGapCard(name, g)).join('')}
-          </div>
-        </section>
-      `;
-    }
+  if (gaps && gaps.missing && gaps.missing.length > 0) {
+    const completenessPercent = gaps.completeness ? Math.round(gaps.completeness * 100) : 0;
+    const completnessBadge = `<span class="section-badge" title="Discografie compleet">${completenessPercent}%</span>`;
+
+    gapsHtml = `
+      <section class="detail-section">
+        <div class="section-header">
+          <h2>Ontbrekende albums</h2>
+          <span class="section-count">${gaps.missing.length}</span>
+          ${completnessBadge}
+        </div>
+        <div class="detail-grid">
+          ${gaps.missing.map(g => renderGapCard(name, g)).join('')}
+        </div>
+      </section>
+    `;
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -207,6 +217,16 @@ function renderArtistDetail(data) {
   // Event handlers
   // ────────────────────────────────────────────────────────────────────────
 
+  // Back button
+  const backBtn = content.querySelector('.detail-back-btn');
+  if (backBtn) {
+    backBtn.addEventListener('click', async e => {
+      e.preventDefault();
+      const prevView = state.previousView || 'home';
+      await switchView(prevView);
+    });
+  }
+
   // Play album buttons
   content.querySelectorAll('.detail-album-play-btn').forEach(btn => {
     btn.addEventListener('click', async e => {
@@ -232,6 +252,8 @@ function renderArtistDetail(data) {
       e.preventDefault();
       const artistName = chip.dataset.artistDetail;
       if (artistName) {
+        // Maak de currentArtist als previousView voordat we navigeren
+        state.previousView = state.activeView;
         state.viewParams = { name: artistName };
         await loadArtistDetail();
       }

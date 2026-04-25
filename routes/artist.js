@@ -17,40 +17,64 @@ module.exports = function(app, deps) {
 
     try {
       const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
+        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
         lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
         getMBZArtist(name)
       ]);
 
       let image = null;
+      let imageXl = null;
       if (deezerR.status === 'fulfilled') {
         const results = deezerR.value?.data || [];
-        const exact   = results.find(a => a.name.toLowerCase() === name.toLowerCase());
-        const best    = exact || results[0];
-        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) image = best.picture_medium;
+        const best    = results[0];
+        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
+          image = best.picture_medium;
+          imageXl = best.picture_xl || best.picture_medium;
+        }
       }
+
+      // Helper: fetch album cover van Deezer als fallback
+      const getDeezerAlbumCover = async (albumName) => {
+        try {
+          const q = `artist:"${name}" album:"${albumName}"`;
+          const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
+          const album = res?.data?.[0];
+          return album?.cover_medium || null;
+        } catch {
+          return null;
+        }
+      };
 
       let albums = [];
       if (albumsR.status === 'fulfilled') {
-        albums = (albumsR.value.topalbums?.album || [])
+        const albumList = (albumsR.value.topalbums?.album || [])
           .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-          .slice(0, 5)
-          .map(a => {
-            const img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-            const inPlex = albumInPlex(name, a.name);
-            return {
-              name:      a.name,
-              image:     (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
-              playcount: parseInt(a.playcount) || 0,
-              inPlex,
-              ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-            };
-          });
+          .slice(0, 5);
+
+        // Parallel fetch images voor albums zonder cover
+        albums = await Promise.all(albumList.map(async a => {
+          let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+
+          // Fallback: als Last.fm image placeholder is, probeer Deezer
+          if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+            img = await getDeezerAlbumCover(a.name);
+          }
+
+          const inPlex = albumInPlex(name, a.name);
+          return {
+            name:      a.name,
+            image:     img,
+            playcount: parseInt(a.playcount) || 0,
+            inPlex,
+            ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
+          };
+        }));
       }
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
-        image, albums,
+        image, imageXl, albums,
         inPlex:    artistInPlex(name),
         country:   mbz?.country   || null,
         startYear: mbz?.startYear || null,
@@ -66,7 +90,7 @@ module.exports = function(app, deps) {
       res.json(result);
     } catch (e) {
       // ── Geen caching bij errors ────────────────────────────────────────
-      res.status(500).json({ error: e.message, image: null, albums: [], inPlex: false, tags: [] });
+      res.status(500).json({ error: e.message, image: null, imageXl: null, albums: [], inPlex: false, tags: [] });
     }
   });
 
@@ -84,40 +108,64 @@ module.exports = function(app, deps) {
 
     try {
       const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
+        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
         lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
         getMBZArtist(name)
       ]);
 
       let image = null;
+      let imageXl = null;
       if (deezerR.status === 'fulfilled') {
         const results = deezerR.value?.data || [];
-        const exact   = results.find(a => a.name.toLowerCase() === name.toLowerCase());
-        const best    = exact || results[0];
-        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) image = best.picture_medium;
+        const best    = results[0];
+        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
+          image = best.picture_medium;
+          imageXl = best.picture_xl || best.picture_medium;
+        }
       }
+
+      // Helper: fetch album cover van Deezer als fallback
+      const getDeezerAlbumCover = async (albumName) => {
+        try {
+          const q = `artist:"${name}" album:"${albumName}"`;
+          const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
+          const album = res?.data?.[0];
+          return album?.cover_medium || null;
+        } catch {
+          return null;
+        }
+      };
 
       let albums = [];
       if (albumsR.status === 'fulfilled') {
-        albums = (albumsR.value.topalbums?.album || [])
+        const albumList = (albumsR.value.topalbums?.album || [])
           .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-          .slice(0, 5)
-          .map(a => {
-            const img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-            const inPlex = albumInPlex(name, a.name);
-            return {
-              name:      a.name,
-              image:     (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
-              playcount: parseInt(a.playcount) || 0,
-              inPlex,
-              ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-            };
-          });
+          .slice(0, 5);
+
+        // Parallel fetch images voor albums zonder cover
+        albums = await Promise.all(albumList.map(async a => {
+          let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+
+          // Fallback: als Last.fm image placeholder is, probeer Deezer
+          if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+            img = await getDeezerAlbumCover(a.name);
+          }
+
+          const inPlex = albumInPlex(name, a.name);
+          return {
+            name:      a.name,
+            image:     img,
+            playcount: parseInt(a.playcount) || 0,
+            inPlex,
+            ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
+          };
+        }));
       }
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
-        image, albums,
+        image, imageXl, albums,
         inPlex:    artistInPlex(name),
         country:   mbz?.country   || null,
         startYear: mbz?.startYear || null,
@@ -133,7 +181,7 @@ module.exports = function(app, deps) {
       res.json(result);
     } catch (e) {
       // ── Geen caching bij errors ────────────────────────────────────────
-      res.status(500).json({ error: e.message, image: null, albums: [], inPlex: false, tags: [] });
+      res.status(500).json({ error: e.message, image: null, imageXl: null, albums: [], inPlex: false, tags: [] });
     }
   });
 
@@ -238,45 +286,69 @@ module.exports = function(app, deps) {
     }
 
     try {
-      // ── Parallel fetch: artist info, wikipedia, similar artists ──────────
-      const [infoR, wikiR, similarR] = await Promise.allSettled([
+      // ── Parallel fetch: artist info, wikipedia, similar artists, gaps ──────────
+      const [infoR, wikiR, similarR, gapsR] = await Promise.allSettled([
         // Artist info: Deezer image + Last.fm albums + MusicBrainz metadata
         (async () => {
           const [deezerR, albumsR, mbzR] = await Promise.allSettled([
-            fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
+            fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=1`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
             lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
             getMBZArtist(name)
           ]);
 
           let image = null;
+          let imageXl = null;
           if (deezerR.status === 'fulfilled') {
             const results = deezerR.value?.data || [];
-            const exact   = results.find(a => a.name.toLowerCase() === name.toLowerCase());
-            const best    = exact || results[0];
-            if (best?.picture_medium && !best.picture_medium.includes('/artist//')) image = best.picture_medium;
+            const best    = results[0];
+            if (best?.picture_medium && !best.picture_medium.includes('/artist//')) {
+              image = best.picture_medium;
+              imageXl = best.picture_xl || best.picture_medium;
+            }
           }
+
+          // Helper: fetch album cover van Deezer als fallback
+          const getDeezerAlbumCover = async (albumName) => {
+            try {
+              const q = `artist:"${name}" album:"${albumName}"`;
+              const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
+              const res = await fetch(url, { signal: AbortSignal.timeout(3_000) }).then(r => r.json());
+              const album = res?.data?.[0];
+              return album?.cover_medium || null;
+            } catch {
+              return null;
+            }
+          };
 
           let albums = [];
           if (albumsR.status === 'fulfilled') {
-            albums = (albumsR.value.topalbums?.album || [])
+            const albumList = (albumsR.value.topalbums?.album || [])
               .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
-              .slice(0, 5)
-              .map(a => {
-                const img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
-                const inPlex = albumInPlex(name, a.name);
-                return {
-                  name:      a.name,
-                  image:     (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
-                  playcount: parseInt(a.playcount) || 0,
-                  inPlex,
-                  ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
-                };
-              });
+              .slice(0, 5);
+
+            // Parallel fetch images voor albums zonder cover
+            albums = await Promise.all(albumList.map(async a => {
+              let img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+
+              // Fallback: als Last.fm image placeholder is, probeer Deezer
+              if (!img || img.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                img = await getDeezerAlbumCover(a.name);
+              }
+
+              const inPlex = albumInPlex(name, a.name);
+              return {
+                name:      a.name,
+                image:     img,
+                playcount: parseInt(a.playcount) || 0,
+                inPlex,
+                ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
+              };
+            }));
           }
 
           const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
           return {
-            image, albums,
+            image, imageXl, albums,
             inPlex:    artistInPlex(name),
             country:   mbz?.country   || null,
             startYear: mbz?.startYear || null,
@@ -289,12 +361,15 @@ module.exports = function(app, deps) {
         getWikipediaExtract(name),
 
         // Similar artists
-        getSimilarArtists(name, 6)
+        getSimilarArtists(name, 6),
+
+        // Artist-specific gaps
+        getArtistGaps(name)
       ]);
 
       // ── Extract results ───────────────────────────────────────────────────
       let info = {
-        image: null, albums: [],
+        image: null, imageXl: null, albums: [],
         inPlex: false, country: null,
         startYear: null, tags: [], mbid: null
       };
@@ -312,8 +387,13 @@ module.exports = function(app, deps) {
         similar = similarR.value;
       }
 
-      // ── Get global gaps data (not artist-specific, but good context) ──────
-      const gapsData = getGaps();
+      // ── Get artist-specific gaps data ──────────────────────────────────────
+      let gaps = {};
+      if (gapsR.status === 'fulfilled' && gapsR.value) {
+        gaps = gapsR.value;
+      } else if (gapsR.reason) {
+        gaps = { error: gapsR.reason.message, owned: [], missing: [] };
+      }
 
       // ── Combine all results ───────────────────────────────────────────────
       const result = {
@@ -324,11 +404,7 @@ module.exports = function(app, deps) {
           artists: similar,
           count: similar.length
         },
-        gaps: gapsData.status === 'ok' ? {
-          gaps: gapsData.gaps || [],
-          count: (gapsData.gaps || []).length,
-          builtAt: gapsData.builtAt
-        } : { status: gapsData.status, message: gapsData.message }
+        gaps
       };
 
       // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
@@ -341,7 +417,7 @@ module.exports = function(app, deps) {
       res.status(500).json({
         error: e.message,
         name,
-        info: { image: null, albums: [], inPlex: false, country: null, startYear: null, tags: [], mbid: null },
+        info: { image: null, imageXl: null, albums: [], inPlex: false, country: null, startYear: null, tags: [], mbid: null },
         wikipedia: null,
         similar: { artists: [], count: 0 },
         gaps: { status: 'error', message: e.message }

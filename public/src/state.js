@@ -4,6 +4,7 @@
 export const state = {
   // ── Navigatie ───────────────────────────────────────────────────────────
   activeView:        'home',
+  previousView:      null,  // Track vorige view voor terug-knop
   viewParams:        null,  // Parameters voor views (bijv. { name: 'Artist' } voor artist-detail)
   sectionContainerEl: null,
 

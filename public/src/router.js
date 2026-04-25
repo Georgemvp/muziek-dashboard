@@ -70,6 +70,11 @@ async function loadViewModule(viewName) {
 export async function switchView(viewName, params = null) {
   if (!viewLoaders[viewName]) return;
 
+  // Save current view as previous (voordat we naar nieuw view gaan)
+  if (state.activeView && state.activeView !== viewName) {
+    state.previousView = state.activeView;
+  }
+
   // Store params in state if provided (artist-detail uses this)
   if (params) {
     state.viewParams = params;
