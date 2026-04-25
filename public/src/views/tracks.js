@@ -411,8 +411,9 @@ async function loadTracksData() {
 
   try {
     // Load from both sources in parallel
+    // limit=0 fetches ALL tracks (no pagination limit)
     const [plexRes, lastfmRes] = await Promise.allSettled([
-      apiFetch('/api/plex/tracks'),
+      apiFetch('/api/plex/tracks?limit=0'),
       apiFetch('/api/top/tracks?period=overall')
     ]);
 
