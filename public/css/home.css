@@ -1532,3 +1532,166 @@
   border-color: var(--accent);
   font-weight: 600;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   FEATURED ARTIST BANNER (Roon-stijl)
+   ══════════════════════════════════════════════════════════════════ */
+
+.home-featured-banner {
+  min-height: 200px;
+  border-radius: 12px;
+  padding: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+  gap: 48px;
+}
+
+.featured-content-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  z-index: 2;
+}
+
+.featured-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.featured-name {
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 400;
+  color: white;
+  margin: 0 0 20px 0;
+  line-height: 1.2;
+}
+
+.featured-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: opacity var(--transition-fast);
+  padding: 0;
+  width: fit-content;
+}
+
+.featured-play:hover {
+  opacity: 0.85;
+}
+
+.featured-play:active {
+  opacity: 0.7;
+}
+
+.featured-play-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.featured-play-text {
+  margin-left: 4px;
+}
+
+.featured-albums {
+  display: flex;
+  gap: 16px;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.featured-album-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 100px;
+}
+
+.featured-album-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.featured-album-ph {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 24px;
+}
+
+.featured-album-info {
+  text-align: center;
+}
+
+.featured-album-artist {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.featured-album-title {
+  font-size: 11px;
+  color: white;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .home-featured-banner {
+    flex-direction: column;
+    padding: 32px 24px;
+    min-height: auto;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  .featured-name {
+    font-size: 24px;
+  }
+
+  .featured-albums {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .featured-album-card {
+    flex: 0 1 calc(50% - 8px);
+  }
+}

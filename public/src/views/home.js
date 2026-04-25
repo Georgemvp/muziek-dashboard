@@ -360,6 +360,86 @@ function renderListenLater(wishlist) {
     <div class="home-listen-later-grid">${itemsHtml}</div>`;
 }
 
+// ── Section 2b: Featured Artist Banner ──────────────────────────────────
+
+/**
+ * Kies een random artiest uit de top 10 en genereer een featured artist banner
+ * Slaat de keuze op in sessionStorage zodat deze niet bij elke navigatie wisselt
+ */
+async function renderFeaturedArtist(topArtists) {
+  const artists = (topArtists?.topartists?.artist || []).slice(0, 10);
+  if (!artists.length) return '';
+
+  // Haal opgeslagen featured artiest op uit sessionStorage
+  let featuredArtist = null;
+  try {
+    const stored = sessionStorage.getItem('featuredArtistName');
+    if (stored) {
+      // Check of de opgeslagen artiest nog in de top 10 zit
+      featuredArtist = artists.find(a => a.name === stored);
+    }
+  } catch {
+    // sessionStorage niet beschikbaar
+  }
+
+  // Als geen opgeslagen, of artiest niet meer in top 10, kies random
+  if (!featuredArtist) {
+    const randomIdx = Math.floor(Math.random() * artists.length);
+    featuredArtist = artists[randomIdx];
+    try {
+      sessionStorage.setItem('featuredArtistName', featuredArtist.name);
+    } catch {
+      // sessionStorage niet beschikbaar
+    }
+  }
+
+  // Fetch gerelateerde albums
+  let albums = [];
+  try {
+    const artistData = await apiFetch(`/api/artist/${encodeURIComponent(featuredArtist.name)}`);
+    const artistAlbums = artistData?.topalbums?.album || artistData?.albums || [];
+    albums = artistAlbums.slice(0, 3);
+  } catch {
+    // Stille fout — toon banner zonder albums
+  }
+
+  // Genereer kleur op basis van artiest naam
+  const bgGradient = gradientFor(featuredArtist.name);
+
+  // HTML voor album kaartjes
+  const albumsHtml = albums.map(album => {
+    const albumImg = album.image?.[2]?.['#text'] || album.image?.[1]?.['#text'] || '';
+    const imgUrl = albumImg ? proxyImg(albumImg, 80) : null;
+    const imgEl = imgUrl
+      ? `<img src="${esc(imgUrl)}" alt="${esc(album.name)}" class="featured-album-img">`
+      : `<div class="featured-album-ph">♫</div>`;
+
+    return `
+      <div class="featured-album-card">
+        ${imgEl}
+        <div class="featured-album-info">
+          <div class="featured-album-artist">${esc(album.artist?.name || album.artist || '')}</div>
+          <div class="featured-album-title">${esc(album.name || '')}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="home-featured-banner" style="background: ${bgGradient}">
+      <div class="featured-content-left">
+        <div class="featured-label">PERFORMING THE MUSIC OF</div>
+        <div class="featured-name">${esc(featuredArtist.name)}</div>
+        <button class="featured-play" id="featured-play-btn" data-artist="${esc(featuredArtist.name)}">
+          <span class="featured-play-icon">▶</span>
+          <span class="featured-play-text">PLAY TRACKS</span>
+        </button>
+      </div>
+      <div class="featured-albums">
+        ${albumsHtml}
+      </div>
+    </div>`;
+}
+
 // ── Section 3b: Your Recent Artists ──────────────────────────────────────
 
 function renderRecentArtists(topArtists) {
@@ -1160,6 +1240,9 @@ export async function loadHome() {
   const releases  = releasesRaw;
   const genreData = buildGenreData(topArtistsRaw);
 
+  // Featured Artist Banner rendering
+  const featuredArtistHtml = await renderFeaturedArtist(topArtistsRaw).catch(() => '');
+
   // ── Activity Matrix: waterfall fallback ──────────────────────────────────
   let activityMatrixTracks = tracks;
   let activityMatrixDailyPlays = null;
@@ -1205,6 +1288,9 @@ export async function loadHome() {
 
       <!-- 2. Recent Activity -->
       ${renderRecentActivity(tracks)}
+
+      <!-- 2b. Featured Artist Banner -->
+      ${featuredArtistHtml}
 
       <!-- 3. Listen Later -->
       <div>${renderListenLater(wishlist)}</div>
@@ -1333,6 +1419,32 @@ export async function loadHome() {
       if (name) openArtistPanel(name);
     });
   });
+
+  // Featured Artist Banner Play Button
+  const featuredPlayBtn = document.getElementById('featured-play-btn');
+  if (featuredPlayBtn) {
+    featuredPlayBtn.addEventListener('click', async () => {
+      const artistName = featuredPlayBtn.dataset.artist;
+      if (!artistName) return;
+
+      try {
+        // Haal artiest rating key op
+        const artistData = await apiFetch(`/api/artist/${encodeURIComponent(artistName)}`);
+        const ratingKey = artistData?.ratingKey;
+
+        if (!ratingKey) {
+          console.warn('Geen ratingKey voor artiest:', artistName);
+          return;
+        }
+
+        // Importeer playOnZone van plexRemote
+        const { playOnZone } = await import('../components/plexRemote.js');
+        await playOnZone(ratingKey, 'music');
+      } catch (err) {
+        console.error('Featured artist play mislukt:', err);
+      }
+    });
+  }
 
   // Recent artists nav pijlen
   const artistsRow = document.getElementById('home-recent-artists');
