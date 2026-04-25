@@ -429,7 +429,7 @@ class AlbumsVirtualScroller {
       if (row.type === 'header') {
         html += `<div class="albums-letter-header" style="height:${row.height}px">${esc(row.letter)}</div>`;
       } else {
-        html += `<div class="albums-grid">`;
+        html += `<div class="albums-grid" style="--album-cols:${this.cols}">`;
         for (const item of row.items) {
           html += albumCard(item);
         }
