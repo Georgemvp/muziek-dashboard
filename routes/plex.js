@@ -260,6 +260,55 @@ module.exports = function(app, deps) {
     }
   });
 
+  // ── /api/plex/tracks ──────────────────────────────────────────────────────
+  // Haalt alle tracks uit de Plex library op met metadata.
+  // Gebruikt 5 minuten cache.
+  app.get('/api/plex/tracks', async (req, res) => {
+    if (!PLEX_TOKEN) {
+      res.set('Cache-Control', 'private, max-age=300');
+      return res.json({ ok: false, tracks: [] });
+    }
+    try {
+      const cached = getCache('api:plex:tracks', 300_000); // 5 min cache
+      if (cached) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json(cached);
+      }
+
+      // Haal muziek-section key op
+      const sections = await plexGet('/library/sections');
+      const music = (sections?.MediaContainer?.Directory || []).find(s => s.type === 'artist');
+      if (!music) {
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json({ ok: false, error: 'Geen muziek-section gevonden', tracks: [] });
+      }
+
+      // Haal alle tracks op (type=10 = track)
+      const data = await plexGet(`/library/sections/${music.key}/all?type=10&limit=10000`);
+      const metadata = data?.MediaContainer?.Metadata || [];
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      const tracks = metadata.map(t => ({
+        ratingKey: t.ratingKey,
+        title: t.title || '',
+        artist: t.grandparentTitle || '',
+        album: t.parentTitle || '',
+        duration: t.duration || 0,
+        thumb: t.parentThumb ? `${plexStreamUrl}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        addedAt: t.addedAt || 0
+      }));
+
+      const result = { ok: true, total: tracks.length, tracks };
+      setCache('api:plex:tracks', result);
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(result);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex tracks ophalen mislukt');
+      res.set('Cache-Control', 'private, max-age=300');
+      res.status(500).json({ ok: false, error: e.message, tracks: [] });
+    }
+  });
+
   // ── /api/plex/playlists ──────────────────────────────────────────────────
   app.get('/api/plex/playlists', async (req, res) => {
     if (!PLEX_TOKEN) {
