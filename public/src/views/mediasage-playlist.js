@@ -692,8 +692,9 @@ function renderStep1() {
         ${seedSectionHtml}
       </div>
 
-      <div class="ms-row">
-        <button class="ms-btn ms-btn-primary" id="ms-analyze-btn">Analyseer →</button>
+      <div class="ms-analyze-btn-row">
+        <button class="ms-btn ms-btn-primary" id="ms-analyze-btn"
+          ${!msPromptText.trim() && !msSeedTrack ? 'disabled' : ''}>Analyseer →</button>
       </div>
     </div>
   `;
@@ -949,6 +950,8 @@ function bindEvents() {
 function bindStep1() {
   document.getElementById('ms-prompt')?.addEventListener('input', e => {
     msPromptText = e.target.value;
+    const btn = document.getElementById('ms-analyze-btn');
+    if (btn) btn.disabled = !msPromptText.trim() && !msSeedTrack;
   });
 
   document.getElementById('ms-seed-toggle')?.addEventListener('change', e => {

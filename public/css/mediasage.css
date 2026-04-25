@@ -381,6 +381,22 @@
   margin-top: var(--space-4);
 }
 
+/* Analyse-knop rij (stap 1) — rechts uitgelijnd */
+.ms-analyze-btn-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .ms-analyze-btn-row {
+    justify-content: stretch;
+  }
+  .ms-analyze-btn-row .ms-btn-primary {
+    width: 100%;
+  }
+}
+
 /* Loading state */
 .ms-loading {
   display: flex;
