@@ -22,6 +22,7 @@ const viewMeta = {
   folders:     { title: 'Muziek · Folders' },
   'artist-detail': { title: 'Muziek · Artiest' },
   stats:           { title: 'Muziek · Statistieken' },
+  mediasage:       { title: 'Muziek · MediaSage' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -43,6 +44,7 @@ const viewLoaders = {
   folders:     () => import('./views/folders.js'),
   'artist-detail': () => import('./views/artist-detail.js'),
   stats:           () => import('./views/stats.js'),
+  mediasage:       () => import('./views/mediasage.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -96,6 +98,14 @@ export async function switchView(viewName, params = null) {
   state.activeView = viewName;
   state.sectionContainerEl = null;
 
+  // ── Verberg iframe wraps bij view-wissel (tenzij de view ze zelf toont) ──
+  const tidarrWrap    = document.getElementById('tidarr-ui-wrap');
+  const mediasageWrap = document.getElementById('mediasage-ui-wrap');
+  const contentEl     = document.getElementById('content');
+  if (tidarrWrap)    tidarrWrap.style.display    = 'none';
+  if (mediasageWrap) mediasageWrap.style.display = 'none';
+  if (contentEl)     contentEl.style.display     = '';
+
   // ── Clear toolbar ──────────────────────────────────────────────────────
   const toolbar = document.getElementById('view-toolbar');
   if (toolbar) toolbar.innerHTML = '';
@@ -123,6 +133,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'folders'     ? viewModule.loadFolders :
       viewName === 'artist-detail' ? viewModule.loadArtistDetail :
       viewName === 'stats'         ? viewModule.loadStats :
+      viewName === 'mediasage'     ? viewModule.loadMediaSage :
       null;
 
     if (renderFn) {
