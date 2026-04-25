@@ -31,18 +31,20 @@ logger.info({ tidarrUrl: TIDARR_BASE }, 'Tidarr proxy configured');
 const MEDIASAGE_BASE = (process.env.MEDIASAGE_URL || 'http://localhost:5765').replace(/\/$/, '');
 logger.info({ mediasageUrl: MEDIASAGE_BASE }, 'MediaSage proxy configured');
 
-// SSE endpoints: direct doorsturen ZONDER responseInterceptor buffering
-app.use('/mediasage/api/generate/stream', createProxyMiddleware({
+// SSE endpoints: direct doorsturen ZONDER responseInterceptor buffering.
+// Gemount op /mediasage zodat Express alleen /mediasage uit req.url strip —
+// req.url is dan al /api/generate/stream of /api/recommend/generate en de
+// proxy stuurt dat pad correct door zonder extra pathRewrite.
+const mediasageSseProxy = createProxyMiddleware({
   target:       MEDIASAGE_BASE,
   changeOrigin: true,
-  pathRewrite:  { '^/mediasage': '' },
-}));
-
-app.use('/mediasage/api/recommend/generate', createProxyMiddleware({
-  target:       MEDIASAGE_BASE,
-  changeOrigin: true,
-  pathRewrite:  { '^/mediasage': '' },
-}));
+});
+app.use('/mediasage', (req, res, next) => {
+  if (req.path === '/api/generate/stream' || req.path === '/api/recommend/generate') {
+    return mediasageSseProxy(req, res, next);
+  }
+  next();
+});
 
 app.use('/mediasage', createProxyMiddleware({
   target:              MEDIASAGE_BASE,
