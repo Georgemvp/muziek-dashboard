@@ -96,7 +96,7 @@ def _cached_track_to_model(cached: dict) -> Track:
         duration_ms=cached.get("duration_ms") or 0,
         year=cached.get("year"),
         genres=cached.get("genres") or [],
-        art_url=f"/api/art/{cached['rating_key']}",
+        art_url=f"/mediasage/api/art/{cached['rating_key']}",
     )
 
 
