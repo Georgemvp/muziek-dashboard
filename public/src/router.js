@@ -23,6 +23,7 @@ const viewMeta = {
   'artist-detail': { title: 'Muziek · Artiest' },
   stats:           { title: 'Muziek · Statistieken' },
   mediasage:       { title: 'Muziek · MediaSage' },
+  tidarr:          { title: 'Muziek · Tidarr' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -45,6 +46,7 @@ const viewLoaders = {
   'artist-detail': () => import('./views/artist-detail.js'),
   stats:           () => import('./views/stats.js'),
   mediasage:       () => import('./views/mediasage.js'),
+  tidarr:          () => import('./views/downloads.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -134,6 +136,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'artist-detail' ? viewModule.loadArtistDetail :
       viewName === 'stats'         ? viewModule.loadStats :
       viewName === 'mediasage'     ? viewModule.loadMediaSage :
+      viewName === 'tidarr'        ? viewModule.loadDownloads :
       null;
 
     if (renderFn) {
