@@ -45,6 +45,22 @@ function limitConcurrency(tasks, limit) {
   });
 }
 
+// ── Deezer album cover helper ────────────────────────────────────────────────
+/**
+ * Zoekt een album cover op Deezer
+ */
+async function getDeezerAlbumCover(artistName, albumName) {
+  try {
+    const q = `artist:"${artistName}" album:"${albumName}"`;
+    const url = `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) }).then(r => r.json());
+    const album = res?.data?.[0];
+    return album?.cover_medium || null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function buildGapsCache() {
   // Kies willekeurig een periode voor afwisseling
   const period = PERIODS[Math.floor(Math.random() * PERIODS.length)];
@@ -81,6 +97,24 @@ async function buildGapsCache() {
         const missing = albums.filter(a => !a.inPlex);
         if (missing.length === 0) return null;
 
+        // ── Haal Deezer album covers op voor missing albums ────────────────
+        const missingWithImages = await Promise.all(
+          missing.map(async album => ({
+            ...album,
+            name: album.title,  // ← Voeg 'name' property toe (MusicBrainz heeft 'title')
+            image: album.image || await getDeezerAlbumCover(name, album.title).catch(() => null)
+          }))
+        );
+
+        // ── Haal images ook op voor owned albums ─────────────────────────
+        const ownedWithImages = await Promise.all(
+          albums.filter(a => a.inPlex).map(async album => ({
+            ...album,
+            name: album.title,
+            image: album.image || await getDeezerAlbumCover(name, album.title).catch(() => null)
+          }))
+        );
+
         return {
           artistId:   mbz.mbid,
           title:      name,
@@ -88,9 +122,9 @@ async function buildGapsCache() {
           country:    mbz.country,
           startYear:  mbz.startYear,
           genres:     mbz.tags,
-          missing:    missing,
-          owned:      albums.filter(a => a.inPlex),
-          ownedCount: albums.filter(a => a.inPlex).length,
+          missing:    missingWithImages,
+          owned:      ownedWithImages,
+          ownedCount: ownedWithImages.length,
           totalCount: albums.length
         };
       } catch (e) {
@@ -183,7 +217,13 @@ async function getArtistGaps(artistName) {
     // Check per album of het in Plex staat (parallel processing met limit van 8)
     const albumTasks = allAlbums.map(album => async () => {
       const inPlex = albumInPlex(artistName, album.title);
-      return { ...album, inPlex };
+      const image = album.image || await getDeezerAlbumCover(artistName, album.title).catch(() => null);
+      return {
+        ...album,
+        name: album.title,  // ← Voeg 'name' property toe
+        image,              // ← Voeg image toe
+        inPlex
+      };
     });
 
     const results = await limitConcurrency(albumTasks, 8);

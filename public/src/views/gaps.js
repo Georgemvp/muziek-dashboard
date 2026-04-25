@@ -2,8 +2,10 @@ import { apiFetch } from '../api.js';
 import { getCached, setCache, invalidate } from '../cache.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, countryFlag,
-  albumCard, showLoading, showError, proxyImg, p, plexBadge, downloadBtn
+  albumCard, showLoading, showError, proxyImg, p, plexBadge, downloadBtn,
+  isDownloaded, markDownloaded
 } from '../helpers.js';
+import { state } from '../state.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 
 // Module state
@@ -11,6 +13,42 @@ let gapsData = null;
 let gapsSort = 'missing';
 let gapsSearchTerm = '';
 let expandedArtists = new Set();
+
+/**
+ * Render a gap album card (missing album from MusicBrainz)
+ * Albums from gaps have: { title, image, name, albumType, releaseDate, inPlex }
+ */
+function renderGapAlbumCard(album, artist = '') {
+  const bg = gradientFor(album.title || '');
+  const year = album.releaseDate ? album.releaseDate.slice(0, 4) : '—';
+  const typeLabel = album.albumType || 'Album';
+  const alreadyDl = artist ? isDownloaded(artist, album.title || '') : false;
+
+  const dlHtml = (state.tidarrOk && artist && !album.inPlex)
+    ? alreadyDl
+      ? `<button class="album-dl-btn download-btn dl-done" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title||'')}" title="Al gedownload">✓</button>`
+      : `<button class="album-dl-btn download-btn" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title||'')}" title="Download via Tidarr">⬇</button>`
+    : '';
+
+  const imgUrl = album.image ? proxyImg(album.image, 120) : null;
+  const imgHtml = imgUrl
+    ? `<img src="${esc(imgUrl)}" alt="${esc(album.title)}" loading="lazy" decoding="async" style="opacity:0;transition:opacity 0.35s;position:relative;z-index:1" onload="this.style.opacity='1'" onerror="this.remove()">`
+    : '';
+
+  return `
+    <div class="album-card missing" title="${esc(album.title)}${year !== '—' ? ' ('+year+')' : ''}">
+      <div class="album-cover" style="background:${bg}">
+        <div class="album-cover-ph">${initials(album.title || '?')}</div>
+        ${imgHtml}
+        ${dlHtml}
+      </div>
+      <div class="album-info">
+        <div class="album-title">${esc(album.title)}</div>
+        <div class="album-year">${year} · ${typeLabel}</div>
+        <span class="album-status miss">✦ Ontbreekt</span>
+      </div>
+    </div>`;
+}
 
 function renderToolbar() {
   const toolbar = document.getElementById('view-toolbar');
@@ -87,7 +125,7 @@ function renderArtistCard(artist) {
     html += `<div class="gaps-albums-section">
       <h4>Ontbrekende albums</h4>
       <div class="gaps-albums-grid">
-        ${(artist.missing || []).map(album => albumCard(album)).join('')}
+        ${(artist.missing || []).map(album => renderGapAlbumCard(album, artist.title)).join('')}
       </div>`;
 
     if (artist.owned && artist.owned.length > 0) {
@@ -95,7 +133,7 @@ function renderArtistCard(artist) {
         <details class="gaps-owned-details">
           <summary>Albums die je al hebt (${artist.owned?.length || 0})</summary>
           <div class="gaps-albums-grid">
-            ${(artist.owned || []).map(album => albumCard(album)).join('')}
+            ${(artist.owned || []).map(album => renderGapAlbumCard(album, artist.title)).join('')}
           </div>
         </details>`;
     }

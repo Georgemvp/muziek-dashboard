@@ -1,5 +1,5 @@
 // ── Artist Detail View ────────────────────────────────────────────────────────
-// Comprehensive artist page with hero, bio, albums, gaps, and similar artists
+// Comprehensive artist page with progressive loading for hero, bio, albums, gaps, and similar artists
 
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
@@ -18,12 +18,10 @@ let currentArtist = null;
 let artistData = null;
 
 /**
- * Load artist detail view
+ * Load artist detail view - PROGRESSIVE LOADING VERSION
  * Expects state.viewParams = { name: 'Artist Name' }
  */
 export async function loadArtistDetail() {
-  showLoading();
-
   const artistName = state.viewParams?.name;
   if (!artistName) {
     showError('Geen artiest geselecteerd');
@@ -32,29 +30,29 @@ export async function loadArtistDetail() {
 
   currentArtist = artistName;
 
+  // ── STAP 1: Laad snel /api/artist/:name/info en render hero + albums ────
   try {
-    // Fetch comprehensive artist data
-    const data = await apiFetch(`/api/artist/${encodeURIComponent(artistName)}/full`);
-    artistData = data;
+    const info = await apiFetch(`/api/artist/${encodeURIComponent(artistName)}/info`);
 
-    renderArtistDetail(data);
+    // Render hero + albums direct (niet showLoading() die hele pagina blokkeert)
+    renderHeroAndAlbums(artistName, info);
+
+    // ── STAP 2: Laad daarna parallel andere secties zonder blocking ──────────
+    // Wikipedia, similar artists, gaps, top tracks
+    loadAdditionalSections(artistName, info);
+
   } catch (err) {
     showError(`Kan artiest niet laden: ${err.message}`);
   }
 }
 
 /**
- * Render complete artist detail page
+ * Render hero section + owned albums direct (fast path)
  */
-function renderArtistDetail(data) {
+function renderHeroAndAlbums(name, info) {
   const content = document.getElementById('content');
-  const { name, info, wikipedia, similar, gaps, topTracks } = data;
 
-  // ────────────────────────────────────────────────────────────────────────
-  // 1. HERO SECTION
-  // ────────────────────────────────────────────────────────────────────────
-
-  // Gebruiken picture_xl als beschikbaar, fallback naar picture_medium
+  // Build hero HTML
   const heroImg = proxyImg(info.imageXl || info.image, 600) || (info.imageXl || info.image);
   const heroBg = heroImg
     ? `background-image: url('${esc(heroImg)}'); background-size: cover; background-position: center;`
@@ -77,7 +75,6 @@ function renderArtistDetail(data) {
     tagHtml = `<div class="detail-tags">${tagsHtml(info.tags, 8)}</div>`;
   }
 
-  // Back button
   const backBtn = state.previousView ? `
     <button class="detail-back-btn" data-previous-view="${esc(state.previousView)}" title="Terug">
       ← Terug
@@ -99,64 +96,13 @@ function renderArtistDetail(data) {
     </div>
   `;
 
-  // ────────────────────────────────────────────────────────────────────────
-  // 2. WIKIPEDIA BIO SECTION
-  // ────────────────────────────────────────────────────────────────────────
-
-  let wikiHtml = '';
-  if (wikipedia && wikipedia.extract) {
-    const paragraphs = wikipedia.extract
-      .split('\n')
-      .filter(p => p.trim().length > 0)
-      .slice(0, 3)
-      .map(p => `<p>${esc(p)}</p>`)
-      .join('');
-
-    const langBadge = wikipedia.lang ? `<span class="wiki-lang-badge">${wikipedia.lang.toUpperCase()}</span>` : '';
-
-    wikiHtml = `
-      <section class="detail-section">
-        <div class="section-header">
-          <h2>Over deze artiest</h2>
-          ${langBadge}
-        </div>
-        <div class="detail-bio">
-          ${paragraphs}
-        </div>
-        ${wikipedia.url ? `<a href="${esc(wikipedia.url)}" target="_blank" rel="noopener" class="detail-link">Lees meer op Wikipedia →</a>` : ''}
-      </section>
-    `;
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // 3. TOP TRACKS SECTION
-  // ────────────────────────────────────────────────────────────────────────
-
-  let tracksHtml = '';
-  if (topTracks && topTracks.length > 0) {
-    tracksHtml = `
-      <section class="detail-section">
-        <div class="section-header">
-          <h2>Populairste nummers</h2>
-          <span class="section-count">${topTracks.length}</span>
-        </div>
-        <div class="detail-tracks-list">
-          ${topTracks.map((t, idx) => renderTrackRow(name, t, idx + 1)).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // 4. ALBUMS SECTION (albums in je Plex)
-  // ────────────────────────────────────────────────────────────────────────
-
+  // Build albums section
   let albumsHtml = '';
   if (info.albums && info.albums.length > 0) {
     const ownedAlbums = info.albums.filter(a => a.inPlex);
     if (ownedAlbums.length > 0) {
       albumsHtml = `
-        <section class="detail-section">
+        <section class="detail-section" id="section-albums">
           <div class="section-header">
             <h2>Albums die je hebt</h2>
             <span class="section-count">${ownedAlbums.length}</span>
@@ -169,73 +115,215 @@ function renderArtistDetail(data) {
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // 5. GAPS SECTION (missing albums)
-  // ────────────────────────────────────────────────────────────────────────
-
-  let gapsHtml = '';
-  if (gaps && gaps.missing && gaps.missing.length > 0) {
-    const completenessPercent = gaps.completeness ? Math.round(gaps.completeness * 100) : 0;
-    const completnessBadge = `<span class="section-badge" title="Discografie compleet">${completenessPercent}%</span>`;
-
-    gapsHtml = `
-      <section class="detail-section">
-        <div class="section-header">
-          <h2>Ontbrekende albums</h2>
-          <span class="section-count">${gaps.missing.length}</span>
-          ${completnessBadge}
-        </div>
-        <div class="detail-grid">
-          ${gaps.missing.map(g => renderGapCard(name, g)).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // 6. SIMILAR ARTISTS SECTION
-  // ────────────────────────────────────────────────────────────────────────
-
-  let similarHtml = '';
-  if (similar && similar.artists && similar.artists.length > 0) {
-    similarHtml = `
-      <section class="detail-section">
-        <div class="section-header">
-          <h2>Vergelijkbare artiesten</h2>
-        </div>
-        <div class="detail-similar-row">
-          ${similar.artists.map(s => `
-            <button class="detail-similar-chip" data-artist-detail="${esc(s.name)}">
-              ${esc(s.name)}
-            </button>
-          `).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Render everything
-  // ────────────────────────────────────────────────────────────────────────
-
+  // Render initial page structure
   content.innerHTML = `
     <article class="detail-page">
       ${heroHtml}
       <div class="detail-content">
-        ${wikiHtml}
-        ${tracksHtml}
         ${albumsHtml}
-        ${gapsHtml}
-        ${similarHtml}
+
+        <!-- Loading placeholders for sections to be filled later -->
+        <section class="detail-section" id="section-wikipedia">
+          <div class="section-loading">Biografie laden...</div>
+        </section>
+        <section class="detail-section" id="section-tracks">
+          <div class="section-loading">Populaire nummers laden...</div>
+        </section>
+        <section class="detail-section" id="section-gaps">
+          <div class="section-loading">Ontbrekende albums scannen...</div>
+        </section>
+        <section class="detail-section" id="section-similar">
+          <div class="section-loading">Vergelijkbare artiesten laden...</div>
+        </section>
       </div>
     </article>
   `;
 
   document.title = `Muziek · ${name}`;
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Event handlers
-  // ────────────────────────────────────────────────────────────────────────
+  // ── Register event handlers on hero ────────────────────────────────────
+  setupEventHandlers();
+}
+
+/**
+ * Load additional sections in parallel and update DOM as they arrive
+ */
+async function loadAdditionalSections(artistName, info) {
+  // Load all sections in parallel
+  const [wikipediaData, similarData, gapsData, tracksData] = await Promise.allSettled([
+    apiFetch(`/api/artist/${encodeURIComponent(artistName)}/wikipedia`).catch(() => null),
+    apiFetch(`/api/artist/${encodeURIComponent(artistName)}/similar`).catch(() => null),
+    apiFetch(`/api/gaps/${encodeURIComponent(artistName)}`).catch(() => null),
+    apiFetch(`/api/artist/${encodeURIComponent(artistName)}/tracks`).catch(() => null),
+  ]);
+
+  // ── Update sections as data arrives (but check view is still active) ────
+
+  // Wikipedia section
+  if (state.activeView === 'artist-detail' && currentArtist === artistName) {
+    const wikiData = wikipediaData.status === 'fulfilled' ? wikipediaData.value : null;
+    if (wikiData) {
+      renderWikipediaSection(wikiData);
+    } else {
+      document.getElementById('section-wikipedia').innerHTML = '';
+    }
+  }
+
+  // Top tracks section
+  if (state.activeView === 'artist-detail' && currentArtist === artistName) {
+    const tracksData_ = tracksData.status === 'fulfilled' ? tracksData.value : null;
+    if (tracksData_ && Array.isArray(tracksData_) && tracksData_.length > 0) {
+      renderTracksSection(artistName, tracksData_);
+    } else {
+      document.getElementById('section-tracks').innerHTML = '';
+    }
+  }
+
+  // Gaps section
+  if (state.activeView === 'artist-detail' && currentArtist === artistName) {
+    const gapsData_ = gapsData.status === 'fulfilled' ? gapsData.value : null;
+    if (gapsData_ && gapsData_.missing && gapsData_.missing.length > 0) {
+      renderGapsSection(artistName, gapsData_);
+    } else {
+      document.getElementById('section-gaps').innerHTML = '';
+    }
+  }
+
+  // Similar artists section
+  if (state.activeView === 'artist-detail' && currentArtist === artistName) {
+    const similarData_ = similarData.status === 'fulfilled' ? similarData.value : null;
+    if (similarData_ && (similarData_.similar || similarData_.artists)) {
+      const artists = similarData_.similar || similarData_.artists || [];
+      if (artists.length > 0) {
+        renderSimilarSection(artists);
+      } else {
+        document.getElementById('section-similar').innerHTML = '';
+      }
+    } else {
+      document.getElementById('section-similar').innerHTML = '';
+    }
+  }
+}
+
+/**
+ * Render Wikipedia bio section
+ */
+function renderWikipediaSection(wikiData) {
+  const sectionEl = document.getElementById('section-wikipedia');
+  if (!wikiData || !wikiData.extract) {
+    sectionEl.innerHTML = '';
+    return;
+  }
+
+  const paragraphs = wikiData.extract
+    .split('\n')
+    .filter(p => p.trim().length > 0)
+    .slice(0, 3)
+    .map(p => `<p>${esc(p)}</p>`)
+    .join('');
+
+  const langBadge = wikiData.lang ? `<span class="wiki-lang-badge">${wikiData.lang.toUpperCase()}</span>` : '';
+
+  sectionEl.innerHTML = `
+    <div class="section-header">
+      <h2>Over deze artiest</h2>
+      ${langBadge}
+    </div>
+    <div class="detail-bio">
+      ${paragraphs}
+    </div>
+    ${wikiData.url ? `<a href="${esc(wikiData.url)}" target="_blank" rel="noopener" class="detail-link">Lees meer op Wikipedia →</a>` : ''}
+  `;
+}
+
+/**
+ * Render top tracks section
+ */
+function renderTracksSection(artistName, tracks) {
+  const sectionEl = document.getElementById('section-tracks');
+  if (!tracks || tracks.length === 0) {
+    sectionEl.innerHTML = '';
+    return;
+  }
+
+  sectionEl.innerHTML = `
+    <div class="section-header">
+      <h2>Populairste nummers</h2>
+      <span class="section-count">${tracks.length}</span>
+    </div>
+    <div class="detail-tracks-list">
+      ${tracks.map((t, idx) => renderTrackRow(artistName, t, idx + 1)).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Render gaps (missing albums) section
+ */
+function renderGapsSection(artistName, gapsData) {
+  const sectionEl = document.getElementById('section-gaps');
+  if (!gapsData || !gapsData.missing || gapsData.missing.length === 0) {
+    sectionEl.innerHTML = '';
+    return;
+  }
+
+  const completeness = gapsData.completeness || 0;
+  const completnessBadge = `<span class="section-badge" title="Discografie compleet">${completeness}%</span>`;
+
+  sectionEl.innerHTML = `
+    <div class="section-header">
+      <h2>Ontbrekende albums</h2>
+      <span class="section-count">${gapsData.missing.length}</span>
+      ${completnessBadge}
+    </div>
+    <div class="detail-grid">
+      ${gapsData.missing.map(g => renderGapCard(artistName, g)).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Render similar artists section
+ */
+function renderSimilarSection(artists) {
+  const sectionEl = document.getElementById('section-similar');
+  if (!artists || artists.length === 0) {
+    sectionEl.innerHTML = '';
+    return;
+  }
+
+  sectionEl.innerHTML = `
+    <div class="section-header">
+      <h2>Vergelijkbare artiesten</h2>
+    </div>
+    <div class="detail-similar-row">
+      ${artists.map(s => `
+        <button class="detail-similar-chip" data-artist-detail="${esc(s.name)}">
+          ${esc(s.name)}
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  // Setup event handlers for similar artist chips
+  document.querySelectorAll('.detail-similar-chip').forEach(chip => {
+    chip.addEventListener('click', async e => {
+      e.preventDefault();
+      const artistName = chip.dataset.artistDetail;
+      if (artistName) {
+        state.previousView = state.activeView;
+        state.viewParams = { name: artistName };
+        await loadArtistDetail();
+      }
+    });
+  });
+}
+
+/**
+ * Setup general event handlers (back button, play buttons, etc.)
+ */
+function setupEventHandlers() {
+  const content = document.getElementById('content');
 
   // Back button
   const backBtnEl = content.querySelector('.detail-back-btn');
@@ -260,22 +348,6 @@ function renderArtistDetail(data) {
         btn.disabled = false;
         btn.textContent = ok ? '▶ Speelt af' : origText;
         if (ok) setTimeout(() => { btn.textContent = origText; }, 3000);
-      }
-    });
-  });
-
-  // Download buttons (already handled by global event delegation in events.js)
-
-  // Similar artist chips
-  content.querySelectorAll('.detail-similar-chip').forEach(chip => {
-    chip.addEventListener('click', async e => {
-      e.preventDefault();
-      const artistName = chip.dataset.artistDetail;
-      if (artistName) {
-        // Maak de currentArtist als previousView voordat we navigeren
-        state.previousView = state.activeView;
-        state.viewParams = { name: artistName };
-        await loadArtistDetail();
       }
     });
   });

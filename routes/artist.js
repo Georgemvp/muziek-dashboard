@@ -453,6 +453,47 @@ module.exports = function(app, deps) {
     }
   });
 
+  // ── /api/artist/:name/wikipedia ───────────────────────────────────────────
+  // Haalt Wikipedia extract op voor een artiest
+  app.get('/api/artist/:name/wikipedia', async (req, res) => {
+    const name = decodeURIComponent(req.params.name);
+
+    try {
+      const wikipedia = await getWikipediaExtract(name);
+      res.set('Cache-Control', 'private, max-age=86400');
+      res.json(wikipedia || null);
+    } catch (e) {
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json(null);
+    }
+  });
+
+  // ── /api/artist/:name/tracks ──────────────────────────────────────────────
+  // Haalt top tracks op voor een artiest
+  app.get('/api/artist/:name/tracks', async (req, res) => {
+    const name = decodeURIComponent(req.params.name);
+
+    try {
+      const tracksData = await lfm({ method: 'artist.gettoptracks', artist: name, limit: 10 }, { includeUser: false });
+      const tracks = (tracksData?.toptracks?.track || [])
+        .filter(t => t.name && t.name !== '(null)' && t.name !== '[unknown]')
+        .slice(0, 10)
+        .map(t => ({
+          name: t.name,
+          playcount: parseInt(t.playcount) || 0,
+          listeners: parseInt(t.listeners) || 0,
+          url: t.url || null
+        }));
+
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.json(tracks);
+    } catch (e) {
+      console.warn(`Top tracks API failed for "${name}":`, e.message);
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json([]);
+    }
+  });
+
   // ── /api/gaps/:artist ─────────────────────────────────────────────────────
   // Haalt gaps (missing albums) op voor een specifieke artiest
   app.get('/api/gaps/:artist', async (req, res) => {
