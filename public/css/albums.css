@@ -171,9 +171,14 @@
   width: 100%;
   padding-bottom: 100%;
   background: var(--surface2);
-  border-radius: var(--radius-md);
+  border-radius: 4px;
   overflow: hidden;
-  transition: transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.albums-album:hover .albums-cover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 
