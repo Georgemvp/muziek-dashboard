@@ -372,7 +372,7 @@ async function renderStats(period) {
   // Data ophalen
   let data;
   try {
-    data = await apiFetch(`/api/plex/history?period=${period}`);
+    data = await apiFetch(`/api/plex/stats?period=${period}`);
   } catch (e) {
     content.querySelector('.stats-skeleton').innerHTML = `
       <div class="error-box">⚠️ Statistieken laden mislukt: ${esc(e.message)}</div>
