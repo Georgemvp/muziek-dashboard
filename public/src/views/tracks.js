@@ -1,9 +1,10 @@
-// ── Tracks view — Plex + Last.fm track listing met toolbar ──────────────────
+// ── Tracks view — Roon-style My Tracks tabel met Plex + Last.fm ──────────
 
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
-import { esc, fmt, proxyImg, showLoading, showError, plexBadge, downloadBtn } from '../helpers.js';
+import { esc, fmt, proxyImg, showLoading, showError } from '../helpers.js';
 import { playOnZone, getSelectedZone } from '../components/plexRemote.js';
+import { openArtistPanel } from '../components/panel.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module-level state
@@ -11,8 +12,14 @@ import { playOnZone, getSelectedZone } from '../components/plexRemote.js';
 
 let tracksData = null;           // merged tracks data {plex: [], lastfm: [], all: []}
 let tracksSearchTerm = '';       // current search term
-let tracksSort = 'name';         // sort mode: name, artist, album, plays, duration
+let tracksSort = 'artist';       // sort mode: track, length, artist, album
+let tracksSortDir = 'asc';       // sort direction: asc or desc
 let tracksFilter = 'all';        // filter: all, plex-only, lastfm-only
+let tracksScrollPos = 0;         // saved scroll position
+
+// Virtual scrolling config
+const TRACK_ROW_HEIGHT = 48;     // Hoogte van elke track-rij in px
+const TRACKS_BUFFER = 5;         // Buffer rows boven/onder viewport
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -22,12 +29,24 @@ function getContent() {
   return document.getElementById('content');
 }
 
+function getToolbar() {
+  return document.getElementById('view-toolbar');
+}
+
 function formatDuration(ms) {
   if (!ms) return '-';
   const totalSecs = Math.floor(ms / 1000);
   const mins = Math.floor(totalSecs / 60);
   const secs = totalSecs % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/** Bereken hoeveel rijen zichtbaar zijn in viewport. */
+function getViewportRows() {
+  const content = getContent();
+  if (!content) return 20;
+  const viewportHeight = content.clientHeight - 100; // aftrekken header
+  return Math.ceil(viewportHeight / TRACK_ROW_HEIGHT) + (TRACKS_BUFFER * 2);
 }
 
 function normalizeTrackName(name) {
@@ -108,79 +127,90 @@ function filterAndSort(tracks) {
   }
 
   // Sort
-  switch (tracksSort) {
-    case 'artist':
-      filtered.sort((a, b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title));
-      break;
-    case 'album':
-      filtered.sort((a, b) => a.album.localeCompare(b.album) || a.artist.localeCompare(b.artist));
-      break;
-    case 'plays':
-      filtered.sort((a, b) => (b.plays || 0) - (a.plays || 0));
-      break;
-    case 'duration':
-      filtered.sort((a, b) => (b.duration || 0) - (a.duration || 0));
-      break;
-    case 'name':
-    default:
-      filtered.sort((a, b) => a.title.localeCompare(b.title));
-  }
+  const ascending = tracksSortDir === 'asc';
+  const compare = (a, b) => {
+    let result = 0;
 
+    switch (tracksSort) {
+      case 'artist':
+        result = (a.artist || '').localeCompare(b.artist || '') ||
+                 (a.album || '').localeCompare(b.album || '') ||
+                 (a.title || '').localeCompare(b.title || '');
+        break;
+      case 'album':
+        result = (a.album || '').localeCompare(b.album || '') ||
+                 (a.artist || '').localeCompare(b.artist || '') ||
+                 (a.title || '').localeCompare(b.title || '');
+        break;
+      case 'length':
+        result = (a.duration || 0) - (b.duration || 0);
+        break;
+      case 'track':
+      default:
+        result = (a.title || '').localeCompare(b.title || '');
+    }
+
+    return ascending ? result : -result;
+  };
+
+  filtered.sort(compare);
   return filtered;
 }
 
-/** Render toolbar met search, sort, filter. */
-function renderToolbar() {
-  const toolbar = document.getElementById('view-toolbar');
+/** Render Roon-style header. */
+function renderHeader() {
+  const toolbar = getToolbar();
   const totalTracks = tracksData?.all?.length || 0;
-  const plexCount = tracksData?.plex?.length || 0;
-  const lastfmCount = tracksData?.lastfm?.length || 0;
 
   toolbar.innerHTML = `
-    <div class="tracks-toolbar">
-      <div class="toolbar-group">
-        <input type="text" id="tracks-search" placeholder="Zoek tracks..." class="toolbar-input" value="${esc(tracksSearchTerm)}">
-        <select id="tracks-sort" class="toolbar-select">
-          <option value="name" ${tracksSort === 'name' ? 'selected' : ''}>Naam</option>
-          <option value="artist" ${tracksSort === 'artist' ? 'selected' : ''}>Artiest</option>
-          <option value="album" ${tracksSort === 'album' ? 'selected' : ''}>Album</option>
-          <option value="plays" ${tracksSort === 'plays' ? 'selected' : ''}>Meest beluisterd</option>
-          <option value="duration" ${tracksSort === 'duration' ? 'selected' : ''}>Duur</option>
-        </select>
-        <select id="tracks-filter" class="toolbar-select">
-          <option value="all" ${tracksFilter === 'all' ? 'selected' : ''}>Alles (${totalTracks})</option>
-          <option value="plex-only" ${tracksFilter === 'plex-only' ? 'selected' : ''}>Alleen Plex (${plexCount})</option>
-          <option value="lastfm-only" ${tracksFilter === 'lastfm-only' ? 'selected' : ''}>Alleen Last.fm (${lastfmCount})</option>
-        </select>
+    <div class="tracks-roon-header">
+      <!-- Title & count -->
+      <div class="tracks-roon-title">
+        <h1>My Tracks</h1>
+        <span class="tracks-roon-count">${fmt(totalTracks)} tracks</span>
       </div>
-      <div class="toolbar-group">
-        <span class="toolbar-badge">${totalTracks} nummers</span>
+
+      <!-- Left actions: Focus + Heart -->
+      <div class="tracks-roon-left-actions">
+        <button class="tracks-focus-btn" title="Focus">
+          Focus <span class="tracks-focus-arrow">›</span>
+        </button>
+        <button class="tracks-heart-btn" title="Favorite">♡</button>
       </div>
+
+      <!-- Right actions: Play now dropdown -->
+      <button class="tracks-play-now-btn">
+        ▶ Play now <span class="tracks-dropdown-arrow">▼</span>
+      </button>
     </div>
   `;
 
-  document.getElementById('tracks-search').addEventListener('input', e => {
-    tracksSearchTerm = e.target.value;
-    renderTracks();
+  // Event listeners
+  toolbar.querySelector('.tracks-focus-btn')?.addEventListener('click', () => {
+    // Focus functionaliteit (toekomstig)
   });
 
-  document.getElementById('tracks-sort').addEventListener('change', e => {
-    tracksSort = e.target.value;
-    renderTracks();
+  toolbar.querySelector('.tracks-heart-btn')?.addEventListener('click', () => {
+    // Heart functionaliteit (toekomstig)
   });
 
-  document.getElementById('tracks-filter').addEventListener('change', e => {
-    tracksFilter = e.target.value;
-    renderTracks();
+  toolbar.querySelector('.tracks-play-now-btn')?.addEventListener('click', () => {
+    // Speel alle visible tracks af
+    const zone = getSelectedZone();
+    if (!zone) {
+      showError('Selecteer eerst een Plex zone');
+      return;
+    }
+    // Play all visible tracks functionaliteit
   });
 }
 
-/** Render track listing als tabel. */
+/** Render Roon-style track tabel met virtual scrolling. */
 async function renderTracks() {
   const content = getContent();
   if (!content || !tracksData) return;
 
-  renderToolbar();
+  renderHeader();
 
   const filtered = filterAndSort(tracksData.all);
   const zone = getSelectedZone();
@@ -196,56 +226,181 @@ async function renderTracks() {
     return;
   }
 
+  // Render container met virtual scrolling
   content.innerHTML = `
-    <div class="tracks-table-container">
-      <table class="tracks-table">
-        <thead>
+    <div class="tracks-roon-table-wrapper">
+      <table class="tracks-roon-table">
+        <thead class="tracks-roon-thead">
           <tr>
-            <th></th>
-            <th>Nummer</th>
-            <th>Artiest</th>
-            <th>Album</th>
-            <th>Duur</th>
-            <th>Plays</th>
-            <th></th>
+            <th class="tracks-col-num">#</th>
+            <th class="tracks-col-art"></th>
+            <th class="tracks-col-title">
+              <span>Track</span>
+              <span class="tracks-search-icon">🔍</span>
+            </th>
+            <th class="tracks-col-heart">♡</th>
+            <th class="tracks-col-length" data-sort="length">
+              <span>Length</span>
+              ${tracksSort === 'length' ? `<span class="tracks-sort-arrow ${tracksSortDir}">${tracksSortDir === 'asc' ? '↑' : '↓'}</span>` : ''}
+            </th>
+            <th class="tracks-col-artist" data-sort="artist">
+              <span>Album artist</span>
+              ${tracksSort === 'artist' ? `<span class="tracks-sort-arrow ${tracksSortDir}">${tracksSortDir === 'asc' ? '↑' : '↓'}</span>` : ''}
+              <span class="tracks-search-icon">🔍</span>
+            </th>
+            <th class="tracks-col-album" data-sort="album">
+              <span>Album</span>
+              ${tracksSort === 'album' ? `<span class="tracks-sort-arrow ${tracksSortDir}">${tracksSortDir === 'asc' ? '↑' : '↓'}</span>` : ''}
+              <span class="tracks-search-icon">🔍</span>
+            </th>
+            <th class="tracks-col-menu">⚙️</th>
           </tr>
         </thead>
-        <tbody id="tracks-tbody">
-          ${filtered.map((track, idx) => `
-            <tr data-idx="${idx}" data-rating-key="${track.ratingKey || ''}">
-              <td>
-                ${track.inPlex ? `<span class="plex-badge">P</span>` : '<span class="music-note">♪</span>'}
-              </td>
-              <td>${esc(track.title)}</td>
-              <td>${esc(track.artist)}</td>
-              <td>${esc(track.album)}</td>
-              <td>${formatDuration(track.duration)}</td>
-              <td>${track.plays > 0 ? `<strong>${track.plays}</strong>` : '—'}</td>
-              <td>
-                ${track.ratingKey ? `
-                  <button class="track-play-btn" data-rating-key="${track.ratingKey}" data-zone="${zone?.id || ''}">▶</button>
-                ` : ''}
-              </td>
-            </tr>
-          `).join('')}
+        <tbody id="tracks-tbody" class="tracks-roon-tbody">
+          ${renderVisibleRows(filtered, 0)}
         </tbody>
       </table>
+      <div class="tracks-virtual-spacer" id="tracks-virtual-spacer"></div>
     </div>
   `;
 
-  // Event listeners for play buttons
-  document.querySelectorAll('.track-play-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      const ratingKey = btn.getAttribute('data-rating-key');
+  // Update spacer height
+  const totalHeight = filtered.length * TRACK_ROW_HEIGHT;
+  document.getElementById('tracks-virtual-spacer').style.height = totalHeight + 'px';
 
+  // Attach event listeners
+  attachTableEvents(content, filtered, zone);
+
+  // Add scroll listener voor virtual scrolling
+  content.addEventListener('scroll', () => {
+    const scrollTop = content.scrollTop;
+    const startIdx = Math.max(0, Math.floor(scrollTop / TRACK_ROW_HEIGHT) - TRACKS_BUFFER);
+    const endIdx = Math.min(filtered.length, startIdx + getViewportRows());
+    const tbody = document.getElementById('tracks-tbody');
+    if (tbody) {
+      tbody.innerHTML = renderVisibleRows(filtered, startIdx, endIdx);
+      tbody.style.transform = `translateY(${startIdx * TRACK_ROW_HEIGHT}px)`;
+      attachTableEvents(content, filtered, zone);
+    }
+  });
+}
+
+/** Render alleen zichtbare rijen (virtual scrolling). */
+function renderVisibleRows(filtered, startIdx, endIdx = null) {
+  if (endIdx === null) {
+    endIdx = Math.min(filtered.length, startIdx + getViewportRows());
+  }
+
+  const zone = getSelectedZone();
+
+  return filtered.slice(startIdx, endIdx).map((track, idx) => {
+    const actualIdx = startIdx + idx;
+    const coverSrc = track.thumb ? proxyImg(track.thumb, 40) : null;
+    const inPlexIcon = track.inPlex ? '<span class="tracks-plex-pin" title="In Plex">📌</span>' : '';
+
+    return `
+      <tr class="tracks-roon-row" data-idx="${actualIdx}" data-rating-key="${track.ratingKey || ''}">
+        <td class="tracks-col-num">${actualIdx + 1}</td>
+        <td class="tracks-col-art">
+          ${coverSrc
+            ? `<img src="${esc(coverSrc)}" alt="album art" class="tracks-thumb">`
+            : '<div class="tracks-thumb-placeholder">♪</div>'
+          }
+        </td>
+        <td class="tracks-col-title">
+          <span class="tracks-title-text">${esc(track.title)}</span>
+          ${inPlexIcon}
+        </td>
+        <td class="tracks-col-heart">
+          <button class="tracks-heart-toggle" data-track-id="${esc(track.title)}" title="Add to favorites">♡</button>
+        </td>
+        <td class="tracks-col-length">${formatDuration(track.duration)}</td>
+        <td class="tracks-col-artist">
+          <span class="tracks-artist-link" data-artist="${esc(track.artist)}">${esc(track.artist)}</span>
+        </td>
+        <td class="tracks-col-album">
+          <span class="tracks-album-link" data-album="${esc(track.album)}">${esc(track.album)}</span>
+        </td>
+        <td class="tracks-col-menu">
+          <button class="tracks-menu-btn" title="More options">⋯</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/** Attach event listeners aan tabel-elementen. */
+function attachTableEvents(content, filtered, zone) {
+  // Header sort clicks
+  content.querySelectorAll('.tracks-roon-thead th[data-sort]').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const newSort = th.getAttribute('data-sort');
+      if (tracksSort === newSort) {
+        // Toggle direction
+        tracksSortDir = tracksSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        tracksSort = newSort;
+        tracksSortDir = 'asc';
+      }
+      renderTracks();
+    });
+  });
+
+  // Artist links
+  content.querySelectorAll('.tracks-artist-link').forEach(link => {
+    link.style.cursor = 'pointer';
+    link.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const artist = link.getAttribute('data-artist');
+      if (artist) openArtistPanel(artist);
+    });
+  });
+
+  // Album links
+  content.querySelectorAll('.tracks-album-link').forEach(link => {
+    link.style.cursor = 'pointer';
+    link.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const albumName = link.getAttribute('data-album');
+      // TODO: navigate to album detail
+    });
+  });
+
+  // Play buttons
+  content.querySelectorAll('.tracks-roon-row').forEach(row => {
+    const ratingKey = row.getAttribute('data-rating-key');
+    if (!ratingKey) return;
+
+    row.style.cursor = 'pointer';
+    row.addEventListener('dblclick', async (e) => {
+      e.preventDefault();
+      if (!zone) {
+        showError('Selecteer eerst een Plex zone');
+        return;
+      }
       try {
         await playOnZone(ratingKey, 'music');
-        btn.textContent = '⏸';
-        setTimeout(() => { btn.textContent = '▶'; }, 2000);
       } catch (err) {
         showError('Kan nummer niet afspelen: ' + err.message);
       }
+    });
+  });
+
+  // Heart toggles
+  content.querySelectorAll('.tracks-heart-toggle').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // Toggle favorite via Last.fm API
+      btn.classList.toggle('loved');
+    });
+  });
+
+  // Menu buttons
+  content.querySelectorAll('.tracks-menu-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Show context menu
     });
   });
 }

@@ -1,268 +1,380 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Tracks View - Tabel met Plex + Last.fm tracks
+   Tracks View - Roon-style "My Tracks" tabel
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Toolbar ────────────────────────────────────────────────────────────────── */
+/* ── Roon Header ────────────────────────────────────────────────────────────── */
 
-.tracks-toolbar {
+.tracks-roon-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 16px 0;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 24px 0;
+  margin-bottom: 24px;
 }
 
-.tracks-toolbar .toolbar-group {
+.tracks-roon-title {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.tracks-roon-title h1 {
+  font-size: 32px;
+  font-weight: 500;
+  margin: 0;
+  font-family: Georgia, serif;
+  letter-spacing: -0.5px;
+}
+
+.tracks-roon-count {
+  font-size: 16px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.tracks-roon-left-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.tracks-focus-btn,
+.tracks-heart-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 8px 16px;
+  color: var(--text);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  font-weight: 500;
+}
+
+.tracks-focus-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.tracks-toolbar .toolbar-input,
-.tracks-toolbar .toolbar-select {
-  padding: 8px 12px;
+.tracks-focus-arrow {
+  font-size: 20px;
+  margin-left: 4px;
+}
+
+.tracks-focus-btn:hover,
+.tracks-heart-btn:hover {
   background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text);
+  color: var(--accent);
+}
+
+.tracks-play-now-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 10px 20px;
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   transition: all var(--transition-fast);
 }
 
-.tracks-toolbar .toolbar-input::placeholder {
-  color: var(--text-secondary);
+.tracks-play-now-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
-.tracks-toolbar .toolbar-input:focus,
-.tracks-toolbar .toolbar-select:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--surface1);
+.tracks-dropdown-arrow {
+  font-size: 10px;
+  margin-left: 4px;
 }
 
-.tracks-toolbar .toolbar-badge {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--surface2);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
+/* ── Table Wrapper & Container ──────────────────────────────────────────────── */
 
-/* ── Table Container ────────────────────────────────────────────────────────── */
-
-.tracks-table-container {
+.tracks-roon-table-wrapper {
   width: 100%;
   height: 100%;
-  overflow-x: auto;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--surface2);
+  overflow-y: auto;
+  border-radius: 0;
   background: var(--surface1);
+  position: relative;
 }
 
-/* ── Table Styling ──────────────────────────────────────────────────────────── */
-
-.tracks-table {
+.tracks-roon-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
 }
 
-.tracks-table thead {
+/* ── Table Header ────────────────────────────────────────────────────────────── */
+
+.tracks-roon-thead {
   position: sticky;
   top: 0;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--surface3);
+  background: var(--surface1);
+  border-bottom: 1px solid var(--surface2);
   z-index: 10;
 }
 
-.tracks-table th {
-  padding: 12px 8px;
+.tracks-roon-thead th {
+  padding: 12px 12px;
   text-align: left;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary);
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   height: 44px;
-  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.tracks-table th:first-child {
-  width: 30px;
-  text-align: center;
-}
-
-.tracks-table th:nth-child(2) {
-  min-width: 200px;
-}
-
-.tracks-table th:nth-child(3) {
-  min-width: 150px;
-}
-
-.tracks-table th:nth-child(4) {
-  min-width: 150px;
-}
-
-.tracks-table th:nth-child(5) {
-  width: 60px;
-  text-align: center;
-}
-
-.tracks-table th:nth-child(6) {
-  width: 80px;
-  text-align: center;
-}
-
-.tracks-table th:last-child {
+/* Column widths */
+.tracks-col-num {
   width: 40px;
   text-align: center;
 }
 
-/* ── Table Body Rows ────────────────────────────────────────────────────────── */
+.tracks-col-art {
+  width: 50px;
+}
 
-.tracks-table tbody tr {
+.tracks-col-title {
+  flex: 1;
+  min-width: 250px;
+}
+
+.tracks-col-heart {
+  width: 40px;
+  text-align: center;
+}
+
+.tracks-col-length {
+  width: 80px;
+  text-align: center;
+}
+
+.tracks-col-artist {
+  width: 200px;
+}
+
+.tracks-col-album {
+  width: 200px;
+}
+
+.tracks-col-menu {
+  width: 44px;
+  text-align: center;
+}
+
+/* Sortable column styling */
+.tracks-roon-thead th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tracks-roon-thead th[data-sort]:hover {
+  background: var(--surface2);
+}
+
+.tracks-search-icon {
+  font-size: 14px;
+  opacity: 0.5;
+  margin-left: auto;
+}
+
+.tracks-sort-arrow {
+  font-size: 12px;
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+/* ── Table Body & Rows ──────────────────────────────────────────────────────── */
+
+.tracks-roon-tbody {
+  position: relative;
+}
+
+.tracks-roon-row {
+  height: 48px;
   border-bottom: 1px solid var(--surface2);
   transition: background-color var(--transition-fast);
 }
 
-.tracks-table tbody tr:hover {
-  background-color: var(--surface2);
+.tracks-roon-row:hover {
+  background: var(--surface2);
 }
 
-.tracks-table td {
-  padding: 10px 8px;
-  height: 44px;
-  line-height: 1.4;
+.tracks-roon-row td {
+  padding: 8px 12px;
+  line-height: 1;
   vertical-align: middle;
   color: var(--text);
+  height: 48px;
 }
 
-.tracks-table td:first-child {
+.tracks-col-num {
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
-  width: 30px;
 }
 
-.tracks-table td:nth-child(2) {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tracks-col-art {
+  padding: 6px 12px;
 }
 
-.tracks-table td:nth-child(3),
-.tracks-table td:nth-child(4) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-}
-
-.tracks-table td:nth-child(5) {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 12px;
-  width: 60px;
-}
-
-.tracks-table td:nth-child(6) {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 12px;
-  width: 80px;
-}
-
-.tracks-table td:nth-child(6) strong {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.tracks-table td:last-child {
-  text-align: center;
+.tracks-thumb {
   width: 40px;
-}
-
-/* ── Plex Badge ─────────────────────────────────────────────────────────────── */
-
-.tracks-table .plex-badge {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  background: var(--accent);
-  color: white;
+  height: 40px;
   border-radius: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
+  object-fit: cover;
+  display: block;
 }
 
-.tracks-table .music-note {
+.tracks-thumb-placeholder {
+  width: 40px;
+  height: 40px;
+  background: var(--surface2);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.tracks-col-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.tracks-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tracks-plex-pin {
+  flex-shrink: 0;
   font-size: 12px;
   opacity: 0.6;
 }
 
-/* ── Play Button ────────────────────────────────────────────────────────────── */
+.tracks-col-heart {
+  text-align: center;
+}
 
-.track-play-btn {
+.tracks-heart-toggle {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
+  font-size: 16px;
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  padding: 4px;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  margin: 0 auto;
 }
 
-.track-play-btn:hover {
-  background: var(--surface2);
+.tracks-heart-toggle:hover {
   color: var(--accent);
+  background: var(--surface2);
 }
 
-.track-play-btn:active {
-  transform: scale(0.95);
+.tracks-heart-toggle.loved {
+  color: var(--accent);
+  font-weight: 700;
 }
 
-.track-play-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.tracks-col-length {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
-/* ── Download Button ────────────────────────────────────────────────────────── */
+.tracks-col-artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.track-download-btn {
+.tracks-artist-link {
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.tracks-artist-link:hover {
+  opacity: 0.8;
+}
+
+.tracks-col-album {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracks-album-link {
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.tracks-album-link:hover {
+  opacity: 0.8;
+}
+
+.tracks-col-menu {
+  text-align: center;
+}
+
+.tracks-menu-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
+  font-size: 16px;
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  padding: 4px;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  opacity: 0;
 }
 
-.track-download-btn:hover {
+.tracks-roon-row:hover .tracks-menu-btn {
+  opacity: 1;
+}
+
+.tracks-menu-btn:hover {
   background: var(--surface2);
-  color: var(--accent);
+  color: var(--text);
+}
+
+/* Virtual scrolling spacer */
+#tracks-virtual-spacer {
+  height: 0;
 }
 
 /* ── Empty State ────────────────────────────────────────────────────────────── */
@@ -296,105 +408,173 @@
 
 /* ── Responsive Design ──────────────────────────────────────────────────────── */
 
+@media (max-width: 1400px) {
+  .tracks-col-album {
+    width: 150px;
+  }
+
+  .tracks-col-artist {
+    width: 150px;
+  }
+}
+
 @media (max-width: 1024px) {
-  .tracks-table th:nth-child(4) {
-    min-width: 120px;
+  .tracks-roon-header {
+    gap: 24px;
   }
 
-  .tracks-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .tracks-col-title {
+    min-width: 200px;
   }
 
-  .tracks-toolbar .toolbar-group {
-    width: 100%;
+  .tracks-col-album {
+    width: 120px;
   }
 
-  .tracks-toolbar .toolbar-input {
-    flex: 1;
+  .tracks-col-artist {
+    width: 120px;
   }
 }
 
 @media (max-width: 768px) {
-  .tracks-table {
-    font-size: 12px;
+  .tracks-roon-header {
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px 0;
+    margin-bottom: 16px;
   }
 
-  .tracks-table th,
-  .tracks-table td {
-    padding: 8px 6px;
-    height: 40px;
+  .tracks-roon-title h1 {
+    font-size: 24px;
   }
 
-  .tracks-table th:nth-child(2) {
+  .tracks-roon-left-actions {
+    width: 100%;
+  }
+
+  .tracks-play-now-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tracks-roon-table {
+    font-size: 13px;
+  }
+
+  .tracks-roon-row {
+    height: 44px;
+  }
+
+  .tracks-roon-row td {
+    padding: 6px 8px;
+    height: 44px;
+  }
+
+  .tracks-col-num {
+    width: 36px;
+    font-size: 11px;
+  }
+
+  .tracks-col-art {
+    width: 44px;
+    padding: 4px 8px;
+  }
+
+  .tracks-thumb,
+  .tracks-thumb-placeholder {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tracks-col-title {
     min-width: 150px;
   }
 
-  .tracks-table th:nth-child(3),
-  .tracks-table th:nth-child(4) {
-    min-width: 100px;
+  .tracks-col-heart {
+    width: 36px;
   }
 
-  .track-play-btn {
+  .tracks-col-length {
+    width: 60px;
+    font-size: 11px;
+  }
+
+  .tracks-col-artist {
+    width: 100px;
+    font-size: 12px;
+  }
+
+  .tracks-col-album {
+    width: 100px;
+    font-size: 12px;
+  }
+
+  .tracks-col-menu {
+    width: 40px;
+  }
+
+  .tracks-menu-btn {
     width: 28px;
     height: 28px;
-    font-size: 12px;
+  }
+
+  .tracks-heart-toggle {
+    width: 28px;
+    height: 28px;
   }
 }
 
 @media (max-width: 480px) {
-  .tracks-table-container {
-    border: none;
-    border-radius: 0;
+  .tracks-roon-title h1 {
+    font-size: 20px;
   }
 
-  .tracks-table {
+  .tracks-roon-count {
+    font-size: 14px;
+  }
+
+  .tracks-roon-table {
     font-size: 11px;
   }
 
-  .tracks-table th,
-  .tracks-table td {
-    padding: 6px 4px;
-    height: 36px;
+  .tracks-roon-row {
+    height: 40px;
   }
 
-  .tracks-table th {
+  .tracks-roon-row td {
+    padding: 4px 6px;
+    height: 40px;
+  }
+
+  .tracks-roon-thead th {
+    padding: 8px 6px;
+    height: 36px;
     font-size: 10px;
   }
 
-  .tracks-table th:nth-child(2) {
+  /* Hide less important columns on very small screens */
+  .tracks-col-album {
+    display: none;
+  }
+
+  .tracks-roon-row td:nth-child(7) {
+    display: none;
+  }
+
+  .tracks-col-length {
+    width: 50px;
+    font-size: 10px;
+  }
+
+  .tracks-col-artist {
+    width: 80px;
+  }
+
+  .tracks-col-title {
     min-width: 120px;
   }
 
-  .tracks-table th:nth-child(3) {
+  .tracks-search-icon {
     display: none;
-  }
-
-  .tracks-table td:nth-child(3) {
-    display: none;
-  }
-
-  .tracks-table th:nth-child(4) {
-    display: none;
-  }
-
-  .tracks-table td:nth-child(4) {
-    display: none;
-  }
-
-  .tracks-table th:nth-child(5) {
-    width: 50px;
-    font-size: 9px;
-  }
-
-  .tracks-table th:nth-child(6) {
-    width: 50px;
-    font-size: 9px;
-  }
-
-  .track-play-btn {
-    width: 24px;
-    height: 24px;
-    font-size: 10px;
   }
 }
