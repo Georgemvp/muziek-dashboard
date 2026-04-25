@@ -5,7 +5,7 @@ import { state } from './state.js';
 import { prefersReducedMotion } from './helpers.js';
 
 // ── Import components + routers ───────────────────────────────────────────
-import { initSidebar } from './components/sidebar.js';
+import { initSidebar, updateNavBadge } from './components/sidebar.js';
 import { initRouter, switchView } from './router.js';
 import { initPlayer } from './components/player.js';
 import { initZonePicker, playOnZone, getSelectedZone } from './components/plexRemote.js';
@@ -68,6 +68,38 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── Nieuwe releases controleren en badge tonen ────────────────────────────────
+const SEEN_RELEASES_KEY = 'seenReleaseIds';
+
+async function checkNewReleases() {
+  try {
+    const data = await apiFetch('/api/releases');
+    if (!data || !data.releases) return;
+
+    const seen = new Set(JSON.parse(localStorage.getItem(SEEN_RELEASES_KEY) || '[]'));
+    const allIds = data.releases.map(r => `${r.artist}::${r.album}`);
+    const newIds = allIds.filter(id => !seen.has(id));
+
+    state.newReleaseCount = newIds.length;
+
+    if (newIds.length > 0) {
+      updateNavBadge('ontdek', newIds.length);
+
+      // Browser-notificatie (alleen als toestemming al gegeven is)
+      if (Notification.permission === 'granted') {
+        new Notification(`${newIds.length} nieuwe release${newIds.length !== 1 ? 's' : ''}`, {
+          body: 'Van artiesten die je volgt — open Ontdek voor meer info.',
+          icon: '/icon-192.png',
+          tag: 'new-releases',
+          renotify: false,
+        });
+      }
+    }
+  } catch {
+    // Stil falen — niet kritisch
+  }
+}
+
 // ── Background prefetch voor snellere tab-navigatie ──────────────────────────
 function prefetchBackgroundData() {
   const endpoints = [
@@ -111,6 +143,9 @@ async function start() {
 
   // Background prefetch (non-blocking)
   prefetchBackgroundData();
+
+  // Controleer nieuwe releases en toon badge (non-blocking)
+  checkNewReleases().catch(() => {});
 
   // Load downloads tidarr status (fire-and-forget, non-blocking)
   try {

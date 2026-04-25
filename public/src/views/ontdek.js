@@ -8,6 +8,7 @@ import {
   setupLazyLoad, runWithSection, contentEl, proxyImg, p
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
+import { updateNavBadge } from '../components/sidebar.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // MODULE STATE
@@ -335,6 +336,13 @@ async function renderReleasesTab() {
         ${dateHtml}<div class="rel-footer">${plex}${deezer}${downloadBtn(r.artist, r.album, r.inPlex)}</div></div></div>`;
     });
     setContent(html + '</div>');
+
+    // Markeer alle huidige releases als gezien + verwijder badge
+    const allIds = releases.map(r => `${r.artist}::${r.album}`);
+    localStorage.setItem('seenReleaseIds', JSON.stringify(allIds));
+    state.newReleaseCount = 0;
+    updateNavBadge('ontdek', 0);
+
   } catch (e) { if (e.name !== 'AbortError') showError(e.message); }
 }
 

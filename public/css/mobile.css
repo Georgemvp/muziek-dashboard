@@ -23,6 +23,7 @@
   cursor: pointer;
   min-width: 64px;
   min-height: 48px;
+  position: relative;
 }
 .bnav-btn.active { color: var(--accent); }
 .bnav-btn svg { width: 22px; height: 22px; }

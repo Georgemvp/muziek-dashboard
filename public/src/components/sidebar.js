@@ -72,6 +72,30 @@ export function initSidebar() {
 }
 
 /**
+ * Toon of verberg een release-notificatiebadge op alle nav-items met data-view="{view}".
+ * Werkt voor zowel sidebar nav-items als bottom nav knoppen.
+ * @param {string} view - De view-naam (bijv. 'ontdek')
+ * @param {number} count - Aantal nieuwe items (0 = badge verbergen)
+ */
+export function updateNavBadge(view, count) {
+  document.querySelectorAll(`[data-view="${view}"]`).forEach(el => {
+    let badge = el.querySelector('.nav-release-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-release-badge';
+      badge.setAttribute('aria-hidden', 'true');
+      el.appendChild(badge);
+    }
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.add('visible');
+    } else {
+      badge.classList.remove('visible');
+    }
+  });
+}
+
+/**
  * Load Plex playlists directly from API and render them in the sidebar.
  */
 export async function loadSidebarPlaylists() {
