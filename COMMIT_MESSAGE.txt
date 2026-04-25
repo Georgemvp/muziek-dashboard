@@ -1,0 +1,8 @@
+feat: enhance play-on-hover album cards with improved animations
+
+- Scale cover image on hover (1.03x) for subtle zoom effect
+- Increase play button size to 48px for better touch targets
+- Darker overlay (0.45 opacity) for improved visibility
+- Add box-shadow to play button with hover/active states
+- Improve pointer-events handling for overlay
+- Smooth transition timing (0.25s for overlay, 0.3s for cover)

@@ -157,62 +157,8 @@ function bindDetailViewEvents(item, tracks) {
   const content = getContent();
   if (!content) return;
 
-  // Back button
-  const backBtn = content.querySelector('.album-detail-back');
-  if (backBtn) {
-    backBtn.addEventListener('click', hideAlbumDetail);
-  }
-
-  // Play album button
-  const playBtn = content.querySelector('.album-detail-play-btn');
-  if (playBtn) {
-    playBtn.addEventListener('click', async () => {
-      const zone = getSelectedZone();
-      if (zone) {
-        await playOnZone(item.ratingKey, 'music');
-      }
-    });
-  }
-
-  // Play on Plex button
-  const plexBtn = content.querySelector('.album-detail-plex-btn');
-  if (plexBtn) {
-    plexBtn.addEventListener('click', async () => {
-      const zone = getSelectedZone();
-      if (zone) {
-        await playOnZone(item.ratingKey, 'music');
-      }
-    });
-  }
-
-  // Artist link
-  const artistLink = content.querySelector('.album-detail-artist-link');
-  if (artistLink) {
-    artistLink.addEventListener('click', () => {
-      // Filter albums by artist
-      albumsSearchTerm = artistLink.dataset.artist;
-      hideAlbumDetail();
-      const searchInput = document.getElementById('albums-search');
-      if (searchInput) {
-        searchInput.value = albumsSearchTerm;
-      }
-      renderToolbar();
-      rerender();
-    });
-  }
-
-  // Track clicks
-  content.addEventListener('click', async (e) => {
-    const trackEl = e.target.closest('.album-track');
-    const playBtn = e.target.closest('.album-track-play');
-
-    if (trackEl && playBtn) {
-      const ratingKey = trackEl.dataset.ratingKey;
-      await playOnZone(ratingKey, 'music');
-    }
-  });
-
   // Track hover: show play button instead of number
+  // (Click events zijn nu geïntegreerd in handleAlbumsClick())
   const tracks_els = content.querySelectorAll('.album-track');
   tracks_els.forEach(trackEl => {
     trackEl.addEventListener('mouseenter', () => {
@@ -229,6 +175,26 @@ function bindDetailViewEvents(item, tracks) {
       if (playBtn) playBtn.style.opacity = '0';
     });
   });
+
+  // Play buttons
+  const playBtn = content.querySelector('.album-detail-play-btn');
+  const plexBtn = content.querySelector('.album-detail-plex-btn');
+  if (playBtn) {
+    playBtn.addEventListener('click', async () => {
+      const zone = getSelectedZone();
+      if (zone) {
+        await playOnZone(item.ratingKey, 'music');
+      }
+    });
+  }
+  if (plexBtn) {
+    plexBtn.addEventListener('click', async () => {
+      const zone = getSelectedZone();
+      if (zone) {
+        await playOnZone(item.ratingKey, 'music');
+      }
+    });
+  }
 }
 
 // ── Filter & Sort ──────────────────────────────────────────────────────────
@@ -645,39 +611,77 @@ async function render(container, data) {
   renderAZRail(albumsScroller);
 }
 
+// ── Global click handler (exported voor events.js) ────────────────────────
+
+export async function handleAlbumsClick(e) {
+  // Album card click → open detail view (maar niet bij play-btn)
+  const card = e.target.closest('.albums-album');
+  if (card && !e.target.closest('.albums-play-btn')) {
+    const item = {
+      ratingKey: card.dataset.ratingKey,
+      album: card.dataset.album,
+      artist: card.dataset.artist,
+      thumb: card.dataset.thumb
+    };
+    await showAlbumDetail(item);
+    return true;
+  }
+
+  // Play button (album cover) → play album
+  const playBtn = e.target.closest('.albums-play-btn');
+  if (playBtn) {
+    const card = playBtn.closest('.albums-album');
+    if (card) {
+      e.stopPropagation();
+      const ratingKey = card.dataset.ratingKey;
+      const zone = getSelectedZone();
+      if (zone) {
+        await playOnZone(ratingKey, 'music');
+      }
+    }
+    return true;
+  }
+
+  // Back button in detail view
+  if (e.target.closest('.album-detail-back')) {
+    hideAlbumDetail();
+    return true;
+  }
+
+  // Artist link in detail view → filter on artist
+  const artistLink = e.target.closest('.album-detail-artist-link');
+  if (artistLink) {
+    albumsSearchTerm = artistLink.dataset.artist;
+    hideAlbumDetail();
+    const searchInput = document.getElementById('albums-search');
+    if (searchInput) {
+      searchInput.value = albumsSearchTerm;
+    }
+    renderToolbar();
+    rerender();
+    return true;
+  }
+
+  // Track play button in detail view
+  const trackPlayBtn = e.target.closest('.album-track-play');
+  if (trackPlayBtn) {
+    const trackEl = trackPlayBtn.closest('.album-track');
+    if (trackEl) {
+      e.stopPropagation();
+      const ratingKey = trackEl.dataset.ratingKey;
+      await playOnZone(ratingKey, 'music');
+    }
+    return true;
+  }
+
+  return false;
+}
+
 // ── Setup event handlers ───────────────────────────────────────────────────
 
 function setupEventHandlers() {
-  const content = getContent();
-  if (!content) return;
-
-  content.addEventListener('click', async (e) => {
-    // Detail view: open album detail
-    const card = e.target.closest('.albums-album');
-    if (card && !e.target.closest('.albums-play-btn')) {
-      const item = {
-        ratingKey: card.dataset.ratingKey,
-        album: card.dataset.album,
-        artist: card.dataset.artist,
-        thumb: card.dataset.thumb
-      };
-      await showAlbumDetail(item);
-      return;
-    }
-
-    // Play button: play album immediately
-    const playBtn = e.target.closest('.albums-play-btn');
-    if (playBtn) {
-      const card = playBtn.closest('.albums-album');
-      if (card) {
-        const ratingKey = card.dataset.ratingKey;
-        const zone = getSelectedZone();
-        if (zone) {
-          await playOnZone(ratingKey, 'music');
-        }
-      }
-    }
-  });
+  // Event handlers zijn nu geïntegreerd in de globale delegation via handleAlbumsClick()
+  // Details: bindDetailViewEvents() wordt aangeroepen vanuit showAlbumDetail()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,7 @@ let bibliotheekModulePromise;
 let downloadsModulePromise;
 let playerModulePromise;
 let gapsModulePromise;
+let albumsModulePromise;
 
 function loadOntdekModule() {
   if (!ontdekModulePromise) ontdekModulePromise = import('./views/ontdek.js');
@@ -34,6 +35,11 @@ function loadGapsModule() {
   return gapsModulePromise;
 }
 
+function loadAlbumsModule() {
+  if (!albumsModulePromise) albumsModulePromise = import('./views/albums.js');
+  return albumsModulePromise;
+}
+
 function loadPlayerModule() {
   if (!playerModulePromise) playerModulePromise = import('./components/player.js');
   return playerModulePromise;
@@ -46,6 +52,7 @@ export const tabLoaders = {
   ontdek:      async () => (await loadOntdekModule()).loadOntdek(),
   bibliotheek: async () => (await loadBibliotheekModule()).loadBibliotheek(),
   downloads:   async () => (await loadDownloadsModule()).loadDownloads(),
+  albums:      async () => (await loadAlbumsModule()).loadAlbums(),
   // Backward-compat voor keyboard shortcuts en sub-tab loaders
   discover:    async () => (await loadOntdekModule()).loadDiscover(),
   gaps:        async () => (await loadGapsModule()).loadGaps(),
@@ -208,6 +215,7 @@ document.getElementById('panel-close')?.addEventListener('click', closeArtistPan
 
 // ── Globale event delegation (klikken) ────────────────────────────────────
 // Bevat ALLEEN handlers voor cross-view events:
+// - Albums clicks (albums-specifiek: kaarten, play, artist, back)
 // - Plex bibliotheek clicks (bibliotheek-specifiek maar globaal voor fallback)
 // - Play buttons (overal beschikbaar)
 // - Artist links en panel management (globaal in alle views)
@@ -219,10 +227,17 @@ document.getElementById('panel-close')?.addEventListener('click', closeArtistPan
 // - Panel overlay backdrop (globaal)
 //
 // VIEW-SPECIFIEKE handlers zitten in hun eigen modules:
+// - albums.js: kaart clicks, play buttons, detail view navigation
 // - ontdek.js: tab switches, filters, sort, discover toggles
 // - gaps.js: search, sort, refresh, artist expansions
 // - altri views hebben hun eigen internal event handling
 document.addEventListener('click', async e => {
+  // Albums view clicks
+  if (state.activeView === 'albums') {
+    const { handleAlbumsClick } = await loadAlbumsModule();
+    if (await handleAlbumsClick(e)) return;
+  }
+
   // Plex bibliotheek knoppen (▶ play + artiest-header collapse)
   if ((await loadBibliotheekModule()).handlePlexLibraryClick(e)) return;
 
