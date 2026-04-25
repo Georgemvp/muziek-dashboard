@@ -48,17 +48,10 @@ app.use('/mediasage', createProxyMiddleware({
       const ct = (proxyRes.headers['content-type'] || '');
 
       if (ct.includes('text/html')) {
-        // HTML: herschrijf /static/ en /api/ verwijzingen
+        // HTML: herschrijf /static/ → /mediasage/static/
+        // API-paden in app.js zijn direct gepatcht in mediasage/frontend/app.js
         return buffer.toString('utf8')
-          .replace(/(['"\s(])\/static\//g, '$1/mediasage/static/')
-          .replace(/(['"\s(])\/api\//g,    '$1/mediasage/api/');
-      }
-
-      if (ct.includes('javascript')) {
-        // JS-bundle: herschrijf fetch/XHR-paden naar /api/
-        // Geciteerde strings ("/api/... of '/api/... of `/api/...) zijn API-calls
-        return buffer.toString('utf8')
-          .replace(/(['"`])\/api\//g, '$1/mediasage/api/');
+          .replace(/(['"\s(])\/static\//g, '$1/mediasage/static/');
       }
 
       return buffer;
