@@ -13,6 +13,7 @@ import { loadPlexStatus } from '../api.js';
 import { playOnZone, pauseZone, skipZone, getSelectedZone } from '../components/plexRemote.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 import { renderRecentTracks } from '../modules/recentTracks.js';
+import { skeletonGrid } from '../modules/skeleton.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module-level state
@@ -1688,9 +1689,7 @@ export async function loadBibliotheek() {
   const container = blibContentEl();
   if (!container) return;
   container.scrollTop = 0;
-  container.innerHTML = `<div class="loading" role="status">
-    <div class="spinner" aria-hidden="true"></div>Bibliotheek laden…
-  </div>`;
+  container.innerHTML = skeletonGrid(4, 3);
 
   try {
     // Load based on current tab

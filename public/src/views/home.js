@@ -7,6 +7,7 @@ import { apiFetch, plexFirstFetch } from '../api.js';
 import { switchView } from '../router.js';
 import { esc, proxyImg, gradientFor } from '../helpers.js';
 import { state } from '../state.js';
+import { skeletonHero, skeletonGrid } from '../modules/skeleton.js';
 
 // ── Kleuren voor genre donut (blauw-paars spectrum) ───────────────────────
 const GENRE_COLORS = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb', '#9fa8da'];
@@ -1407,13 +1408,12 @@ export async function loadHome() {
   const content = document.getElementById('content');
   if (!content) return;
 
-  // Toon snel skelet terwijl data laadt
+  // Toon skeleton terwijl data laadt
   content.innerHTML = `
-    <div class="home-page">
-      <div class="home-skeleton" style="height:120px;border-radius:8px"></div>
-      <div class="home-skeleton" style="height:200px;border-radius:12px"></div>
-      <div class="home-skeleton" style="height:160px;border-radius:8px"></div>
-      <div class="home-skeleton" style="height:240px;border-radius:8px"></div>
+    <div class="home-page" aria-busy="true" aria-label="Laden…">
+      ${skeletonHero()}
+      ${skeletonGrid(6, 1)}
+      ${skeletonGrid(4, 2)}
     </div>`;
 
   // ── Parallel data fetching ─────────────────────────────────────────────

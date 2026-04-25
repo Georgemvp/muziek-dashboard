@@ -9,6 +9,7 @@ import {
 } from '../helpers.js';
 import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 import { updateNavBadge } from '../components/sidebar.js';
+import { skeletonGrid } from '../modules/skeleton.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // MODULE STATE
@@ -161,7 +162,7 @@ function applyRecsFilter() {
 }
 
 async function renderRecsTab() {
-  showLoading();
+  setContent(skeletonGrid(4, 2));
   try {
     if (!recsData) {
       let d = getCached('recs', 5 * 60 * 1000);
@@ -285,7 +286,7 @@ function relativeDate(dateStr) {
 }
 
 async function renderReleasesTab() {
-  showLoading();
+  setContent(skeletonGrid(4, 2));
   try {
     if (!releasesData) {
       let d = getCached('releases', 5 * 60 * 1000);
@@ -350,7 +351,7 @@ async function renderReleasesTab() {
 // DISCOVER TAB
 // ────────────────────────────────────────────────────────────────────────────
 async function renderDiscoverTab() {
-  showLoading('Ontdekkingen ophalen...');
+  setContent(skeletonGrid(4, 2));
   try {
     if (!discoverData) {
       let d = getCached('discover', 5 * 60 * 1000);

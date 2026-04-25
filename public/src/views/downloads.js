@@ -2,6 +2,7 @@
 import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { esc, gradientFor, initials, fmt, markDownloaded, setContent, p } from '../helpers.js';
+import { skeletonList } from '../modules/skeleton.js';
 
 // ── Download-kwaliteit ─────────────────────────────────────────────────────
 export function getDownloadQuality() {
@@ -176,7 +177,7 @@ export function renderTidalQueue() {
 export async function renderTidalHistory() {
   const target = document.getElementById('tidal-content');
   if (!target) return;
-  target.innerHTML = `<div class="loading"><div class="spinner"></div>Geschiedenis ophalen…</div>`;
+  target.innerHTML = skeletonList(5);
   try {
     const items = await apiFetch('/api/downloads');
     if (!items.length) {
