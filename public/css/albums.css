@@ -284,15 +284,14 @@
 }
 
 .albums-letter-header {
-  padding: 12px 20px 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  background: var(--surface1);
+  padding: 12px 20px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 /* ── Empty State ──────────────────────────────────────────────────────────── */

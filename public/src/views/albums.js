@@ -341,8 +341,8 @@ class AlbumsVirtualScroller {
 
     if (this.groups) {
       for (const [letter, items] of this.groups) {
-        rows.push({ type: 'header', letter, height: 56, offset });
-        offset += 56;
+        rows.push({ type: 'header', letter, height: 40, offset });
+        offset += 40;
         for (let i = 0; i < items.length; i += this.cols) {
           rows.push({ type: 'items', items: items.slice(i, i + this.cols), height: this.rowH, offset });
           offset += this.rowH;
