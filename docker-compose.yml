@@ -20,9 +20,14 @@ services:
       - ADMIN_PASSWORD=${TIDARR_API_KEY}
       - LOCK_QUALITY=high
       - ENABLE_HISTORY=true
+      # MediaSage AI providers (optioneel, kies er één)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - ./data:/data
       - ./data/tidarr/config:/shared
+      - ./data/mediasage:/mediasage/data
       - /Volumes/4tbdrive/Muziek:/music
     extra_hosts:
       - "host.docker.internal:host-gateway"
