@@ -160,7 +160,7 @@
 .albums-album {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   cursor: pointer;
   transition: transform 0.2s ease;
 }
@@ -252,7 +252,7 @@
 }
 
 .albums-album-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -267,7 +267,6 @@
   border: none;
   cursor: pointer;
   padding: 0;
-  text-decoration: underline;
   transition: color 0.2s ease;
   text-align: left;
   overflow: hidden;
@@ -277,6 +276,7 @@
 
 .albums-artist-btn:hover {
   color: var(--accent);
+  text-decoration: underline;
 }
 
 /* ── Virtual Scroller ──────────────────────────────────────────────────────── */
