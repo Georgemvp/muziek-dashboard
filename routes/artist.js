@@ -70,6 +70,73 @@ module.exports = function(app, deps) {
     }
   });
 
+  // ── /api/artist/:name (alias to /info) ─────────────────────────────────────
+  app.get('/api/artist/:name', async (req, res) => {
+    const name = decodeURIComponent(req.params.name);
+    const cacheKey = `artist:info:${name.toLowerCase()}`;
+
+    // ── Check cache eerst (TTL: 1 uur) ─────────────────────────────────────
+    const cached = getCache(cacheKey, 1 * 3_600_000);
+    if (cached) {
+      res.set('Cache-Control', 'private, max-age=3600');
+      return res.json(cached);
+    }
+
+    try {
+      const [deezerR, albumsR, mbzR] = await Promise.allSettled([
+        fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=3`, { signal: AbortSignal.timeout(5_000) }).then(r => r.json()),
+        lfm({ method: 'artist.gettopalbums', artist: name, limit: 6 }, { includeUser: false }),
+        getMBZArtist(name)
+      ]);
+
+      let image = null;
+      if (deezerR.status === 'fulfilled') {
+        const results = deezerR.value?.data || [];
+        const exact   = results.find(a => a.name.toLowerCase() === name.toLowerCase());
+        const best    = exact || results[0];
+        if (best?.picture_medium && !best.picture_medium.includes('/artist//')) image = best.picture_medium;
+      }
+
+      let albums = [];
+      if (albumsR.status === 'fulfilled') {
+        albums = (albumsR.value.topalbums?.album || [])
+          .filter(a => a.name && a.name !== '(null)' && a.name !== '[unknown]')
+          .slice(0, 5)
+          .map(a => {
+            const img = a.image?.find(i => i.size === 'medium')?.['#text'] || null;
+            const inPlex = albumInPlex(name, a.name);
+            return {
+              name:      a.name,
+              image:     (img && !img.includes('2a96cbd8b46e442fc41c2b86b821562f')) ? img : null,
+              playcount: parseInt(a.playcount) || 0,
+              inPlex,
+              ratingKey: inPlex ? getAlbumRatingKey(name, a.name) : null,
+            };
+          });
+      }
+
+      const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
+      const result = {
+        image, albums,
+        inPlex:    artistInPlex(name),
+        country:   mbz?.country   || null,
+        startYear: mbz?.startYear || null,
+        tags:      mbz?.tags      || [],
+        mbid:      mbz?.mbid      || null
+      };
+
+      // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
+      setCache(cacheKey, result);
+
+      // ── Voeg browser cache header toe ──────────────────────────────────
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.json(result);
+    } catch (e) {
+      // ── Geen caching bij errors ────────────────────────────────────────
+      res.status(500).json({ error: e.message, image: null, albums: [], inPlex: false, tags: [] });
+    }
+  });
+
   // ── /api/artist/:name/similar ──────────────────────────────────────────────
   // Retourneert gelijkaardige artiesten voor een gegeven artiestnaam.
   // Probeert eerst Last.fm API → fallback naar Plex genres als Last.fm faalt.

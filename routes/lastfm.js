@@ -153,6 +153,22 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
   });
 
+  // ── /api/top/tracks (alias) ────────────────────────────────────────────────
+  app.get('/api/top/tracks', async (req, res) => {
+    try {
+      const period = req.query.period || '7day';
+      const cacheKey = `api:toptracks:${period}`;
+      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
+      const data = await lfm(
+        { method: 'user.gettoptracks', period, limit: 20 },
+        { cacheKey, cacheTTL: 300_000 }
+      );
+      markLastFmUp();
+      res.set('Cache-Control', 'private, max-age=300');
+      res.json(data);
+    } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
+  });
+
   // ── /api/top/albums ────────────────────────────────────────────────────────
   app.get('/api/top/albums', async (req, res) => {
     try {
