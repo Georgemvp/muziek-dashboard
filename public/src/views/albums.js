@@ -14,6 +14,8 @@ let albumsScroller = null;    // virtual scroller instance
 let albumsSearchTerm = '';    // current search term
 let albumsSort = 'artist';    // sort mode: artist, artist-za, album, album-za, recent
 let albumsViewMode = 'grid';  // grid or list
+let detailViewData = null;    // current album detail view data
+let scrollPosition = 0;       // saved scroll position for grid
 
 // Row dimensions for virtual scroller
 const ALBUMS_GRID_ROW_H = 210;
@@ -34,6 +36,199 @@ function getCols() {
   if (w >= 650) return 4;
   if (w >= 480) return 3;
   return 2;
+}
+
+// ── Detail View Helpers ────────────────────────────────────────────────────
+
+function formatDuration(seconds) {
+  if (!seconds) return '-';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// ── Album Detail View Functions ─────────────────────────────────────────────
+
+async function showAlbumDetail(item) {
+  detailViewData = item;
+  const content = getContent();
+  if (!content) return;
+
+  // Save scroll position
+  const scrollEl = content;
+  scrollPosition = scrollEl.scrollTop || 0;
+
+  // Render detail view
+  await renderDetailView();
+}
+
+function hideAlbumDetail() {
+  detailViewData = null;
+  const content = getContent();
+  if (content) {
+    // Restore grid view
+    const filtered = filterAndSort(albumsData || []);
+    content.innerHTML = `
+      <div style="display: flex; gap: 8px; flex: 1;">
+        <div style="flex: 1;" id="albums-container"></div>
+        <div id="albums-az-rail" class="albums-az-rail"></div>
+      </div>
+    `;
+    const container = content.querySelector('#albums-container');
+    if (container) {
+      render(container, filtered).then(() => {
+        // Restore scroll position
+        setTimeout(() => {
+          content.scrollTop = scrollPosition;
+        }, 0);
+      });
+    }
+  }
+}
+
+async function renderDetailView() {
+  const content = getContent();
+  if (!content || !detailViewData) return;
+
+  const item = detailViewData;
+  const coverSrc = item.thumb ? proxyImg(item.thumb, 320) : null;
+  const zone = getSelectedZone();
+
+  // Load tracks
+  let tracks = [];
+  try {
+    const res = await apiFetch(`/api/plex/album/${item.ratingKey}/tracks`);
+    if (res && Array.isArray(res.tracks)) {
+      tracks = res.tracks;
+    }
+  } catch (e) {
+    console.error('Error loading album tracks:', e);
+  }
+
+  const tracksHTML = tracks.length
+    ? `<div class="album-detail-tracks">
+         <h2 style="margin: 32px 0 20px 0; font-family: Georgia, serif; font-size: 20px; font-weight: 400;">Nummers</h2>
+         <div class="album-detail-tracklist">
+           ${tracks.map((track, idx) => `
+             <div class="album-track" data-rating-key="${esc(track.ratingKey)}">
+               <div class="album-track-num">${idx + 1}</div>
+               <div class="album-track-title">${esc(track.title)}</div>
+               <div class="album-track-duration">${formatDuration(track.duration)}</div>
+               <button class="album-track-play" title="Play track">▶</button>
+             </div>
+           `).join('')}
+         </div>
+       </div>`
+    : '';
+
+  content.innerHTML = `
+    <div class="album-detail-view">
+      <!-- Header: Back button -->
+      <button class="album-detail-back" title="Terug naar albums">← Alle albums</button>
+
+      <!-- Hero Section -->
+      <div class="album-detail-hero">
+        <div class="album-detail-cover-wrapper">
+          ${coverSrc
+            ? `<img src="${esc(coverSrc)}" alt="${esc(item.album)}" class="album-detail-cover">`
+            : `<div class="album-detail-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`
+          }
+        </div>
+        <div class="album-detail-info">
+          <h1>${esc(item.album)}</h1>
+          <button class="album-detail-artist-link" data-artist="${esc(item.artist)}">${esc(item.artist)}</button>
+          <div class="album-detail-buttons">
+            <button class="album-detail-play-btn">▶ Speel album af</button>
+            ${zone ? `<button class="album-detail-plex-btn">🔊 Speel op Plex</button>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Tracklist -->
+      ${tracksHTML}
+    </div>
+  `;
+
+  // Bind detail view events
+  bindDetailViewEvents(item, tracks);
+}
+
+function bindDetailViewEvents(item, tracks) {
+  const content = getContent();
+  if (!content) return;
+
+  // Back button
+  const backBtn = content.querySelector('.album-detail-back');
+  if (backBtn) {
+    backBtn.addEventListener('click', hideAlbumDetail);
+  }
+
+  // Play album button
+  const playBtn = content.querySelector('.album-detail-play-btn');
+  if (playBtn) {
+    playBtn.addEventListener('click', async () => {
+      const zone = getSelectedZone();
+      if (zone) {
+        await playOnZone(item.ratingKey, 'music');
+      }
+    });
+  }
+
+  // Play on Plex button
+  const plexBtn = content.querySelector('.album-detail-plex-btn');
+  if (plexBtn) {
+    plexBtn.addEventListener('click', async () => {
+      const zone = getSelectedZone();
+      if (zone) {
+        await playOnZone(item.ratingKey, 'music');
+      }
+    });
+  }
+
+  // Artist link
+  const artistLink = content.querySelector('.album-detail-artist-link');
+  if (artistLink) {
+    artistLink.addEventListener('click', () => {
+      // Filter albums by artist
+      albumsSearchTerm = artistLink.dataset.artist;
+      hideAlbumDetail();
+      const searchInput = document.getElementById('albums-search');
+      if (searchInput) {
+        searchInput.value = albumsSearchTerm;
+      }
+      renderToolbar();
+      rerender();
+    });
+  }
+
+  // Track clicks
+  content.addEventListener('click', async (e) => {
+    const trackEl = e.target.closest('.album-track');
+    const playBtn = e.target.closest('.album-track-play');
+
+    if (trackEl && playBtn) {
+      const ratingKey = trackEl.dataset.ratingKey;
+      await playOnZone(ratingKey, 'music');
+    }
+  });
+
+  // Track hover: show play button instead of number
+  const tracks_els = content.querySelectorAll('.album-track');
+  tracks_els.forEach(trackEl => {
+    trackEl.addEventListener('mouseenter', () => {
+      const numEl = trackEl.querySelector('.album-track-num');
+      const playBtn = trackEl.querySelector('.album-track-play');
+      if (numEl) numEl.style.opacity = '0';
+      if (playBtn) playBtn.style.opacity = '1';
+    });
+
+    trackEl.addEventListener('mouseleave', () => {
+      const numEl = trackEl.querySelector('.album-track-num');
+      const playBtn = trackEl.querySelector('.album-track-play');
+      if (numEl) numEl.style.opacity = '1';
+      if (playBtn) playBtn.style.opacity = '0';
+    });
+  });
 }
 
 // ── Filter & Sort ──────────────────────────────────────────────────────────
@@ -457,6 +652,20 @@ function setupEventHandlers() {
   if (!content) return;
 
   content.addEventListener('click', async (e) => {
+    // Detail view: open album detail
+    const card = e.target.closest('.albums-album');
+    if (card && !e.target.closest('.albums-play-btn')) {
+      const item = {
+        ratingKey: card.dataset.ratingKey,
+        album: card.dataset.album,
+        artist: card.dataset.artist,
+        thumb: card.dataset.thumb
+      };
+      await showAlbumDetail(item);
+      return;
+    }
+
+    // Play button: play album immediately
     const playBtn = e.target.closest('.albums-play-btn');
     if (playBtn) {
       const card = playBtn.closest('.albums-album');
@@ -464,7 +673,7 @@ function setupEventHandlers() {
         const ratingKey = card.dataset.ratingKey;
         const zone = getSelectedZone();
         if (zone) {
-          await playOnZone(zone, 'album', ratingKey);
+          await playOnZone(ratingKey, 'music');
         }
       }
     }
