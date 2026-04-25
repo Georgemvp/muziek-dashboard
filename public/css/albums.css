@@ -4,9 +4,7 @@
 
 /* ── Toolbar ───────────────────────────────────────────────────────────────── */
 .albums-toolbar-header {
-  padding: 20px 20px 12px;
-  background: var(--surface1);
-  border-bottom: 1px solid var(--border);
+  padding: 16px 0 12px;
 }
 
 .albums-toolbar-header h1 {
@@ -21,9 +19,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
-  background: var(--surface1);
-  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
   flex-wrap: wrap;
 }
 
@@ -154,7 +150,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 20px 16px;
-  padding: 20px;
+  padding: 0;
 }
 
 .albums-album {
