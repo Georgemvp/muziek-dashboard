@@ -172,6 +172,11 @@
   background: var(--surface2);
   border-radius: var(--radius-md);
   overflow: hidden;
+  transition: transform 0.3s ease;
+}
+
+.albums-album:hover .albums-cover {
+  transform: scale(1.03);
 }
 
 .albums-cover img {
@@ -203,35 +208,44 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
 }
 
 .albums-album:hover .albums-play-overlay {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .albums-play-btn {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
   border: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-weight: 500;
 }
 
 .albums-play-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.albums-play-btn:active {
+  transform: scale(0.95);
 }
 
 .albums-album-title {
