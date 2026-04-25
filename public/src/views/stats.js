@@ -3,7 +3,7 @@
 // een periodefilter. Gebruikt Chart.js (CDN) voor de grafieken.
 
 import { apiFetch } from '../api.js';
-import { esc } from '../helpers.js';
+import { esc, proxyImg } from '../helpers.js';
 
 // ── Instantie-cache zodat grafieken bij herlaad worden vernietigd ─────────
 let _lineChart = null;
@@ -307,8 +307,9 @@ function renderTopArtistsList(topArtists) {
     <ol class="stats-artist-list">
       ${top.map((a, i) => {
         const pct = Math.round(((a.playcount || 0) / max) * 100);
-        const imgHtml = a.thumb
-          ? `<img class="stats-artist-thumb" src="/api/image-proxy?url=${encodeURIComponent(a.thumb)}&size=40" alt="${esc(a.name)}" loading="lazy">`
+        const imgSrc = proxyImg(a.thumb, 40);
+        const imgHtml = imgSrc
+          ? `<img class="stats-artist-thumb" src="${imgSrc}" alt="${esc(a.name)}" loading="lazy">`
           : `<div class="stats-artist-ph" style="background:${gradientForName(a.name)}">${initials(a.name)}</div>`;
         return `
           <li class="stats-artist-row">
