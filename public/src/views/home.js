@@ -266,7 +266,7 @@ function renderActivityMatrix(recentTracks, dailyPlays) {
 
 // ── Section 2: Recent Activity ────────────────────────────────────────────
 
-function recentCoversHtml(tracks) {
+function recentCoversHtml(tracks, dateType = 'played') {
   if (!tracks?.length) {
     return `<div style="color:rgba(255,255,255,0.5);font-size:13px;padding:12px 0">Geen recente activiteit</div>`;
   }
@@ -274,15 +274,26 @@ function recentCoversHtml(tracks) {
   return items.map(t => {
     // Verbeterde fallback: probeer [2], dan [1], dan [3]. Check dat URL niet leeg is.
     const imgUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
-    const img = imgUrl ? coverImg(imgUrl, 120) : null;
+    const img = imgUrl ? coverImg(imgUrl, 140) : null;
     const imgEl = img
       ? `<img src="${esc(img)}" alt="${esc(t.name)}" loading="lazy">`
       : `<div class="home-recent-cover-ph">♪</div>`;
+
+    // Bepaal de datumslabel op basis van dateType
+    let dateLabel = '';
+    if (dateType === 'added' && t.addedAt) {
+      dateLabel = ageLabel(t.addedAt);
+    } else if (dateType === 'played' && t.date?.uts) {
+      const d = new Date(parseInt(t.date.uts, 10) * 1000);
+      dateLabel = ageLabel(d.toISOString());
+    }
+
     return `
       <div class="home-recent-cover">
         ${imgEl}
-        <div class="home-recent-cover-label" title="${esc(t.name)}">${esc(t.name)}</div>
-        <div class="home-recent-cover-label" style="opacity:.7">${esc(t.artist?.['#text'] || t.artist || '')}</div>
+        ${dateLabel ? `<div class="home-recent-cover-date">${dateLabel}</div>` : ''}
+        <div class="home-recent-cover-title" title="${esc(t.name)}">${esc(t.name)}</div>
+        <div class="home-recent-cover-artist" title="${esc(t.artist?.['#text'] || t.artist || '')}">${esc(t.artist?.['#text'] || t.artist || '')}</div>
       </div>`;
   }).join('');
 }
@@ -294,7 +305,7 @@ function renderRecentActivity(tracks) {
         <div class="home-recent-title">Recent activity</div>
         <div class="home-recent-tabs">
           <button class="home-recent-tab active" data-recent-tab="played">PLAYED</button>
-          <button class="home-recent-tab" data-recent-tab="loved">LOVED</button>
+          <button class="home-recent-tab" data-recent-tab="added">ADDED</button>
         </div>
         <button class="home-recent-more" id="home-recent-more">MORE</button>
       </div>
@@ -302,7 +313,7 @@ function renderRecentActivity(tracks) {
         <button class="home-recent-nav" id="home-recent-prev" aria-label="Vorige">&#8249;</button>
         <div class="home-recent-covers-wrap">
           <div class="home-recent-covers" id="home-recent-covers">
-            ${recentCoversHtml(tracks)}
+            ${recentCoversHtml(tracks, 'played')}
           </div>
         </div>
         <button class="home-recent-nav" id="home-recent-next" aria-label="Volgende">&#8250;</button>
@@ -883,7 +894,7 @@ function initRecentCarousel() {
   if (!covers || !prevBtn || !nextBtn) return;
 
   let offset = 0;
-  const STEP = 224; // 100px cover + 12px gap × 2
+  const STEP = 160; // 140px cover + 20px gap
 
   function update() {
     const maxOffset = Math.max(0, covers.scrollWidth - covers.parentElement.offsetWidth);
@@ -1284,7 +1295,7 @@ export async function loadHome() {
     });
   });
 
-  // Recent tabs (PLAYED / LOVED)
+  // Recent tabs (PLAYED / ADDED)
   let recentTab = 'played';
   content.querySelectorAll('[data-recent-tab]').forEach(tab => {
     tab.addEventListener('click', async () => {
@@ -1295,17 +1306,22 @@ export async function loadHome() {
       const coversEl = document.getElementById('home-recent-covers');
       if (!coversEl) return;
 
-      if (recentTab === 'loved') {
+      if (recentTab === 'added') {
         try {
-          const data = await apiFetch('/api/loved');
-          const lovedTracks = data?.lovedtracks?.track || [];
-          coversEl.innerHTML = recentCoversHtml(lovedTracks.map(t => ({
-            ...t,
-            image: t.image,
-          })));
-        } catch { /* stil falen */ }
+          const data = await apiFetch('/api/plex/library?sort=addedAt:desc&limit=8');
+          const addedItems = (data?.library || []).map(item => ({
+            name: item.album,
+            artist: { '#text': item.artist },
+            image: item.thumb ? [null, null, { '#text': item.thumb }] : [null, null, { '#text': '' }],
+            addedAt: new Date(item.addedAt * 1000).toISOString(),
+          }));
+          coversEl.innerHTML = recentCoversHtml(addedItems, 'added');
+        } catch (err) {
+          console.warn('Failed to load added items:', err);
+          coversEl.innerHTML = `<div style="color:rgba(255,255,255,0.5);font-size:13px;padding:12px 0">Fout bij laden van recent toegevoegde albums</div>`;
+        }
       } else {
-        coversEl.innerHTML = recentCoversHtml(tracks);
+        coversEl.innerHTML = recentCoversHtml(tracks, 'played');
       }
     });
   });

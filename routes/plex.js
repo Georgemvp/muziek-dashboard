@@ -205,10 +205,21 @@ module.exports = function(app, deps) {
     const page  = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const q     = (req.query.q || '').toLowerCase().trim();
+    const sort  = req.query.sort || null; // e.g., "addedAt:desc"
+
     let lib = getPlexLibrary();
+
     if (q) lib = lib.filter(x =>
       x.artist.toLowerCase().includes(q) || x.album.toLowerCase().includes(q)
     );
+
+    // Sorteer indien nodig
+    if (sort === 'addedAt:desc') {
+      lib = lib.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    } else if (sort === 'addedAt:asc') {
+      lib = lib.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    }
+
     const { ok, artistCount } = getPlexStatus();
     const total = lib.length;
     const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
