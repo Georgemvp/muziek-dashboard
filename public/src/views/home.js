@@ -472,6 +472,119 @@ function renderRecentArtists(topArtists) {
     </div>`;
 }
 
+// ── Section 3c: Recommended Artists (Roon-stijl) ──────────────────────
+
+/**
+ * Haal aanbevolen artiesten op via discover endpoint of similar artists API
+ * Toon maximaal 5 unieke aanbevelingen
+ */
+async function renderRecommendedArtists(topArtistsRaw) {
+  try {
+    const topArtists = (topArtistsRaw?.topartists?.artist || topArtistsRaw || []).slice(0, 5);
+    if (!topArtists.length) return '';
+
+    // Probeer eerst discover endpoint
+    let recommendedList = [];
+    try {
+      const discoverData = await apiFetch('/api/discover');
+      if (discoverData?.artists && Array.isArray(discoverData.artists)) {
+        recommendedList = discoverData.artists.slice(0, 5);
+      }
+    } catch {
+      // Fallback naar similar artists
+    }
+
+    // Fallback: verzamel similar artists van top 3 artiesten
+    if (recommendedList.length === 0) {
+      const similarPromises = topArtists.slice(0, 3).map(async (a) => {
+        try {
+          const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          return {
+            source: a.name,
+            similar: (data?.similarartists?.artist || data?.similar || []).slice(0, 5)
+          };
+        } catch {
+          return { source: a.name, similar: [] };
+        }
+      });
+
+      const similarResults = await Promise.all(similarPromises);
+      const seen = new Set(topArtists.map(a => a.name.toLowerCase()));
+
+      // Verzamel unieke aanbevelingen met hun "reason" (bron-artiesten)
+      for (const result of similarResults) {
+        for (const similar of result.similar) {
+          const name = (similar.name || similar).toLowerCase();
+          if (!seen.has(name) && recommendedList.length < 5) {
+            seen.add(name);
+            recommendedList.push({
+              name: similar.name || similar,
+              image: similar.image,
+              sources: [result.source], // Track bron-artiesten
+            });
+          }
+        }
+      }
+    }
+
+    if (!recommendedList.length) return '';
+
+    // Render aanbevelingen
+    const recArtistsHtml = recommendedList.map(a => {
+      const artName = typeof a === 'string' ? a : a.name;
+      const artImage = a.image;
+      const sources = a.sources || [];
+
+      // Foto ophalen
+      const thumbUrl = typeof a !== 'string'
+        ? (a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'] || a.thumb || '')
+        : '';
+      const img = coverImg(thumbUrl, 120);
+      const imgEl = img
+        ? `<img class="home-rec-artist-img" src="${esc(img)}" alt="${esc(artName)}" loading="lazy">`
+        : `<div class="home-rec-artist-ph">♪</div>`;
+
+      // "If you like..." tekst opbouwen
+      let reasonText = '';
+      if (sources.length > 0) {
+        const sourceNames = sources.slice(0, 2); // Max 2 bron-artiesten
+        if (sourceNames.length === 1) {
+          reasonText = `If you like ${sourceNames[0]}`;
+        } else {
+          reasonText = `If you like ${sourceNames.join(' and ')}`;
+        }
+      }
+
+      return `
+        <div class="home-rec-artist" data-artist="${esc(artName)}">
+          <div class="home-rec-artist-img-wrap">${imgEl}</div>
+          <div class="home-rec-artist-name">${esc(artName)}</div>
+          ${reasonText ? `<div class="home-rec-artist-reason">${esc(reasonText)}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="home-section-header">
+        <div class="home-section-title" style="font-family: Georgia, serif; font-size: 20px">Recommended artists</div>
+        <div class="home-rec-artists-nav">
+          <button class="home-rec-artists-btn" id="home-rec-artists-prev" aria-label="Vorige">&#8249;</button>
+          <button class="home-rec-artists-btn" id="home-rec-artists-next" aria-label="Volgende">&#8250;</button>
+        </div>
+        <button class="home-more-btn" data-switch="ontdek">MORE</button>
+      </div>
+      <div class="home-recommended-artists-wrap">
+        <div class="home-recommended-artists" id="home-recommended-artists">
+          ${recArtistsHtml}
+        </div>
+      </div>`;
+  } catch (err) {
+    console.warn('Recommended artists render mislukt:', err);
+    return '';
+  }
+}
+
 // ── Section 4: Daily Mixes ────────────────────────────────────────────────
 
 function renderDailyMixes(topArtists) {
@@ -1243,6 +1356,9 @@ export async function loadHome() {
   // Featured Artist Banner rendering
   const featuredArtistHtml = await renderFeaturedArtist(topArtistsRaw).catch(() => '');
 
+  // Recommended Artists rendering
+  const recommendedArtistsHtml = await renderRecommendedArtists(topArtistsRaw).catch(() => '');
+
   // ── Activity Matrix: waterfall fallback ──────────────────────────────────
   let activityMatrixTracks = tracks;
   let activityMatrixDailyPlays = null;
@@ -1297,6 +1413,9 @@ export async function loadHome() {
 
       <!-- 3b. Recent Artists -->
       <div>${renderRecentArtists(topArtistsRaw)}</div>
+
+      <!-- 3c. Recommended Artists -->
+      <div>${recommendedArtistsHtml}</div>
 
       <!-- 4. Daily Mixes -->
       <div>${renderDailyMixes(topArtistsRaw)}</div>
@@ -1457,6 +1576,26 @@ export async function loadHome() {
       artistsRow.scrollBy({ left: ARTIST_STEP * 2, behavior: 'smooth' });
     });
   }
+
+  // Recommended artists nav pijlen
+  const recArtistsRow = document.getElementById('home-recommended-artists');
+  if (recArtistsRow) {
+    const REC_ARTIST_STEP = 160; // 140px + gap
+    document.getElementById('home-rec-artists-prev')?.addEventListener('click', () => {
+      recArtistsRow.scrollBy({ left: -REC_ARTIST_STEP * 2, behavior: 'smooth' });
+    });
+    document.getElementById('home-rec-artists-next')?.addEventListener('click', () => {
+      recArtistsRow.scrollBy({ left: REC_ARTIST_STEP * 2, behavior: 'smooth' });
+    });
+  }
+
+  // Recommended artists click handlers
+  content.querySelectorAll('.home-rec-artist').forEach(item => {
+    item.addEventListener('click', () => {
+      const name = item.dataset.artist;
+      if (name) openArtistPanel(name);
+    });
+  });
 
   // Lazy-load "Featuring…" voor Daily Mixes
   loadDailyMixFeaturing(topArtistsRaw);
