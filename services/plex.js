@@ -181,7 +181,7 @@ async function syncPlexLibrary(force = false) {
     plexAlbums     = new Set(albumMeta.map(a => `${(a.parentTitle || '').toLowerCase()}||${a.title.toLowerCase()}`));
     plexAlbumsNorm = new Set(albumMeta.map(a => `${normStr(a.parentTitle)}||${normStr(a.title)}`));
     plexLibrary    = albumMeta
-      .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null, thumb: a.thumb || null }))
+      .map(a => ({ artist: a.parentTitle || '', album: a.title || '', ratingKey: a.ratingKey || null, thumb: a.thumb || null, addedAt: a.addedAt || 0 }))
       .filter(x => x.artist && x.album)
       .sort((a, b) => a.artist.localeCompare(b.artist, 'nl', { sensitivity: 'base' }));
 
