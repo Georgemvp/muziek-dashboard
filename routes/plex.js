@@ -186,6 +186,90 @@ module.exports = function(app, deps) {
     }
   });
 
+  // ── /api/plex/remotequeue ────────────────────────────────────────────────
+  // Geeft de afspeelwachtrij terug voor een actieve remote sessie (bijv. WiiM Pro).
+  // Probeert eerst de Plex playQueue API, dan albumtracks als fallback.
+  app.get('/api/plex/remotequeue', async (req, res) => {
+    if (!PLEX_TOKEN) return res.json({ tracks: [], currentRatingKey: null });
+    try {
+      const machineId = req.query.machineId || null;
+      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+
+      // Zoek actieve muziek-sessie
+      const sessionsData = await plexGet('/status/sessions');
+      const sessions = sessionsData?.MediaContainer?.Metadata || [];
+
+      let session = machineId
+        ? sessions.find(s => s.type === 'track' && s.Player?.machineIdentifier === machineId)
+        : null;
+      if (!session) session = sessions.find(s => s.type === 'track');
+
+      if (!session) return res.json({ tracks: [], currentRatingKey: null });
+
+      const currentRatingKey = session.ratingKey || null;
+      const playQueueID = session.playQueueID || null;
+
+      const _mapTrack = (item) => {
+        const thumb = item.parentThumb || item.grandparentThumb;
+        return {
+          ratingKey:      item.ratingKey,
+          title:          item.title || '',
+          artist:         item.grandparentTitle || item.originalTitle || '',
+          album:          item.parentTitle || '',
+          duration:       item.duration || 0,
+          thumb:          thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          playQueueItemID: item.playQueueItemID || null,
+        };
+      };
+
+      // Probeer playQueue API (Plex Pass vereist)
+      if (playQueueID) {
+        try {
+          const queueData = await plexGet(`/playQueues/${playQueueID}?type=audio`);
+          const items = queueData?.MediaContainer?.Metadata || [];
+          if (items.length > 0) {
+            return res.json({ tracks: items.map(_mapTrack), currentRatingKey, source: 'playQueue' });
+          }
+        } catch (e) {
+          logger.debug({ err: e }, 'Plex playQueue ophalen mislukt, fallback naar albumtracks');
+        }
+      }
+
+      // Fallback: albumtracks ophalen
+      const albumRatingKey = session.parentRatingKey || null;
+      if (albumRatingKey) {
+        const albumTracks = await getAlbumTracks(albumRatingKey);
+        const tracks = (albumTracks || []).map(track => ({
+          ratingKey: track.ratingKey,
+          title:     track.title || '',
+          artist:    track.artist || '',
+          album:     track.album || '',
+          duration:  track.duration || 0,
+          thumb:     track.thumb ? `${plexStreamUrl}${track.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        }));
+        return res.json({ tracks, currentRatingKey, source: 'albumTracks' });
+      }
+
+      // Laatste optie: alleen het huidige nummer teruggeven
+      const thumb = session.parentThumb || session.grandparentThumb;
+      return res.json({
+        tracks: [{
+          ratingKey: session.ratingKey,
+          title:     session.title || '',
+          artist:    session.grandparentTitle || session.originalTitle || '',
+          album:     session.parentTitle || '',
+          duration:  session.duration || 0,
+          thumb:     thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        }],
+        currentRatingKey,
+        source: 'singleTrack',
+      });
+    } catch (e) {
+      logger.warn({ err: e }, 'Remote queue ophalen mislukt');
+      res.json({ tracks: [], currentRatingKey: null, error: e.message });
+    }
+  });
+
   // ── /api/plex/refresh ─────────────────────────────────────────────────────
   app.post('/api/plex/refresh', async (req, res) => {
     if (!PLEX_TOKEN) return res.json({ connected: false, reason: 'Geen PLEX_TOKEN' });

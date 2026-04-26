@@ -416,6 +416,131 @@ async function _playTrackAtIndex(index) {
   }
 }
 
+// ── Remote Playback Helpers ────────────────────────────────────────────────
+
+/** Start een interval dat de progressie 1 seconde per seconde vooruit tikt voor remote playback. */
+function _startRemoteProgressTicker() {
+  _stopRemoteProgressTicker();
+  playerState.remoteProgressTicker = setInterval(() => {
+    // Stop als de web player actief is of de remote sessie niet meer speelt
+    if (playerState.isWebPlaying && !playerState.webPlayerAudio.paused) {
+      _stopRemoteProgressTicker();
+      return;
+    }
+    if (!playerState.activeRemote || playerState.activeRemote.state !== 'playing') {
+      _stopRemoteProgressTicker();
+      return;
+    }
+    playerState.currentTime += 1;
+    if (playerState.totalDuration && playerState.currentTime >= playerState.totalDuration) {
+      playerState.currentTime = playerState.totalDuration;
+      _stopRemoteProgressTicker();
+    }
+    _updateProgressUI(playerState.currentTime);
+  }, 1000);
+}
+
+/** Stop het progress ticker interval. */
+function _stopRemoteProgressTicker() {
+  if (playerState.remoteProgressTicker) {
+    clearInterval(playerState.remoteProgressTicker);
+    playerState.remoteProgressTicker = null;
+  }
+}
+
+/** Werk de progress bar en tijd-labels bij op basis van currentTime (in seconden). */
+function _updateProgressUI(currentTime) {
+  const progressFill = document.getElementById('player-progress-fill');
+  const progressBar  = document.getElementById('player-progress');
+  const timeCurrent  = document.getElementById('player-time-current');
+  const timeTotal    = document.getElementById('player-time-total');
+
+  if (progressFill && playerState.totalDuration) {
+    progressFill.style.width = (currentTime / playerState.totalDuration * 100).toFixed(1) + '%';
+  }
+  if (timeCurrent) timeCurrent.textContent = _formatTime(currentTime);
+  if (timeTotal && playerState.totalDuration) timeTotal.textContent = _formatTime(playerState.totalDuration);
+  if (progressBar && playerState.totalDuration) {
+    progressBar.setAttribute('aria-valuenow', Math.round((currentTime / playerState.totalDuration) * 100));
+  }
+}
+
+/**
+ * Haal de remote Plex wachtrij op en render deze in het queue panel.
+ * Wordt aangeroepen als er geen web-queue is maar wel een actieve remote sessie.
+ */
+async function fetchAndRenderRemoteQueue() {
+  const listEl    = document.getElementById('pq-list');
+  const queueBadge = document.getElementById('queue-badge');
+  if (!listEl) return;
+
+  listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Wachtrij ophalen…</div>';
+
+  try {
+    const machineId = playerState.activeRemote?.machineId;
+    const url = machineId
+      ? `/api/plex/remotequeue?machineId=${encodeURIComponent(machineId)}`
+      : '/api/plex/remotequeue';
+
+    const data = await fetch(url).then(r => r.json());
+    const tracks = data.tracks || [];
+    const currentRatingKey = data.currentRatingKey || playerState.activeRemote?.ratingKey;
+
+    playerState.remoteQueueTracks = tracks;
+
+    if (tracks.length === 0) {
+      listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Geen wachtrij beschikbaar</div>';
+      return;
+    }
+
+    // Badge bijwerken
+    if (queueBadge) {
+      queueBadge.textContent = tracks.length;
+      queueBadge.style.display = '';
+    }
+
+    listEl.innerHTML = '';
+    let activeEl = null;
+
+    tracks.forEach((track, index) => {
+      const isActive = String(track.ratingKey) === String(currentRatingKey);
+      const li = document.createElement('li');
+      li.className = `pq-track${isActive ? ' active' : ''}`;
+      li.role = 'listitem';
+      if (isActive) activeEl = li;
+
+      const trackNum = document.createElement('div');
+      trackNum.className = 'pq-track-num';
+      trackNum.textContent = isActive ? '▶' : (index + 1).toString().padStart(2, '0');
+
+      const trackInfo = document.createElement('div');
+      trackInfo.className = 'pq-track-info';
+
+      const trackTitle = document.createElement('div');
+      trackTitle.className = 'pq-track-title';
+      trackTitle.textContent = track.title || 'Onbekend nummer';
+      trackTitle.title = track.title || 'Onbekend nummer';
+
+      const trackArtist = document.createElement('div');
+      trackArtist.className = 'pq-track-artist';
+      trackArtist.textContent = track.artist || '';
+
+      trackInfo.appendChild(trackTitle);
+      trackInfo.appendChild(trackArtist);
+      li.appendChild(trackNum);
+      li.appendChild(trackInfo);
+      listEl.appendChild(li);
+    });
+
+    // Scroll naar het actieve nummer
+    if (activeEl) {
+      setTimeout(() => activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    }
+  } catch {
+    listEl.innerHTML = '<div style="padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">Wachtrij ophalen mislukt</div>';
+  }
+}
+
 // ── Player Bar Controller ──────────────────────────────────────────────────
 /**
  * Initialiseer de player bar controls en SSE stream listener.
@@ -444,33 +569,41 @@ export function initPlayer() {
   // ── Play/Pause button ──────────────────────────────────────────
   playBtn?.addEventListener('click', async () => {
     const zone = getSelectedZone();
-    if (!zone) {
-      console.warn('[Player] No zone selected');
+
+    // Web player (via zone picker)
+    if (zone?.machineId === '__web__') {
+      pauseWebPlayer();
+      playBtn.innerHTML = playerState.webPlayerAudio.paused ? PLAY_SVG : PAUSE_SVG;
       return;
     }
 
-    // Web player
-    if (zone.machineId === '__web__') {
-      pauseWebPlayer();
-      // Toggle button SVG
-      if (playBtn.innerHTML.includes('polygon')) {
-        playBtn.innerHTML = PAUSE_SVG;
-      } else {
-        playBtn.innerHTML = PLAY_SVG;
-      }
-    } else {
-      // Remote Plex client
+    // Geselecteerde remote zone via zone picker
+    if (zone?.machineId) {
       await pauseZone();
+      return;
     }
+
+    // Geen zone geselecteerd → gebruik de actief spelende remote sessie (bijv. WiiM Pro)
+    const remoteMachineId = playerState.activeRemote?.machineId;
+    if (!remoteMachineId) {
+      console.warn('[Player] Geen zone of actieve remote sessie gevonden');
+      return;
+    }
+
+    await fetch('/api/plex/pause', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ machineId: remoteMachineId }),
+    }).catch(e => console.warn('[Player] Remote pause fout:', e));
+    // De SSE event zal de knop-staat bijwerken zodra Plex antwoordt
   });
 
   // ── Next/Prev buttons ──────────────────────────────────────────
   nextBtn?.addEventListener('click', async () => {
     const zone = getSelectedZone();
-    if (!zone) return;
 
-    // Web player: play next track in queue (respecting shuffle)
-    if (zone.machineId === '__web__') {
+    // Web player via zone picker
+    if (zone?.machineId === '__web__') {
       const queue = queueManager.getQueue();
       if (queue.length > 0) {
         const nextIdx = queueManager.getNextIndex();
@@ -482,23 +615,33 @@ export function initPlayer() {
       return;
     }
 
-    // Remote Plex client
-    await skipZone('next');
+    // Geselecteerde remote zone
+    if (zone?.machineId) {
+      await skipZone('next');
+      return;
+    }
+
+    // Geen zone → gebruik actieve remote sessie
+    const remoteMachineId = playerState.activeRemote?.machineId;
+    if (!remoteMachineId) return;
+
+    await fetch('/api/plex/skip', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ machineId: remoteMachineId, direction: 'next' }),
+    }).catch(e => console.warn('[Player] Remote skip next fout:', e));
   });
 
   prevBtn?.addEventListener('click', async () => {
     const zone = getSelectedZone();
-    if (!zone) return;
 
-    // Web player: restart current or play previous track (respecting shuffle)
-    if (zone.machineId === '__web__') {
+    // Web player via zone picker
+    if (zone?.machineId === '__web__') {
       const queue = queueManager.getQueue();
       if (queue.length > 0) {
-        // If more than 3 seconds into track, restart it
         if (playerState.webPlayerAudio.currentTime > 3) {
           playerState.webPlayerAudio.currentTime = 0;
         } else {
-          // Otherwise play previous track
           const prevIdx = queueManager.getPrevIndex();
           if (prevIdx >= 0) {
             await _playTrackAtIndex(prevIdx);
@@ -509,8 +652,21 @@ export function initPlayer() {
       return;
     }
 
-    // Remote Plex client
-    await skipZone('prev');
+    // Geselecteerde remote zone
+    if (zone?.machineId) {
+      await skipZone('prev');
+      return;
+    }
+
+    // Geen zone → gebruik actieve remote sessie
+    const remoteMachineId = playerState.activeRemote?.machineId;
+    if (!remoteMachineId) return;
+
+    await fetch('/api/plex/skip', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ machineId: remoteMachineId, direction: 'prev' }),
+    }).catch(e => console.warn('[Player] Remote skip prev fout:', e));
   });
 
   // ── Volume control ────────────────────────────────────────────
@@ -559,10 +715,24 @@ export function initPlayer() {
   const queueCloseBtn = document.getElementById('pq-close');
   const queueClearBtn = document.getElementById('pq-clear');
 
-  queueBtn?.addEventListener('click', () => {
-    if (queuePanel) {
-      const isVisible = queuePanel.style.display !== 'none';
-      queuePanel.style.display = isVisible ? 'none' : '';
+  queueBtn?.addEventListener('click', async () => {
+    if (!queuePanel) return;
+    const isVisible = queuePanel.style.display !== 'none';
+    if (isVisible) {
+      queuePanel.style.display = 'none';
+      return;
+    }
+    queuePanel.style.display = '';
+
+    if (playerState.queue.length > 0) {
+      // Web player queue: bestaand gedrag
+      renderQueue();
+    } else if (playerState.activeRemote?.machineId && playerState.activeRemote.state !== 'stopped') {
+      // Remote sessie actief: haal wachtrij op van Plex
+      await fetchAndRenderRemoteQueue();
+    } else {
+      // Leeg
+      renderQueue();
     }
   });
 
@@ -597,65 +767,91 @@ export function initPlayer() {
     try {
       const data = JSON.parse(event.data);
 
-      // Update track title and artist
-      if (titleEl) titleEl.textContent = data.track || 'Niet aan het afspelen';
+      // Sla actieve remote sessie altijd op (ook bij stop-events)
+      playerState.activeRemote = {
+        machineId:      data.machineId      || playerState.activeRemote?.machineId      || null,
+        playerName:     data.playerName     || playerState.activeRemote?.playerName     || null,
+        state:          data.state          || 'stopped',
+        ratingKey:      data.ratingKey      || playerState.activeRemote?.ratingKey      || null,
+        albumRatingKey: data.albumRatingKey  || playerState.activeRemote?.albumRatingKey || null,
+      };
+
+      // Werk play-knop altijd bij op basis van staat
+      if (playBtn) {
+        playBtn.innerHTML = (data.state === 'playing') ? PAUSE_SVG : PLAY_SVG;
+      }
+
+      if (data.stopped || data.state === 'stopped') {
+        // Stop-event: ticker stoppen, progressie resetten, niets verder updaten
+        _stopRemoteProgressTicker();
+        playerState.currentTime = 0;
+        _updateProgressUI(0);
+        // Zone naam terugzetten als geen zone geselecteerd
+        if (!getSelectedZone()) {
+          const zn = document.getElementById('plex-zone-name-player');
+          if (zn) zn.textContent = data.playerName || '—';
+        }
+        return;
+      }
+
+      // Onderdruk SSE updates als de lokale web player actief aan het spelen is
+      if (playerState.isWebPlaying && !playerState.webPlayerAudio.paused) return;
+
+      // Track info
+      if (titleEl) titleEl.textContent = data.track  || '—';
       if (artistEl) artistEl.textContent = data.artist || '';
 
-      // Update duration if available
-      if (data.duration) playerState.totalDuration = data.duration / 1000; // ms to seconds
+      // Duur (ms → seconden)
+      if (data.duration) playerState.totalDuration = data.duration / 1000;
 
-      // Update play button visual state
-      if (playBtn) {
-        if (data.state === 'paused') {
-          playBtn.innerHTML = PLAY_SVG;
-        } else if (data.playing) {
-          playBtn.innerHTML = PAUSE_SVG;
-        } else if (data.stopped) {
-          playBtn.innerHTML = PLAY_SVG;
-        }
-      }
-
-      // Update progress if viewOffset is available
-      if (data.viewOffset !== undefined && data.viewOffset !== null) {
-        const offset = data.viewOffset / 1000; // ms to seconds
+      // Voortgang vanuit viewOffset
+      if (data.viewOffset != null) {
+        const offset = data.viewOffset / 1000;
         playerState.currentTime = offset;
+        _updateProgressUI(offset);
+      }
 
-        if (progressFill && playerState.totalDuration) {
-          const percent = (offset / playerState.totalDuration * 100).toFixed(1);
-          progressFill.style.width = percent + '%';
-        }
+      // Progress ticker starten/stoppen
+      if (data.state === 'playing') {
+        _startRemoteProgressTicker();
+      } else {
+        _stopRemoteProgressTicker();
+      }
 
-        if (timeCurrent) {
-          timeCurrent.textContent = _formatTime(offset);
-        }
-        if (timeTotal && playerState.totalDuration) {
-          timeTotal.textContent = _formatTime(playerState.totalDuration);
-        }
-
-        // Update progress bar aria-valuenow
-        if (progressBar && playerState.totalDuration) {
-          progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
+      // Album art — proxy via /api/img zodat het altijd bereikbaar is ongeacht
+      // of de browser de interne Plex URL rechtstreeks kan bereiken.
+      const artEl = document.getElementById('player-art');
+      if (artEl) {
+        if (data.thumb) {
+          const proxied = `/api/img?url=${encodeURIComponent(data.thumb)}&w=200`;
+          // Alleen bijwerken als de art veranderd is (voorkomt onnodige reloads)
+          if (artEl.dataset.lastThumb !== data.thumb) {
+            artEl.dataset.lastThumb = data.thumb;
+            artEl.src = proxied;
+            setAmbientBackground(proxied);
+          }
+        } else {
+          artEl.src = '';
+          artEl.dataset.lastThumb = '';
+          setAmbientBackground(null);
         }
       }
 
-      // Update album art if available
-      const artEl = document.getElementById('player-art');
-      if (artEl && data.thumb) {
-        artEl.src = data.thumb;
-        // Update ambient background
-        setAmbientBackground(data.thumb);
-      } else if (!data.thumb) {
-        // No thumb available, remove ambient effect
-        setAmbientBackground(null);
+      // Zone naam in de player bar bijwerken als er geen zone handmatig geselecteerd is
+      if (!getSelectedZone() && data.playerName) {
+        const zoneNamePlayer = document.getElementById('plex-zone-name-player');
+        if (zoneNamePlayer) zoneNamePlayer.textContent = data.playerName;
+        const zoneNameHeader = document.getElementById('plex-zone-name');
+        if (zoneNameHeader) zoneNameHeader.textContent = data.playerName;
       }
     } catch (e) {
       console.error('[Player] SSE parse error:', e);
     }
   });
 
-  playerState.sseEventSource.addEventListener('error', (event) => {
-    console.error('[Player] SSE connection error:', event);
-    // Optioneel: automatic reconnect logic hier
+  playerState.sseEventSource.addEventListener('error', () => {
+    // EventSource herverbindt automatisch; logging is voldoende
+    console.warn('[Player] SSE verbinding verbroken, wacht op herverbinding…');
   });
 
   // ── Web Player Audio Events ────────────────────────────────────
@@ -725,44 +921,52 @@ export function initPlayer() {
     }
   });
 
-  // ── Progress ticker (polling fallback) ──────────────────────
-  // Only poll if SSE connection is not open (10 second interval)
+  // ── Polling fallback (alleen als SSE verbroken is) ────────────
+  // Elke 5 seconden /api/plex/nowplaying pollen als de SSE verbinding weg is.
   setInterval(async () => {
-    // Only poll if SSE is not connected
-    if (playerState.sseEventSource?.readyState === EventSource.OPEN) {
-      return;
-    }
+    if (playerState.sseEventSource?.readyState === EventSource.OPEN) return;
+    // Sla over als de web player actief speelt
+    if (playerState.isWebPlaying && !playerState.webPlayerAudio.paused) return;
 
     try {
       const np = await fetch('/api/plex/nowplaying').then(r => r.json());
-      if (!np) return;
+      if (!np || !np.track) return;
 
-      if (titleEl) titleEl.textContent = np.track || 'Niet aan het afspelen';
+      // Sla active remote info op
+      playerState.activeRemote = {
+        machineId:      np.machineId       || playerState.activeRemote?.machineId      || null,
+        playerName:     np.playerName      || playerState.activeRemote?.playerName     || null,
+        state:          np.playing ? 'playing' : (np.paused ? 'paused' : 'stopped'),
+        ratingKey:      np.ratingKey       || playerState.activeRemote?.ratingKey      || null,
+        albumRatingKey: np.albumRatingKey  || playerState.activeRemote?.albumRatingKey || null,
+      };
+
+      if (titleEl)  titleEl.textContent  = np.track  || '—';
       if (artistEl) artistEl.textContent = np.artist || '';
       if (np.duration) playerState.totalDuration = np.duration / 1000;
 
-      if (playBtn) {
-        playBtn.innerHTML = np.playing ? PAUSE_SVG : PLAY_SVG;
-      }
+      if (playBtn) playBtn.innerHTML = np.playing ? PAUSE_SVG : PLAY_SVG;
 
       const offset = (np.viewOffset || 0) / 1000;
       playerState.currentTime = offset;
+      _updateProgressUI(offset);
 
-      if (progressFill && playerState.totalDuration) {
-        const percent = (offset / playerState.totalDuration * 100).toFixed(1);
-        progressFill.style.width = percent + '%';
+      if (np.playing) _startRemoteProgressTicker();
+      else _stopRemoteProgressTicker();
+
+      const artEl = document.getElementById('player-art');
+      if (artEl && np.thumb) {
+        const proxied = `/api/img?url=${encodeURIComponent(np.thumb)}&w=200`;
+        if (artEl.dataset.lastThumb !== np.thumb) {
+          artEl.dataset.lastThumb = np.thumb;
+          artEl.src = proxied;
+          setAmbientBackground(proxied);
+        }
       }
-
-      if (timeCurrent) timeCurrent.textContent = _formatTime(offset);
-      if (timeTotal && playerState.totalDuration) timeTotal.textContent = _formatTime(playerState.totalDuration);
-
-      if (progressBar && playerState.totalDuration) {
-        progressBar.setAttribute('aria-valuenow', Math.round((offset / playerState.totalDuration) * 100));
-      }
-    } catch (e) {
-      // noop - SSE zal dit afhandelen
+    } catch {
+      // noop — SSE zal dit opvangen zodra de verbinding hersteld is
     }
-  }, 10000);
+  }, 5000);
 
   console.log('[Player] Initialized');
 }
@@ -775,7 +979,10 @@ function _formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Voeg state properties toe voor SSE
-playerState.totalDuration = 0;
-playerState.currentTime = 0;
-playerState.sseEventSource = null;
+// Voeg state properties toe
+playerState.totalDuration        = 0;
+playerState.currentTime          = 0;
+playerState.sseEventSource       = null;
+playerState.activeRemote         = null;  // { machineId, playerName, state, ratingKey, albumRatingKey }
+playerState.remoteProgressTicker = null;  // setInterval handle voor soepele voortgangsbalk
+playerState.remoteQueueTracks    = [];    // Gecachte wachtrij van de actieve remote sessie
