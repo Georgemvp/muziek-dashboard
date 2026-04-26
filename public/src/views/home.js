@@ -468,27 +468,26 @@ function renderListenLater(wishlist) {
  * afbeeldingen door de correcte albumhoes uit Plex.
  */
 async function enrichLovedTracksWithPlexArt() {
-  const container = document.getElementById('home-loved-covers');
-  if (!container) return;
-  const covers = container.querySelectorAll('.home-recent-cover');
+  const covers = document.querySelectorAll('#home-loved-covers .home-recent-cover');
   if (!covers.length) return;
 
-  // Verzamel unieke artiesten (max 6 om requests te beperken)
+  // Verzamel unieke artiesten uit de DOM (max 8 om requests te beperken)
   const artistSet = new Set();
   covers.forEach(cover => {
-    const artist = cover.dataset.artist?.trim();
-    if (artist) artistSet.add(artist);
+    const el = cover.querySelector('.home-recent-cover-artist');
+    const artist = el?.textContent?.trim();
+    if (artist && artist !== '[object Object]') artistSet.add(artist);
   });
+  if (!artistSet.size) return;
 
   // Haal Plex tracks op per artiest (parallel)
   const thumbMap = new Map();
-  await Promise.allSettled([...artistSet].slice(0, 6).map(async artist => {
+  await Promise.allSettled([...artistSet].slice(0, 8).map(async artist => {
     try {
       const data = await apiFetch(`/api/plex/tracks?artist=${encodeURIComponent(artist)}&limit=0`);
       for (const t of (data?.tracks || [])) {
         if (t.thumb) {
-          const key = `${t.artist.toLowerCase()}||${t.title.toLowerCase()}`;
-          thumbMap.set(key, t.thumb);
+          thumbMap.set(`${t.artist.toLowerCase()}||${t.title.toLowerCase()}`, t.thumb);
         }
       }
     } catch {
@@ -498,27 +497,25 @@ async function enrichLovedTracksWithPlexArt() {
 
   if (!thumbMap.size) return;
 
-  // Update DOM: vervang bestaande img of placeholder met Plex album art
+  // Update DOM: vervang alleen ster-placeholders (niet bestaande images)
   covers.forEach(cover => {
-    const title  = cover.dataset.track?.trim()?.toLowerCase();
-    const artist = cover.dataset.artist?.trim()?.toLowerCase();
+    const placeholder = cover.querySelector('.home-recent-cover-ph');
+    if (!placeholder) return; // heeft al een image, skip
+
+    const titleEl  = cover.querySelector('.home-recent-cover-title');
+    const artistEl = cover.querySelector('.home-recent-cover-artist');
+    const title    = titleEl?.textContent?.trim()?.toLowerCase();
+    const artist   = artistEl?.textContent?.trim()?.toLowerCase();
     if (!title || !artist) return;
 
     const thumb = thumbMap.get(`${artist}||${title}`);
-    if (!thumb) return;
-
-    const img = document.createElement('img');
-    img.src     = thumb;
-    img.alt     = title;
-    img.loading = 'lazy';
-    img.onerror = () => { img.style.display = 'none'; };
-
-    const existingImg = cover.querySelector('img');
-    const existingPh  = cover.querySelector('.home-recent-cover-ph');
-    if (existingImg) {
-      existingImg.replaceWith(img);
-    } else if (existingPh) {
-      existingPh.replaceWith(img);
+    if (thumb) {
+      const img = document.createElement('img');
+      img.src     = thumb;
+      img.alt     = titleEl.textContent;
+      img.loading = 'lazy';
+      img.onerror = () => { /* behoud placeholder bij fout */ };
+      placeholder.replaceWith(img);
     }
   });
 }
@@ -560,13 +557,21 @@ async function renderFeaturedArtist(topArtists) {
   let albums = [];
   try {
     const plexData = await apiFetch(
-      `/api/plex/library?q=${encodeURIComponent(featuredArtist.name)}&sort=addedAt:desc&limit=10`
+      `/api/plex/library?q=${encodeURIComponent(featuredArtist.name)}&sort=addedAt:desc&limit=20`
     );
     const plexAlbums = (plexData?.library || [])
-      .filter(item => item.artist.toLowerCase() === featuredArtist.name.toLowerCase())
-      .slice(0, 3);
-    if (plexAlbums.length) {
-      albums = plexAlbums.map(a => ({
+      .filter(item => item.artist?.toLowerCase() === featuredArtist.name.toLowerCase());
+    if (plexAlbums.length > 0) {
+      // Deduplicate op albumnaam
+      const seen   = new Set();
+      const unique = [];
+      for (const a of plexAlbums) {
+        if (!seen.has(a.album)) {
+          seen.add(a.album);
+          unique.push(a);
+        }
+      }
+      albums = unique.slice(0, 3).map(a => ({
         name:       a.album,
         artist:     { name: a.artist },
         _plexThumb: a.thumb   // volledige Plex-URL inclusief token
@@ -1222,7 +1227,7 @@ function buildTopReleases(topTracks) {
   const albumMap = {};
   for (const t of (topTracks?.toptracks?.track || [])) {
     const album  = t.album?.['#text'] || t.album?.name || null;
-    const artist = t.artist?.name || t.artist?.['#text'] || t.artist || '';
+    const artist = t.artist?.name || t.artist?.['#text'] || (typeof t.artist === 'string' ? t.artist : '');
     if (!album) continue;
     const key = `${album}|||${artist}`;
     if (!albumMap[key]) {
