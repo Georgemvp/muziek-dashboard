@@ -20,8 +20,10 @@ const viewMeta = {
   tracks:      { title: 'Muziek · Tracks' },
   composers:   { title: 'Muziek · Composers' },
   folders:     { title: 'Muziek · Folders' },
-  'artist-detail': { title: 'Muziek · Artiest' },
-  stats:           { title: 'Muziek · Statistieken' },
+  'artist-detail':   { title: 'Muziek · Artiest' },
+  playlists:         { title: 'Muziek · Afspeellijsten' },
+  'playlist-detail': { title: 'Muziek · Afspeellijst' },
+  stats:             { title: 'Muziek · Statistieken' },
   mediasage:               { title: 'Muziek · MediaSage' },
   'mediasage-playlist':    { title: 'Muziek · AI Playlist Generator' },
   'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
@@ -46,8 +48,10 @@ const viewLoaders = {
   tracks:      () => import('./views/tracks.js'),
   composers:   () => import('./views/composers.js'),
   folders:     () => import('./views/folders.js'),
-  'artist-detail': () => import('./views/artist-detail.js'),
-  stats:           () => import('./views/stats.js'),
+  'artist-detail':   () => import('./views/artist-detail.js'),
+  playlists:         () => import('./views/playlists.js'),
+  'playlist-detail': () => import('./views/playlists.js'),
+  stats:             () => import('./views/stats.js'),
   mediasage:               () => import('./views/mediasage.js'),
   'mediasage-playlist':    () => import('./views/mediasage-playlist.js'),
   'mediasage-recommend':   () => import('./views/mediasage-recommend.js'),
@@ -139,8 +143,10 @@ export async function switchView(viewName, params = null) {
       viewName === 'tracks'      ? viewModule.loadTracks :
       viewName === 'composers'   ? viewModule.loadComposers :
       viewName === 'folders'     ? viewModule.loadFolders :
-      viewName === 'artist-detail' ? viewModule.loadArtistDetail :
-      viewName === 'stats'         ? viewModule.loadStats :
+      viewName === 'artist-detail'   ? viewModule.loadArtistDetail :
+      viewName === 'playlists'       ? viewModule.loadPlaylists :
+      viewName === 'playlist-detail' ? viewModule.loadPlaylistDetail :
+      viewName === 'stats'           ? viewModule.loadStats :
       viewName === 'mediasage'             ? viewModule.loadMediaSage :
       viewName === 'mediasage-playlist'   ? viewModule.loadMediaSagePlaylist :
       viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :

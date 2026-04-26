@@ -654,7 +654,7 @@ async function renderPlaylistsSection() {
       }
 
       return `
-        <div class="home-playlist-card" data-playlist-id="${esc(p.key || p.id || '')}" data-playlist-name="${esc(p.title || '')}">
+        <div class="home-playlist-card" data-playlist-id="${esc(p.ratingKey || p.key || p.id || '')}" data-playlist-title="${esc(p.title || '')}" data-playlist-name="${esc(p.title || '')}">
           ${bgImg ? `<img class="home-playlist-card-img" src="${esc(bgImg)}" alt="${esc(p.title || '')}" loading="lazy">` : `<div class="home-playlist-card-ph">♫</div>`}
           <div class="home-playlist-name">${esc(p.title || 'Playlist')}</div>
         </div>`;
@@ -668,7 +668,7 @@ async function renderPlaylistsSection() {
             <button class="home-playlist-nav-btn" id="home-playlists-prev" aria-label="Vorige">&#8249;</button>
             <button class="home-playlist-nav-btn" id="home-playlists-next" aria-label="Volgende">&#8250;</button>
           </div>
-          <button class="home-more-btn" data-switch="albums">MORE</button>
+          <button class="home-more-btn" data-switch="playlists">MORE</button>
         </div>
         <div class="home-playlists" id="home-playlists">
           ${cardsHtml}
@@ -1742,18 +1742,14 @@ export async function loadHome() {
     updateNavButtons(); // Initial state
   }
 
-  // Playlists: click handlers
+  // Playlists: click handlers → open playlist detail view
+  // (events.js delegation handled via [data-playlist-id] — deze handler is een fallback)
   content.querySelectorAll('.home-playlist-card').forEach(card => {
     card.addEventListener('click', () => {
-      const playlistId = card.dataset.playlistId;
-      const playlistName = card.dataset.playlistName;
-      if (!playlistId) return;
-
-      // Sla de geselecteerde playlist op in state en ga naar albums
-      if (window.lastSelectedPlaylistId !== undefined) {
-        state.selectedPlaylist = { id: playlistId, name: playlistName };
-      }
-      switchView('albums');
+      const id    = card.dataset.playlistId;
+      const title = card.dataset.playlistTitle || card.dataset.playlistName || 'Afspeellijst';
+      if (!id) return;
+      switchView('playlist-detail', { id, title });
     });
   });
 

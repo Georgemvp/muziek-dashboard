@@ -226,6 +226,28 @@ document.addEventListener('click', async e => {
   // NOTE: Discover toggle handlers (.disc-toggle-btn) zitten nu in ontdek.js
   // ────────────────────────────────────────────────────────────────────────────
 
+  // Playlist-kaart of knop → open playlist detail view
+  const plCard = e.target.closest('[data-playlist-id]');
+  if (plCard) {
+    const id    = plCard.dataset.playlistId;
+    const title = plCard.dataset.playlistTitle || plCard.dataset.playlistName || 'Afspeellijst';
+    if (id) {
+      switchView('playlist-detail', { id, title });
+      return;
+    }
+  }
+
+  // Sidebar playlist items (data-playlist-key) → open playlist detail view
+  const plItem = e.target.closest('[data-playlist-key]');
+  if (plItem) {
+    const id    = plItem.dataset.playlistKey;
+    const title = plItem.dataset.playlistTitle || 'Afspeellijst';
+    if (id) {
+      switchView('playlist-detail', { id, title });
+      return;
+    }
+  }
+
   // Artiest-link → open artist detail view
   const link = e.target.closest('[data-artist], [data-artist-detail]');
   if (link && !link.classList.contains('bookmark-btn')) {
