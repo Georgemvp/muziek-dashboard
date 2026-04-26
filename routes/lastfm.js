@@ -206,7 +206,7 @@ module.exports = function(app, deps) {
     try {
       // Cache-check gebeurt nu in lfm() zelf (voor throttle)
       const data = await lfm(
-        { method: 'user.getlovedtracks', limit: 20 },
+        { method: 'user.getlovedtracks', limit: 50 },
         { cacheKey: 'api:loved', cacheTTL: 600_000 }
       );
       markLastFmUp();

@@ -15,6 +15,53 @@ const GENRE_COLORS = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb', '#9
 // Huidige Chart.js instantie — vernietigen voor hergebruik
 let _genreChartInstance = null;
 
+// ── Shuffle helper (Fisher-Yates) ─────────────────────────────────────────
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ── Global image onerror fallback handler ─────────────────────────────────
+// Gedefinieerd op window zodat onerror-attributen in HTML-strings dit kunnen aanroepen.
+// Fase 1: probeer data-fb (Deezer fallback); Fase 2: toon placeholder.
+if (typeof window !== 'undefined' && !window._imgFb) {
+  window._imgFb = function(el, ph) {
+    if (!el._d) {
+      el._d = 1;
+      var fb = el.getAttribute('data-fb');
+      if (fb) { el.src = fb; return; }
+    }
+    el.style.display = 'none';
+    el.insertAdjacentHTML('afterend', '<div class="home-recent-cover-ph">' + (ph || '♪') + '</div>');
+  };
+}
+
+// ── Img element builder met Deezer onerror-fallback ───────────────────────
+// lastfmUrl : Last.fm image URL (kan leeg zijn)
+// artistName: voor Deezer-fallback via /api/imageproxy/artist/:name
+// alt       : alt-tekst
+// size      : gewenste breedte/hoogte in px
+// placeholder: karakter voor placeholder-div als alle bronnen falen
+// cssClass  : optionele CSS class op het img-element
+function artistImgEl(lastfmUrl, artistName, alt, size, placeholder, cssClass) {
+  size        = size        || 120;
+  placeholder = placeholder || '♪';
+  const proxyUrl = lastfmUrl ? proxyImg(lastfmUrl, size) : null;
+  const deezerFb = artistName ? '/api/imageproxy/artist/' + encodeURIComponent(artistName) : null;
+  const src = proxyUrl || deezerFb;
+  if (!src) return '<div class="home-recent-cover-ph">' + placeholder + '</div>';
+  const classAttr = cssClass ? ' class="' + esc(cssClass) + '"' : '';
+  const altAttr   = alt ? ' alt="' + esc(alt) + '"' : '';
+  const fbAttr    = (proxyUrl && deezerFb) ? ' data-fb="' + esc(deezerFb) + '"' : '';
+  // onerror roept window._imgFb aan. esc() HTML-encodeert &#039; → browser decodeert naar ' bij uitvoer.
+  const onerrorJs = "_imgFb(this,'" + placeholder + "')";
+  return '<img src="' + esc(src) + '"' + altAttr + classAttr + fbAttr + ' loading="lazy" onerror="' + esc(onerrorJs) + '">';
+}
+
 // ── Plex Data Normalisatie ────────────────────────────────────────────────
 // Converteer Plex API responses naar Last.fm formaat voor render-functies
 
@@ -277,12 +324,12 @@ function recentCoversHtml(tracks, dateType = 'played') {
   }
   const items = tracks.slice(0, 8);
   return items.map(t => {
-    // Verbeterde fallback: probeer [2], dan [1], dan [3]. Check dat URL niet leeg is.
-    const imgUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
-    const img = imgUrl ? coverImg(imgUrl, 140) : null;
-    const imgEl = img
-      ? `<img src="${esc(img)}" alt="${esc(t.name)}" loading="lazy">`
-      : `<div class="home-recent-cover-ph">♪</div>`;
+    // Artiest naam extraheren (ondersteunt zowel string als object)
+    const artistName = typeof t.artist === 'object'
+      ? (t.artist?.['#text'] || t.artist?.name || '')
+      : (t.artist || '');
+    const lastfmUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
+    const imgEl = artistImgEl(lastfmUrl, artistName, t.name, 140, '♪');
 
     // Bepaal de datumslabel op basis van dateType
     let dateLabel = '';
@@ -298,7 +345,7 @@ function recentCoversHtml(tracks, dateType = 'played') {
         ${imgEl}
         ${dateLabel ? `<div class="home-recent-cover-date">${dateLabel}</div>` : ''}
         <div class="home-recent-cover-title" title="${esc(t.name)}">${esc(t.name)}</div>
-        <div class="home-recent-cover-artist" title="${esc(t.artist?.['#text'] || t.artist || '')}">${esc(t.artist?.['#text'] || t.artist || '')}</div>
+        <div class="home-recent-cover-artist" title="${esc(artistName)}">${esc(artistName)}</div>
       </div>`;
   }).join('');
 }
@@ -313,6 +360,12 @@ function renderRecentActivity(tracks) {
           <button class="home-recent-tab" data-recent-tab="added">ADDED</button>
         </div>
         <button class="home-recent-more" id="home-recent-more">MORE</button>
+      </div>
+      <!-- Now Playing indicator — gevuld door plex-np-update event -->
+      <div id="home-np-indicator" style="display:none" title="Ga naar Nu-view">
+        <span class="home-np-dot"></span>
+        <span class="home-np-label">Nu: </span>
+        <span class="home-np-track"></span>
       </div>
       <div class="home-recent-row">
         <button class="home-recent-nav" id="home-recent-prev" aria-label="Vorige">&#8249;</button>
@@ -329,23 +382,26 @@ function renderRecentActivity(tracks) {
 // ── Section 2b: Loved Tracks (Last.fm) ────────────────────────────────────
 
 function renderLovedTracks(lovedTracks) {
-  const items = (lovedTracks || []).slice(0, 8);
+  // Bug 3: shuffle zodat elke pageload 8 willekeurige loved tracks toont
+  const items = shuffle(lovedTracks || []).slice(0, 8);
   if (!items.length) {
     return '';
   }
 
+  // Bug 6: correcte artiest-naam extractie (t.artist kan een object zijn)
+  // Bug 3: shuffle voor slice → elke pageload andere 8 tracks
   const coversHtml = items.map(t => {
-    const imgUrl = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
-    const img = imgUrl ? coverImg(imgUrl, 140) : null;
-    const imgEl = img
-      ? `<img src="${esc(img)}" alt="${esc(t.name)}" loading="lazy">`
-      : `<div class="home-recent-cover-ph">♥</div>`;
+    const artistName = t.artist?.name || t.artist?.['#text'] || (typeof t.artist === 'string' ? t.artist : '');
+    const lastfmUrl  = t.image?.[2]?.['#text'] || t.image?.[1]?.['#text'] || t.image?.[3]?.['#text'] || '';
+    // Bug 1: gebruik artistImgEl met Deezer fallback
+    const imgEl = artistImgEl(lastfmUrl, artistName, t.name, 140, '♥');
 
     return `
-      <div class="home-recent-cover">
+      <div class="home-recent-cover" data-track="${esc(t.name)}" data-artist="${esc(artistName)}">
         ${imgEl}
+        <button class="home-loved-play-btn" title="Afspelen in Plex" aria-label="Afspelen">&#9654;</button>
         <div class="home-recent-cover-title" title="${esc(t.name)}">${esc(t.name)}</div>
-        <div class="home-recent-cover-artist" title="${esc(t.artist?.['#text'] || t.artist || '')}">${esc(t.artist?.['#text'] || t.artist || '')}</div>
+        <div class="home-recent-cover-artist" title="${esc(artistName)}">${esc(artistName)}</div>
       </div>`;
   }).join('');
 
@@ -404,6 +460,69 @@ function renderListenLater(wishlist) {
     <div class="home-listen-later-grid">${itemsHtml}</div>`;
 }
 
+// ── Loved Tracks: Plex album art enrichment ──────────────────────────────
+/**
+ * Verrijkt de loved-tracks covers met echte album art uit Plex.
+ * Wordt asynchroon aangeroepen ná de eerste render zodat de pagina
+ * niet blokkeert. Vervangt zowel placeholders (♥) als Deezer-artiest-
+ * afbeeldingen door de correcte albumhoes uit Plex.
+ */
+async function enrichLovedTracksWithPlexArt() {
+  const container = document.getElementById('home-loved-covers');
+  if (!container) return;
+  const covers = container.querySelectorAll('.home-recent-cover');
+  if (!covers.length) return;
+
+  // Verzamel unieke artiesten (max 6 om requests te beperken)
+  const artistSet = new Set();
+  covers.forEach(cover => {
+    const artist = cover.dataset.artist?.trim();
+    if (artist) artistSet.add(artist);
+  });
+
+  // Haal Plex tracks op per artiest (parallel)
+  const thumbMap = new Map();
+  await Promise.allSettled([...artistSet].slice(0, 6).map(async artist => {
+    try {
+      const data = await apiFetch(`/api/plex/tracks?artist=${encodeURIComponent(artist)}&limit=0`);
+      for (const t of (data?.tracks || [])) {
+        if (t.thumb) {
+          const key = `${t.artist.toLowerCase()}||${t.title.toLowerCase()}`;
+          thumbMap.set(key, t.thumb);
+        }
+      }
+    } catch {
+      // Stille fout — artiest niet in Plex
+    }
+  }));
+
+  if (!thumbMap.size) return;
+
+  // Update DOM: vervang bestaande img of placeholder met Plex album art
+  covers.forEach(cover => {
+    const title  = cover.dataset.track?.trim()?.toLowerCase();
+    const artist = cover.dataset.artist?.trim()?.toLowerCase();
+    if (!title || !artist) return;
+
+    const thumb = thumbMap.get(`${artist}||${title}`);
+    if (!thumb) return;
+
+    const img = document.createElement('img');
+    img.src     = thumb;
+    img.alt     = title;
+    img.loading = 'lazy';
+    img.onerror = () => { img.style.display = 'none'; };
+
+    const existingImg = cover.querySelector('img');
+    const existingPh  = cover.querySelector('.home-recent-cover-ph');
+    if (existingImg) {
+      existingImg.replaceWith(img);
+    } else if (existingPh) {
+      existingPh.replaceWith(img);
+    }
+  });
+}
+
 // ── Section 2b: Featured Artist Banner ──────────────────────────────────
 
 /**
@@ -437,14 +556,35 @@ async function renderFeaturedArtist(topArtists) {
     }
   }
 
-  // Fetch gerelateerde albums
+  // Fetch gerelateerde albums — Plex heeft de echte albumhoezen
   let albums = [];
   try {
-    const artistData = await apiFetch(`/api/artist/${encodeURIComponent(featuredArtist.name)}`);
-    const artistAlbums = artistData?.topalbums?.album || artistData?.albums || [];
-    albums = artistAlbums.slice(0, 3);
+    const plexData = await apiFetch(
+      `/api/plex/library?q=${encodeURIComponent(featuredArtist.name)}&sort=addedAt:desc&limit=10`
+    );
+    const plexAlbums = (plexData?.library || [])
+      .filter(item => item.artist.toLowerCase() === featuredArtist.name.toLowerCase())
+      .slice(0, 3);
+    if (plexAlbums.length) {
+      albums = plexAlbums.map(a => ({
+        name:       a.album,
+        artist:     { name: a.artist },
+        _plexThumb: a.thumb   // volledige Plex-URL inclusief token
+      }));
+    }
   } catch {
-    // Stille fout — toon banner zonder albums
+    // Stille fout — val terug op Last.fm/Deezer
+  }
+
+  // Fallback naar Last.fm/Deezer als Plex geen albums heeft
+  if (!albums.length) {
+    try {
+      const artistData  = await apiFetch(`/api/artist/${encodeURIComponent(featuredArtist.name)}`);
+      const artistAlbums = artistData?.topalbums?.album || artistData?.albums || [];
+      albums = artistAlbums.slice(0, 3);
+    } catch {
+      // Stille fout — toon banner zonder albums
+    }
   }
 
   // Genereer kleur op basis van artiest naam
@@ -452,11 +592,16 @@ async function renderFeaturedArtist(topArtists) {
 
   // HTML voor album kaartjes
   const albumsHtml = albums.map(album => {
-    const albumImg = album.image?.[2]?.['#text'] || album.image?.[1]?.['#text'] || '';
-    const imgUrl = albumImg ? proxyImg(albumImg, 80) : null;
-    const imgEl = imgUrl
-      ? `<img src="${esc(imgUrl)}" alt="${esc(album.name)}" class="featured-album-img">`
-      : `<div class="featured-album-ph">♫</div>`;
+    // Prefereer Plex thumb (echte albumhoes); fallback naar Last.fm/Deezer
+    const albumArtist = album.artist?.name || album.artist || featuredArtist.name;
+    let imgEl;
+    if (album._plexThumb) {
+      // Plex URL bevat al het token — niet via proxyImg sturen
+      imgEl = `<img src="${esc(album._plexThumb)}" alt="${esc(album.name || '')}" class="featured-album-img" loading="lazy" onerror="this.style.display='none'">`;
+    } else {
+      const albumImg = album.image?.[2]?.['#text'] || album.image?.[1]?.['#text'] || '';
+      imgEl = artistImgEl(albumImg, albumArtist, album.name, 80, '♫', 'featured-album-img');
+    }
 
     return `
       <div class="featured-album-card">
@@ -491,10 +636,8 @@ function renderRecentArtists(topArtists) {
   if (!artists.length) return '';
 
   const artistsHtml = artists.map(a => {
-    const img = coverImg(a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'], 200);
-    const imgEl = img
-      ? `<img class="home-artist-circle-img" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy">`
-      : `<div class="home-artist-circle-ph">♪</div>`;
+    const lastfmUrl = a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'] || '';
+    const imgEl = artistImgEl(lastfmUrl, a.name, a.name, 200, '♪', 'home-artist-circle-img');
     return `
       <div class="home-artist-circle-item" data-artist="${esc(a.name)}">
         <div class="home-artist-circle">${imgEl}</div>
@@ -581,14 +724,11 @@ async function renderRecommendedArtists(topArtistsRaw) {
       const artImage = a.image;
       const sources = a.sources || [];
 
-      // Foto ophalen
+      // Foto ophalen met Deezer fallback
       const thumbUrl = typeof a !== 'string'
         ? (a.image?.[3]?.['#text'] || a.image?.[2]?.['#text'] || a.thumb || '')
         : '';
-      const img = coverImg(thumbUrl, 120);
-      const imgEl = img
-        ? `<img class="home-rec-artist-img" src="${esc(img)}" alt="${esc(artName)}" loading="lazy">`
-        : `<div class="home-rec-artist-ph">♪</div>`;
+      const imgEl = artistImgEl(thumbUrl, artName, artName, 120, '♪', 'home-rec-artist-img');
 
       // "If you like..." tekst opbouwen
       let reasonText = '';
@@ -1568,6 +1708,9 @@ export async function loadHome() {
   // Carousel
   initRecentCarousel();
 
+  // Loved Tracks: verrijk album art asynchroon via Plex (niet-blokkerend)
+  enrichLovedTracksWithPlexArt().catch(() => {});
+
   // Genre donut — asynchroon laden (eigen API-calls, geen blokkering)
   loadAndRenderGenres('7day');
 
@@ -1657,30 +1800,107 @@ export async function loadHome() {
   });
 
   // Featured Artist Banner Play Button
+  // ── Bug 2: Featured Artist "PLAY TRACKS" — zoek artiest in Plex, shuffle albums, speel af ──
   const featuredPlayBtn = document.getElementById('featured-play-btn');
   if (featuredPlayBtn) {
     featuredPlayBtn.addEventListener('click', async () => {
       const artistName = featuredPlayBtn.dataset.artist;
       if (!artistName) return;
 
-      try {
-        // Haal artiest rating key op
-        const artistData = await apiFetch(`/api/artist/${encodeURIComponent(artistName)}`);
-        const ratingKey = artistData?.ratingKey;
+      featuredPlayBtn.disabled = true;
+      featuredPlayBtn.textContent = '…';
 
-        if (!ratingKey) {
-          console.warn('Geen ratingKey voor artiest:', artistName);
+      try {
+        // Stap 1: zoek artiest in Plex
+        const searchData = await apiFetch(`/api/plex/search?q=${encodeURIComponent(artistName)}&limit=3`);
+        const plexArtist = (searchData?.artists || []).find(a =>
+          a.title?.toLowerCase() === artistName.toLowerCase()
+        ) || searchData?.artists?.[0];
+
+        if (!plexArtist?.ratingKey) {
+          _homeToast(`"${artistName}" niet gevonden in Plex`, '#e05a2b');
           return;
         }
 
-        // Importeer playOnZone van plexRemote
+        // Stap 2: haal albums op voor de artiest
+        const artistDetail = await apiFetch(`/api/plex/artists/${plexArtist.ratingKey}`);
+        const albums = artistDetail?.artist?.albums || [];
+
+        if (!albums.length) {
+          _homeToast('Geen albums gevonden in Plex', '#e05a2b');
+          return;
+        }
+
+        // Stap 3: shuffle albums en speel eerste af
+        const shuffledAlbums = shuffle(albums);
         const { playOnZone } = await import('../components/plexRemote.js');
-        await playOnZone(ratingKey, 'music');
+        await playOnZone(shuffledAlbums[0].ratingKey, 'music');
       } catch (err) {
         console.error('Featured artist play mislukt:', err);
+        _homeToast('Afspelen mislukt', '#e05a2b');
+      } finally {
+        featuredPlayBtn.disabled = false;
+        featuredPlayBtn.innerHTML = '<span class="featured-play-icon">▶</span><span class="featured-play-text">PLAY TRACKS</span>';
       }
     });
   }
+
+  // ── Bug 3: Loved Tracks play buttons ─────────────────────────────────────
+  content.querySelectorAll('.home-loved-play-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const card       = btn.closest('[data-track]');
+      const trackName  = card?.dataset.track  || '';
+      const artistName = card?.dataset.artist || '';
+      if (!trackName) return;
+
+      btn.textContent = '…';
+      try {
+        const q = encodeURIComponent(`${trackName} ${artistName}`.trim());
+        const searchData = await apiFetch(`/api/plex/search?q=${q}&limit=5`);
+        // Zoek naar exact of beste match
+        const tracks = searchData?.tracks || [];
+        const match  = tracks.find(t =>
+          t.title?.toLowerCase() === trackName.toLowerCase()
+        ) || tracks[0];
+
+        if (!match?.ratingKey) {
+          _homeToast(`"${trackName}" niet gevonden in Plex`, '#e05a2b');
+          return;
+        }
+
+        const { playOnZone } = await import('../components/plexRemote.js');
+        await playOnZone(match.ratingKey, 'music');
+      } catch (err) {
+        console.error('Loved track play mislukt:', err);
+      } finally {
+        btn.textContent = '▶';
+      }
+    });
+  });
+
+  // ── Bug 4: Now Playing indicator in Recent Activity ───────────────────────
+  const npIndicator = document.getElementById('home-np-indicator');
+  if (npIndicator) {
+    // Initieel ophalen
+    fetch('/api/plex/nowplaying')
+      .then(r => r.json())
+      .then(np => _updateHomeNP(np))
+      .catch(() => {});
+
+    // Klikbaar → navigeer naar Nu-view
+    npIndicator.addEventListener('click', () => switchView('nu'));
+  }
+
+  // Luister naar plex-np-update events (gegooid vanuit nu.js / main.js)
+  const _npHandler = (e) => {
+    if (document.getElementById('home-np-indicator')) {
+      _updateHomeNP(e.detail);
+    } else {
+      window.removeEventListener('plex-np-update', _npHandler);
+    }
+  };
+  window.addEventListener('plex-np-update', _npHandler);
 
   // Recent artists nav pijlen
   const artistsRow = document.getElementById('home-recent-artists');
@@ -1758,4 +1978,35 @@ export async function loadHome() {
 
   // Plex badges asynchroon controleren voor New Releases
   checkPlexBadges(releases, _releasesTab);
+}
+
+// ── Bug 4: Now Playing indicator updater ──────────────────────────────────
+function _updateHomeNP(np) {
+  const indicator = document.getElementById('home-np-indicator');
+  if (!indicator) return;
+  if (np?.playing && np.track) {
+    indicator.querySelector('.home-np-track').textContent =
+      `${np.track}${np.artist ? ' — ' + np.artist : ''}`;
+    indicator.style.display = 'flex';
+  } else {
+    indicator.style.display = 'none';
+  }
+}
+
+// ── Toast helper voor Home view ───────────────────────────────────────────
+function _homeToast(msg, bg) {
+  bg = bg || '#333';
+  const existing = document.getElementById('home-toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'home-toast';
+  el.textContent = msg;
+  el.style.cssText = `
+    position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+    background:${bg};color:#fff;padding:10px 18px;border-radius:6px;
+    font-size:13px;z-index:9999;pointer-events:none;
+    animation:fadeInUp .2s ease;
+  `;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
 }
