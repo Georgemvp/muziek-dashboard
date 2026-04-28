@@ -87,7 +87,7 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.10-alpine3.21
+FROM python:3.11-alpine3.21
 
 WORKDIR /tidarr
 
@@ -125,8 +125,8 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && 
 
 # ── Tidarr: Python-afhankelijkheden (tiddl downloader) ──────────────────────
 COPY tidarr/docker/requirements.txt /tidarr/docker/requirements.txt
-# tiddl 2.x+ vereist Python >=3.11; op Python 3.10 is 1.9.4 de hoogste werkende versie
-RUN sed -i 's/tiddl==[0-9.]*/tiddl==1.9.4/' /tidarr/docker/requirements.txt && \
+# tiddl: submodule heeft mogelijk een oude pin; normaliseer naar 2.8.0 (Python 3.11 compat)
+RUN sed -i 's/tiddl==[0-9.]*/tiddl==2.8.0/' /tidarr/docker/requirements.txt && \
     apk add --no-cache --virtual .pydeps python3-dev build-base && \
     python -m pip install --no-cache-dir -r /tidarr/docker/requirements.txt && \
     apk del .pydeps
@@ -150,6 +150,9 @@ RUN mkdir -p /mediasage/data
 #        common.txt + cpu.txt dekken dezelfde scope.
 # Noot: common.txt bevat 'zstandard===' (ongeldige spec) — gefilterd en
 #        vervangen door 'zstandard' zonder versiepin.
+# Noot: voyager heeft geen release voor Python >=3.11 — regel verwijderd.
+# Noot: scipy en scikit-learn pins vereisen Python >=3.11 (nieuwe versies);
+#        versiepin verwijderd zodat pip de hoogste compatibele versie kiest.
 COPY audiomuse/requirements/ /tmp/audiomuse-req/
 RUN apk add --no-cache --virtual .audiomuse-build \
         python3-dev build-base libsndfile-dev postgresql-dev libffi-dev && \
@@ -158,8 +161,9 @@ RUN apk add --no-cache --virtual .audiomuse-build \
     cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
     echo "zstandard" >> /tmp/audiomuse-merged.txt && \
     sed -i \
-        -e 's/voyager==2\.1\.0/voyager/' \
-        -e 's/scikit-learn==1\.8\.0/scikit-learn/' \
+        -e '/^voyager/d' \
+        -e 's/scipy==[0-9.]*/scipy/' \
+        -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
