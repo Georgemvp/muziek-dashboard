@@ -122,20 +122,67 @@ app.use('/tidarr-ui', createProxyMiddleware({
 
 // ── AudioMuse UI proxy ──────────────────────────────────────────────────────
 // Alle verzoeken naar /audiomuse/* worden doorgestuurd naar de AudioMuse Flask app.
+// Belt-and-suspenders aanpak:
+//   1. X-Forwarded-Prefix header → Flask/Werkzeug weet dat het achter /audiomuse draait
+//   2. responseInterceptor → herschrijft absolute paden in HTML/JSON zodat ze via de proxy lopen
 const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
 logger.info({ audiomuseUrl: AUDIOMUSE_BASE }, 'AudioMuse proxy configured');
 
-app.use('/audiomuse', createProxyMiddleware({
+// SSE/streaming endpoints: direct doorsturen zonder responseInterceptor buffering
+const audiomuseSseProxy = createProxyMiddleware({
   target:       AUDIOMUSE_BASE,
   changeOrigin: true,
-  pathRewrite:  { '^/audiomuse': '' },
-  ws:           true,  // WebSocket support voor live updates
+  headers:      { 'X-Forwarded-Prefix': '/audiomuse' },
+});
+app.use('/audiomuse', (req, res, next) => {
+  // Streaming endpoints direct doorsturen (geen response buffering)
+  if (req.path.startsWith('/api/') && req.headers.accept === 'text/event-stream') {
+    return audiomuseSseProxy(req, res, next);
+  }
+  next();
+});
+
+app.use('/audiomuse', createProxyMiddleware({
+  target:              AUDIOMUSE_BASE,
+  changeOrigin:        true,
+  pathRewrite:         { '^/audiomuse': '' },
+  ws:                  true,
+  selfHandleResponse:  true,
+  headers:             { 'X-Forwarded-Prefix': '/audiomuse' },
   on: {
-    proxyRes: (proxyRes) => {
+    proxyRes: responseInterceptor(async (buffer, proxyRes, req, res) => {
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['x-content-type-options'];
-    },
+
+      const ct = (proxyRes.headers['content-type'] || '');
+
+      if (ct.includes('text/html')) {
+        // Herschrijf absolute paden in HTML zodat ze via de proxy lopen
+        return buffer.toString('utf8')
+          // Form actions: action="/auth" → action="/audiomuse/auth"
+          .replace(/action="\//g, 'action="/audiomuse/')
+          // Href links: href="/login" → href="/audiomuse/login"
+          .replace(/href="\//g, 'href="/audiomuse/')
+          // Static assets: /static/ → /audiomuse/static/
+          .replace(/(["'\s(])\/static\//g, '$1/audiomuse/static/')
+          // API calls in inline scripts: '/api/ → '/audiomuse/api/
+          .replace(/(["'])\/api\//g, '$1/audiomuse/api/')
+          // Redirect URLs in meta tags
+          .replace(/url=\//g, 'url=/audiomuse/');
+      }
+
+      // JSON responses: herschrijf redirect URLs
+      if (ct.includes('application/json')) {
+        const text = buffer.toString('utf8');
+        if (text.includes('"redirect"') || text.includes('"url"')) {
+          return text.replace(/"(redirect|url)":\s*"\/([^"]*)"/g,
+            '"$1": "/audiomuse/$2"');
+        }
+      }
+
+      return buffer;
+    }),
     error: (err, req, res) => {
       logger.error({
         err:    err.message,
