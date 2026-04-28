@@ -1,8 +1,49 @@
 services:
+  # ── Databases voor AudioMuse-AI ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: audiomuse_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=audiomusedb
+      - POSTGRES_USER=audiomuse
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - audiomuse_pgdata:/var/lib/postgresql/data
+    networks:
+      - muziek_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audiomuse -d audiomusedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: audiomuse_redis
+    restart: unless-stopped
+    volumes:
+      - audiomuse_redis:/data
+    networks:
+      - muziek_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Muziekdashboard (lastfm-app + Tidarr + AudioMuse-AI) ─────────────────
   muziekdashboard:
     build: .
     container_name: muziekdashboard
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "9090:80"
     env_file:
@@ -24,11 +65,18 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # AudioMuse-AI database verbindingen
+      - DATABASE_URL=postgresql://audiomuse:${POSTGRES_PASSWORD:-changeme}@postgres:5432/audiomusedb
+      - REDIS_URL=redis://redis:6379/0
+      - MEDIASERVER_TYPE=${MEDIASERVER_TYPE:-plex}
     volumes:
       - ./data:/data
       - ./data/tidarr/config:/shared
       - ./data/mediasage:/mediasage/data
+      - ./data/audiomuse:/app/audiomuse/data
       - /Volumes/4tbdrive/Muziek:/music
+    networks:
+      - muziek_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -37,3 +85,11 @@ services:
       timeout: 10s
       start_period: 45s
       retries: 3
+
+networks:
+  muziek_net:
+    driver: bridge
+
+volumes:
+  audiomuse_pgdata:
+  audiomuse_redis:

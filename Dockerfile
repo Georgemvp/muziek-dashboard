@@ -37,7 +37,55 @@ RUN npm run build
 RUN npm prune --production
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Stage 3 — Productie-image (Tidarr + muziekdashboard)
+# Stage 3 — AudioMuse ONNX-modellen (gecached; alleen opnieuw bij model-update)
+# ═══════════════════════════════════════════════════════════════════════════
+FROM alpine:3.21 AS audiomuse_models
+
+RUN apk add --no-cache wget ca-certificates && \
+    mkdir -p /app/audiomuse/model
+
+# MusiCNN modellen + CLAP text model (~478 MB)
+# Bron: NeptuneHub/AudioMuse-AI releases v4.0.0-model
+RUN set -eux; \
+    base="https://github.com/NeptuneHub/AudioMuse-AI/releases/download/v4.0.0-model"; \
+    for f in musicnn_embedding.onnx musicnn_prediction.onnx clap_text_model.onnx; do \
+        n=0; \
+        until [ "$n" -ge 5 ]; do \
+            if wget --no-verbose --tries=3 --retry-connrefused --waitretry=5 \
+               --header="User-Agent: AudioMuse-Docker/1.0 (+https://github.com/NeptuneHub/AudioMuse-AI)" \
+               -O "/app/audiomuse/model/$f" "$base/$f"; then \
+                echo "✓ $f gedownload"; break; \
+            fi; \
+            n=$((n+1)); \
+            echo "Poging $n mislukt voor $f — wacht $((n*n))s"; \
+            sleep $((n*n)); \
+        done; \
+        [ "$n" -lt 5 ] || { echo "ERROR: download van $f mislukt na 5 pogingen"; exit 1; }; \
+    done
+
+# DCLAP audio model (~21 MB incl. externe datafile)
+# Bron: NeptuneHub/AudioMuse-AI-DCLAP releases v1
+RUN set -eux; \
+    dclap="https://github.com/NeptuneHub/AudioMuse-AI-DCLAP/releases/download/v1"; \
+    for f in model_epoch_36.onnx model_epoch_36.onnx.data; do \
+        n=0; \
+        until [ "$n" -ge 5 ]; do \
+            if wget --no-verbose --tries=3 --retry-connrefused --waitretry=10 \
+               --header="User-Agent: AudioMuse-Docker/1.0 (+https://github.com/NeptuneHub/AudioMuse-AI)" \
+               -O "/app/audiomuse/model/$f" "$dclap/$f"; then \
+                echo "✓ $f gedownload"; break; \
+            fi; \
+            n=$((n+1)); \
+            echo "Poging $n mislukt voor $f — wacht $((n*n))s"; \
+            sleep $((n*n)); \
+        done; \
+        [ "$n" -lt 5 ] || { echo "ERROR: download van $f mislukt na 5 pogingen"; exit 1; }; \
+    done
+
+RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
 FROM python:3.13-alpine3.21
 
@@ -62,7 +110,9 @@ RUN apk update && apk upgrade && \
         curl \
         wget \
         rsgain \
-        supervisor && \
+        supervisor \
+        libsndfile \
+        postgresql-libs && \
     rm -rf /var/cache/apk/*
 
 # Node.js 20 — exact dezelfde binary als in app_builder (V8 ABI match)
@@ -89,6 +139,30 @@ RUN apk add --no-cache --virtual .mediasage-pydeps \
 COPY mediasage/backend/  /mediasage/backend/
 COPY mediasage/frontend/ /mediasage/frontend/
 RUN mkdir -p /mediasage/data
+
+# ── AudioMuse-AI: Python virtualenv + afhankelijkheden ───────────────────────
+# Gebruikte requirements: audiomuse/requirements/common.txt (alle platforms)
+#                       + audiomuse/requirements/cpu.txt   (ONNX CPU runtime)
+# Noot: 'audiomuse/requirements/requirements.txt' bestaat niet in de bron;
+#        common.txt + cpu.txt dekken dezelfde scope.
+# Noot: common.txt bevat 'zstandard===' (ongeldige spec) — gefilterd en
+#        vervangen door 'zstandard' zonder versiepin.
+COPY audiomuse/requirements/ /tmp/audiomuse-req/
+RUN apk add --no-cache --virtual .audiomuse-build \
+        python3-dev build-base libsndfile-dev postgresql-dev libffi-dev && \
+    python -m venv /app/venv && \
+    grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
+    cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
+    echo "zstandard" >> /tmp/audiomuse-merged.txt && \
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /app/venv/bin/pip install --no-cache-dir -r /tmp/audiomuse-merged.txt && \
+    apk del .audiomuse-build && \
+    rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
+
+# ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
+COPY audiomuse/ /app/audiomuse/
+COPY --from=audiomuse_models /app/audiomuse/model/ /app/audiomuse/model/
+RUN mkdir -p /app/audiomuse/data
 
 # ── Tidarr: gebouwde artefacten + statische bestanden ───────────────────────
 COPY --from=tidarr_builder /tidarr/api/dist       /tidarr/api/dist
