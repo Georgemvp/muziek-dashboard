@@ -108,7 +108,7 @@ RUN python -m venv /app/venv && \
         -e '/^voyager/d' \
         -e 's/scipy==[0-9.]*/scipy/' \
         -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
-        -e 's/^onnx==[0-9.]*/onnx==1.17.0/' \
+        -e 's/^onnx==[0-9.]*/onnx==1.16.2/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
