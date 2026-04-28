@@ -87,7 +87,7 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.12-alpine3.21
+FROM python:3.11-alpine3.21
 
 WORKDIR /tidarr
 
@@ -157,6 +157,10 @@ RUN apk add --no-cache --virtual .audiomuse-build \
     grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
     cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
     echo "zstandard" >> /tmp/audiomuse-merged.txt && \
+    sed -i \
+        -e 's/voyager==2\.1\.0/voyager/' \
+        -e 's/scikit-learn==1\.8\.0/scikit-learn/' \
+        /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
     apk del .audiomuse-build && \
