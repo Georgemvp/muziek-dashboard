@@ -176,6 +176,12 @@ RUN mkdir -p /mediasage/data
 # gcompat (al aanwezig) zorgt dat de manylinux binaries draaien op Alpine musl.
 COPY --from=audiomuse_venv /app/venv /app/venv
 
+# psycopg2-binary uit de Debian build-stage is glibc-gebonden en werkt niet op
+# Alpine musl — ook niet met gcompat. Hercompileer psycopg2 natively op Alpine.
+RUN apk add --no-cache --virtual .pg-build postgresql-dev python3-dev build-base && \
+    /app/venv/bin/pip install --no-cache-dir --force-reinstall psycopg2 && \
+    apk del .pg-build
+
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
 COPY --from=audiomuse_models /app/audiomuse/model/ /app/audiomuse/model/
