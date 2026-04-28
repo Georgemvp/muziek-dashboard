@@ -8,6 +8,10 @@ import threading
 import time
 import config
 
+import sys
+if __name__ == '__main__':
+    sys.modules['app'] = sys.modules['__main__']
+
 # RQ imports
 from rq.job import Job, JobStatus
 from rq.exceptions import NoSuchJobError
