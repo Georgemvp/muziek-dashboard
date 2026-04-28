@@ -123,6 +123,80 @@ def health_check():
         'status': 'ok',
     })
 
+@app.route('/analysis_status')
+def analysis_status():
+    """
+    Geeft de huidige analysestatus terug: hoeveel nummers geanalyseerd zijn,
+    totaal en percentage. Gebruikt door het muziekdashboard als statuswidget.
+    ---
+    tags:
+      - Status
+    responses:
+      200:
+        description: Analysestatus
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  description: "idle | analyzing | clustering | done"
+                analyzed:
+                  type: integer
+                total:
+                  type: integer
+                percent:
+                  type: number
+    """
+    db = get_db()
+    cur = db.cursor(cursor_factory=DictCursor)
+
+    # Totaal tracks in score-tabel
+    cur.execute("SELECT COUNT(*) FROM score")
+    total = cur.fetchone()[0] or 0
+
+    # Volledig geanalyseerde tracks (mood_vector + other_features aanwezig)
+    cur.execute(
+        "SELECT COUNT(*) FROM score "
+        "WHERE mood_vector IS NOT NULL AND mood_vector != '' "
+        "AND other_features IS NOT NULL AND other_features != ''"
+    )
+    analyzed = cur.fetchone()[0] or 0
+
+    # Actieve taak opzoeken
+    non_terminal = ('PENDING', 'STARTED', 'PROGRESS')
+    cur.execute(
+        "SELECT task_type, status, progress FROM task_status "
+        "WHERE parent_task_id IS NULL AND status IN %s "
+        "ORDER BY timestamp DESC LIMIT 1",
+        (non_terminal,)
+    )
+    active_row = cur.fetchone()
+    cur.close()
+
+    if active_row:
+        task_type = active_row['task_type'] or ''
+        if 'cluster' in task_type.lower():
+            status = 'clustering'
+        else:
+            status = 'analyzing'
+        progress = active_row['progress'] or 0
+    else:
+        status = 'idle'
+        progress = 100 if total > 0 and analyzed == total else (
+            round(analyzed / total * 100) if total > 0 else 0
+        )
+
+    return jsonify({
+        'status': status,
+        'analyzed': analyzed,
+        'total': total,
+        'percent': progress if active_row else (
+            round(analyzed / total * 100) if total > 0 else 0
+        ),
+    })
+
 # --- Swagger Setup ---
 app.config['SWAGGER'] = {
     'title': 'AudioMuse-AI API',
