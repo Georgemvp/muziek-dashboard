@@ -149,6 +149,16 @@ app.use('/audiomuse', createProxyMiddleware({
   selfHandleResponse:  true,
   on: {
     proxyRes: responseInterceptor(async (buffer, proxyRes, req, res) => {
+      // Herschrijf redirect Location headers zodat ze via de proxy lopen
+      if (proxyRes.headers.location) {
+        const loc = proxyRes.headers.location;
+        if (loc.startsWith('/') && !loc.startsWith('/audiomuse')) {
+          const newLoc = '/audiomuse' + loc;
+          proxyRes.headers.location = newLoc;
+          res.setHeader('location', newLoc);
+        }
+      }
+
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['x-content-type-options'];

@@ -575,7 +575,7 @@ def check_admin_needed():
 
 def auth_setup_barrier():
     """Single before_request guard: setup -> auth -> admin."""
-    if request.path.startswith('/static/') or request.path == '/api/health':
+    if request.path.startswith('/static/') or request.path in ('/api/health', '/analysis_status'):
         return
 
     if check_setup_needed():

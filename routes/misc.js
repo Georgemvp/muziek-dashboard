@@ -98,7 +98,7 @@ module.exports = function(app, deps) {
   app.get('/api/audiomuse/status', async (req, res) => {
     const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
     try {
-      const response = await fetch(`${AUDIOMUSE_BASE}/`);
+      const response = await fetch(`${AUDIOMUSE_BASE}/api/health`);
       res.json({ status: 'online', code: response.status });
     } catch (e) {
       res.json({ status: 'offline', error: e.message });

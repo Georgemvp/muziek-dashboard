@@ -101,6 +101,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // AudioMuse requests nooit cachen — proxy stuurt 3xx redirects die Cache.put() breken
+  if (url.pathname.includes('/audiomuse')) return;
+
   // Alleen GET requests cachen
   if (event.request.method !== 'GET') return;
 
