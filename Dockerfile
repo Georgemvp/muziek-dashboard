@@ -85,7 +85,36 @@ RUN set -eux; \
 RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
+# Stage 4 — AudioMuse Python venv (Debian: alle manylinux wheels beschikbaar)
+# Debian heeft glibc zodat onnxruntime, llvmlite, sentencepiece etc. gewoon
+# als binary wheel installeren. De venv wordt gekopieerd naar het Alpine
+# productie-image; gcompat zorgt voor runtime-compatibiliteit.
+# ═══════════════════════════════════════════════════════════════════════════
+FROM python:3.11-slim-bookworm AS audiomuse_venv
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake libsndfile1-dev libpq-dev libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY audiomuse/requirements/ /tmp/audiomuse-req/
+
+# Patches identiek aan de Alpine-variant; op Debian lost pip alles op via
+# manylinux wheels dus geen platform-trucjes nodig voor onnxruntime.
+RUN python -m venv /app/venv && \
+    grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
+    cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
+    echo "zstandard" >> /tmp/audiomuse-merged.txt && \
+    sed -i \
+        -e '/^voyager/d' \
+        -e 's/scipy==[0-9.]*/scipy/' \
+        -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
+        /tmp/audiomuse-merged.txt && \
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
+    rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Stage 5 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
 FROM python:3.11-alpine3.21
 
@@ -143,45 +172,9 @@ COPY mediasage/backend/  /mediasage/backend/
 COPY mediasage/frontend/ /mediasage/frontend/
 RUN mkdir -p /mediasage/data
 
-# ── AudioMuse-AI: Python virtualenv + afhankelijkheden ───────────────────────
-# Gebruikte requirements: audiomuse/requirements/common.txt (alle platforms)
-#                       + audiomuse/requirements/cpu.txt   (ONNX CPU runtime)
-# Noot: 'audiomuse/requirements/requirements.txt' bestaat niet in de bron;
-#        common.txt + cpu.txt dekken dezelfde scope.
-# Noot: common.txt bevat 'zstandard===' (ongeldige spec) — gefilterd en
-#        vervangen door 'zstandard' zonder versiepin.
-# Noot: voyager heeft geen release voor Python >=3.11 — regel verwijderd.
-# Noot: scipy en scikit-learn pins vereisen Python >=3.11 (nieuwe versies);
-#        versiepin verwijderd zodat pip de hoogste compatibele versie kiest.
-# Noot: onnxruntime heeft geen musllinux/aarch64 wheels; aparte installatie via
-#        'pip download --platform manylinux_2_17_aarch64' + gcompat compat-laag.
-COPY audiomuse/requirements/ /tmp/audiomuse-req/
-RUN apk add --no-cache --virtual .audiomuse-build \
-        python3-dev build-base libsndfile-dev postgresql-dev libffi-dev && \
-    python -m venv /app/venv && \
-    grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
-    cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
-    echo "zstandard" >> /tmp/audiomuse-merged.txt && \
-    sed -i \
-        -e '/^voyager/d' \
-        -e '/^onnxruntime/d' \
-        -e 's/scipy==[0-9.]*/scipy/' \
-        -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
-        /tmp/audiomuse-merged.txt && \
-    /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
-    pip download \
-        --platform manylinux_2_17_aarch64 \
-        --python-version 311 \
-        --implementation cp \
-        --abi cp311 \
-        --only-binary=:all: \
-        --no-deps \
-        -d /tmp/ort-wheel \
-        "onnxruntime==1.19.2" && \
-    /app/venv/bin/pip install --no-cache-dir --no-deps /tmp/ort-wheel/onnxruntime*.whl && \
-    apk del .audiomuse-build && \
-    rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /tmp/ort-wheel /root/.cache/pip
+# ── AudioMuse-AI: Python virtualenv (pre-gebouwd in audiomuse_venv stage) ────
+# gcompat (al aanwezig) zorgt dat de manylinux binaries draaien op Alpine musl.
+COPY --from=audiomuse_venv /app/venv /app/venv
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
