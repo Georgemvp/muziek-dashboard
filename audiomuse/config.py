@@ -2,7 +2,7 @@
 import os
 
 # --- Media Server Type ---
-MEDIASERVER_TYPE = os.environ.get("MEDIASERVER_TYPE", "jellyfin").lower() # Possible values: jellyfin, navidrome, lyrion, mpd, emby
+MEDIASERVER_TYPE = os.environ.get("MEDIASERVER_TYPE", "jellyfin").lower() # Possible values: jellyfin, navidrome, lyrion, mpd, emby, plex
 
 # --- Jellyfin and DB Constants (Read from Environment Variables first) ---
 
@@ -37,6 +37,8 @@ def _compute_headers():
         return {"X-Emby-Token": JELLYFIN_TOKEN}
     if MEDIASERVER_TYPE == "emby":
         return {"X-Emby-Token": EMBY_TOKEN}
+    if MEDIASERVER_TYPE == "plex":
+        return {}  # Plex auth is handled via X-Plex-Token query param or custom header in the provider
     return {}
 
 HEADERS = _compute_headers()
