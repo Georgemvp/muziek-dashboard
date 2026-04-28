@@ -90,19 +90,13 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # als binary wheel installeren. De venv wordt gekopieerd naar het Alpine
 # productie-image; gcompat zorgt voor runtime-compatibiliteit.
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.11-alpine3.21 AS audiomuse_venv
+FROM python:3.11-slim-bookworm AS audiomuse_venv
 
-# Alpine build-deps voor C-extensies (numpy, scipy, psycopg2, libsndfile, etc.)
-# Moderne pakketten (numpy≥1.26, scipy≥1.11, sklearn≥1.3, onnxruntime≥1.17)
-# hebben musllinux wheels op PyPI — pip --prefer-binary pikt ze automatisch op.
-RUN apk add --no-cache \
-        build-base cmake \
-        libsndfile-dev \
-        postgresql-dev \
-        libffi-dev \
-        musl-dev \
-        linux-headers \
-        python3-dev
+# Debian build-deps — nodig voor onnxruntime dat GEEN musllinux wheel heeft.
+# onnxruntime draait in de finale Alpine image via gcompat (al aanwezig).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake libsndfile1-dev libpq-dev libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY audiomuse/requirements/ /tmp/audiomuse-req/
 
@@ -114,7 +108,6 @@ RUN python -m venv /app/venv && \
         -e '/^voyager/d' \
         -e 's/scipy==[0-9.]*/scipy/' \
         -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
-        -e 's/numpy==[0-9.]*/numpy/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
@@ -182,6 +175,16 @@ RUN mkdir -p /mediasage/data
 # ── AudioMuse-AI: Python virtualenv (pre-gebouwd in audiomuse_venv stage) ────
 # gcompat (al aanwezig) zorgt dat de manylinux binaries draaien op Alpine musl.
 COPY --from=audiomuse_venv /app/venv /app/venv
+
+# De Debian-gebouwde venv bevat glibc-binaries. onnxruntime heeft geen
+# musllinux wheel en draait via gcompat. De overige zware C-extensies
+# (numpy, scipy, scikit-learn, psycopg2) hebben wél musllinux wheels en
+# worden hier opnieuw als musl-native geïnstalleerd.
+RUN apk add --no-cache --virtual .musl-rebuild \
+        postgresql-dev python3-dev build-base && \
+    /app/venv/bin/pip install --no-cache-dir --prefer-binary --force-reinstall \
+        "numpy" "scipy" "scikit-learn" "psycopg2-binary" && \
+    apk del .musl-rebuild
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
