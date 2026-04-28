@@ -108,7 +108,7 @@ RUN python -m venv /app/venv && \
         -e '/^voyager/d' \
         -e 's/scipy==[0-9.]*/scipy/' \
         -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
-        -e 's/^onnx==[0-9.]*/onnx==1.16.2/' \
+        -e 's/^onnx==[0-9.]*/onnx==1.14.1/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
@@ -184,7 +184,7 @@ COPY --from=audiomuse_venv /app/venv /app/venv
 RUN apk add --no-cache --virtual .musl-rebuild \
         postgresql-dev python3-dev build-base && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary --force-reinstall \
-        "numpy" "scipy" "scikit-learn" "psycopg2-binary" && \
+        "numpy" "scipy" "scikit-learn" "psycopg2-binary" "onnx==1.14.1" && \
     /app/venv/bin/pip install --no-cache-dir --no-deps --force-reinstall \
         "pozalabs-pydub==0.37.0" && \
     apk del .musl-rebuild
