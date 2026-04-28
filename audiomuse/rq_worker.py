@@ -31,7 +31,7 @@ except ImportError as e:
 
 # The queues the worker will listen on.
 # The order is important! Workers will always check 'high' before 'default'.
-queues_to_listen = ['default']
+queues_to_listen = ['high', 'default']
 
 if __name__ == '__main__':
     # The redis_conn is already initialized when imported from app.py.
