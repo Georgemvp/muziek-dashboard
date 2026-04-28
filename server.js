@@ -122,9 +122,9 @@ app.use('/tidarr-ui', createProxyMiddleware({
 
 // ── AudioMuse UI proxy ──────────────────────────────────────────────────────
 // Alle verzoeken naar /audiomuse/* worden doorgestuurd naar de AudioMuse Flask app.
-// Belt-and-suspenders aanpak:
-//   1. X-Forwarded-Prefix header → Flask/Werkzeug weet dat het achter /audiomuse draait
-//   2. responseInterceptor → herschrijft absolute paden in HTML/JSON zodat ze via de proxy lopen
+// responseInterceptor herschrijft absolute paden in HTML/JSON zodat ze via de proxy lopen.
+// Geen X-Forwarded-Prefix header: die laat Flask's ProxyFix SCRIPT_NAME instellen waardoor
+// url_for() crasht op endpoints die niet onder die prefix geregistreerd zijn.
 const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
 logger.info({ audiomuseUrl: AUDIOMUSE_BASE }, 'AudioMuse proxy configured');
 
@@ -132,7 +132,6 @@ logger.info({ audiomuseUrl: AUDIOMUSE_BASE }, 'AudioMuse proxy configured');
 const audiomuseSseProxy = createProxyMiddleware({
   target:       AUDIOMUSE_BASE,
   changeOrigin: true,
-  headers:      { 'X-Forwarded-Prefix': '/audiomuse' },
 });
 app.use('/audiomuse', (req, res, next) => {
   // Streaming endpoints direct doorsturen (geen response buffering)
@@ -148,7 +147,6 @@ app.use('/audiomuse', createProxyMiddleware({
   pathRewrite:         { '^/audiomuse': '' },
   ws:                  true,
   selfHandleResponse:  true,
-  headers:             { 'X-Forwarded-Prefix': '/audiomuse' },
   on: {
     proxyRes: responseInterceptor(async (buffer, proxyRes, req, res) => {
       delete proxyRes.headers['x-frame-options'];
