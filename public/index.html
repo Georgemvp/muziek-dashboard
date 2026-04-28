@@ -204,6 +204,18 @@
         <span class="nav-label">Tidarr</span>
       </button>
 
+      <button class="nav-item" data-view="audiomuse" aria-label="AudioMuse Sonic Analysis">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M2 10a2 2 0 0 1 2-2h1l2-4h10l2 4h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/>
+          <circle cx="8.5" cy="13" r="1.5"/>
+          <circle cx="15.5" cy="13" r="1.5"/>
+          <path d="M8.5 13h7"/>
+        </svg>
+        <span class="nav-label">AudioMuse</span>
+      </button>
+
     </nav>
 
     <div class="sidebar-divider" role="separator"></div>
@@ -326,6 +338,18 @@
         style="width:100%; height:100%; border:none; min-height:600px;"
         allow="autoplay"
         title="Tidarr — volledige downloadinterface">
+      </iframe>
+    </div>
+
+    <!-- AudioMuse iframe container (getoond/verborgen door JS) -->
+    <div id="audiomuse-wrap" style="display:none; flex:1; overflow:hidden; min-height:0;" aria-label="AudioMuse Sonic Analysis">
+      <iframe
+        id="audiomuse-iframe"
+        src=""
+        data-src="/audiomuse/"
+        style="width:100%; height:100%; border:none; min-height:600px;"
+        allow="autoplay"
+        title="AudioMuse — Sonic Analysis">
       </iframe>
     </div>
 

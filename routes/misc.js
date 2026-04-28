@@ -94,6 +94,17 @@ module.exports = function(app, deps) {
   // Note: lastFmDown and lastFmDownSince are passed via deps
   // The lastfm route module should export these for use here
 
+  // ── /api/audiomuse/status ─────────────────────────────────────────────────
+  app.get('/api/audiomuse/status', async (req, res) => {
+    const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
+    try {
+      const response = await fetch(`${AUDIOMUSE_BASE}/`);
+      res.json({ status: 'online', code: response.status });
+    } catch (e) {
+      res.json({ status: 'offline', error: e.message });
+    }
+  });
+
   app.get('/health', (req, res) => {
     const { ok: plexConnected } = getPlexStatus();
     const discoverAge = getCacheAge('discover');

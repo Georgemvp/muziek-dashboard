@@ -29,6 +29,7 @@ const viewMeta = {
   'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
   'mediasage-iframe':      { title: 'Muziek · MediaSage (iframe versie)' },
   tidarr:             { title: 'Muziek · Tidarr' },
+  audiomuse:          { title: 'Muziek · AudioMuse' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -57,6 +58,7 @@ const viewLoaders = {
   'mediasage-recommend':   () => import('./views/mediasage-recommend.js'),
   'mediasage-iframe':      () => import('./views/mediasage-iframe.js'),
   tidarr:               () => import('./views/downloads.js'),
+  audiomuse:            () => import('./views/audiomuse.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -111,12 +113,14 @@ export async function switchView(viewName, params = null) {
   state.sectionContainerEl = null;
 
   // ── Verberg iframe wraps bij view-wissel (tenzij de view ze zelf toont) ──
-  const tidarrWrap     = document.getElementById('tidarr-ui-wrap');
-  const mediasageWrap  = document.getElementById('mediasage-iframe-wrap');
-  const contentEl      = document.getElementById('content');
-  if (tidarrWrap)    tidarrWrap.style.display    = 'none';
-  if (mediasageWrap) mediasageWrap.style.display = 'none';
-  if (contentEl)     contentEl.style.display     = '';
+  const tidarrWrap      = document.getElementById('tidarr-ui-wrap');
+  const mediasageWrap   = document.getElementById('mediasage-iframe-wrap');
+  const audiomuseWrap   = document.getElementById('audiomuse-wrap');
+  const contentEl       = document.getElementById('content');
+  if (tidarrWrap)     tidarrWrap.style.display     = 'none';
+  if (mediasageWrap)  mediasageWrap.style.display  = 'none';
+  if (audiomuseWrap)  audiomuseWrap.style.display  = 'none';
+  if (contentEl)      contentEl.style.display      = '';
 
   // ── Clear toolbar ──────────────────────────────────────────────────────
   const toolbar = document.getElementById('view-toolbar');
@@ -152,6 +156,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :
       viewName === 'mediasage-iframe'     ? viewModule.loadMediaSageIframe :
       viewName === 'tidarr'              ? viewModule.loadDownloads :
+      viewName === 'audiomuse'           ? viewModule.loadAudioMuse :
       null;
 
     if (renderFn) {

@@ -120,6 +120,41 @@ app.use('/tidarr-ui', createProxyMiddleware({
   }
 }));
 
+// ── AudioMuse UI proxy ──────────────────────────────────────────────────────
+// Alle verzoeken naar /audiomuse/* worden doorgestuurd naar de AudioMuse Flask app.
+const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
+logger.info({ audiomuseUrl: AUDIOMUSE_BASE }, 'AudioMuse proxy configured');
+
+app.use('/audiomuse', createProxyMiddleware({
+  target:       AUDIOMUSE_BASE,
+  changeOrigin: true,
+  pathRewrite:  { '^/audiomuse': '' },
+  ws:           true,  // WebSocket support voor live updates
+  on: {
+    proxyRes: (proxyRes) => {
+      delete proxyRes.headers['x-frame-options'];
+      delete proxyRes.headers['content-security-policy'];
+      delete proxyRes.headers['x-content-type-options'];
+    },
+    error: (err, req, res) => {
+      logger.error({
+        err:    err.message,
+        code:   err.code,
+        target: AUDIOMUSE_BASE,
+        path:   req.path
+      }, 'AudioMuse proxy error');
+      res.status(502).send(`
+        <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
+          <h2>⚠️ AudioMuse niet bereikbaar</h2>
+          <p>AudioMuse is nog niet opgestart of er is een fout opgetreden.</p>
+          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
+        </div>
+      `);
+    }
+  }
+}));
+
 app.use(compression());
 
 // ── Services ───────────────────────────────────────────────────────────────
