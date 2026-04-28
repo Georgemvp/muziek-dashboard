@@ -188,7 +188,9 @@ COPY --from=audiomuse_venv /app/venv /app/venv
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
 COPY --from=audiomuse_models /app/audiomuse/model/ /app/audiomuse/model/
-RUN mkdir -p /app/audiomuse/data
+# Symlink zodat config.py (/app/model/) de modellen vindt in /app/audiomuse/model/
+RUN ln -sf /app/audiomuse/model /app/model && \
+    mkdir -p /app/audiomuse/data
 
 # ── Tidarr: gebouwde artefacten + statische bestanden ───────────────────────
 COPY --from=tidarr_builder /tidarr/api/dist       /tidarr/api/dist
