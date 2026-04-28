@@ -69,6 +69,10 @@ services:
       - DATABASE_URL=postgresql://audiomuse:${POSTGRES_PASSWORD:-changeme}@postgres:5432/audiomusedb
       - REDIS_URL=redis://redis:6379/0
       - MEDIASERVER_TYPE=${MEDIASERVER_TYPE:-plex}
+      # AudioMuse-AI auth — vereist door supervisord (%(ENV_SECRET_KEY)s etc.)
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-32chars!!}
+      - AUDIOMUSE_USER=${AUDIOMUSE_USER:-admin}
+      - AUDIOMUSE_PASSWORD=${AUDIOMUSE_PASSWORD:-changeme}
     volumes:
       - ./data:/data
       - ./data/tidarr/config:/shared
