@@ -73,6 +73,9 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production-32chars!!}
       - AUDIOMUSE_USER=${AUDIOMUSE_USER:-admin}
       - AUDIOMUSE_PASSWORD=${AUDIOMUSE_PASSWORD:-changeme}
+      # TIJDELIJK: auth uitgeschakeld zodat de setup-wizard en Plex-verbinding
+      # geconfigureerd kunnen worden. Zet terug op true na voltooien van setup.
+      - AUTH_ENABLED=false
     volumes:
       - ./data:/data
       - ./data/tidarr/config:/shared

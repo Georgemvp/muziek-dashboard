@@ -166,25 +166,32 @@ app.use('/audiomuse', createProxyMiddleware({
       const ct = (proxyRes.headers['content-type'] || '');
 
       if (ct.includes('text/html')) {
-        // Herschrijf absolute paden in HTML zodat ze via de proxy lopen
+        // Herschrijf absolute paden in HTML zodat ze via de proxy lopen.
+        // Negatieve lookahead (?!audiomuse\/) voorkomt dubbel prefixing
+        // wanneer Flask al een /audiomuse/-pad teruggeeft.
         return buffer.toString('utf8')
           // Form actions: action="/auth" → action="/audiomuse/auth"
-          .replace(/action="\//g, 'action="/audiomuse/')
+          // maar action="/audiomuse/auth" blijft ongewijzigd
+          .replace(/action="\/(?!audiomuse\/)/g, 'action="/audiomuse/')
           // Href links: href="/login" → href="/audiomuse/login"
-          .replace(/href="\//g, 'href="/audiomuse/')
+          // maar href="/audiomuse/login" blijft ongewijzigd
+          .replace(/href="\/(?!audiomuse\/)/g, 'href="/audiomuse/')
           // Static assets: /static/ → /audiomuse/static/
-          .replace(/(["'\s(])\/static\//g, '$1/audiomuse/static/')
+          // maar /audiomuse/static/ blijft ongewijzigd
+          .replace(/(["'\s(])\/(?!audiomuse\/)static\//g, '$1/audiomuse/static/')
           // API calls in inline scripts: '/api/ → '/audiomuse/api/
-          .replace(/(["'])\/api\//g, '$1/audiomuse/api/')
-          // Redirect URLs in meta tags
-          .replace(/url=\//g, 'url=/audiomuse/');
+          // maar '/audiomuse/api/ blijft ongewijzigd
+          .replace(/(["'])\/(?!audiomuse\/)api\//g, '$1/audiomuse/api/')
+          // Redirect URLs in meta tags: url=/ → url=/audiomuse/
+          .replace(/url=\/(?!audiomuse\/)/g, 'url=/audiomuse/');
       }
 
       // JSON responses: herschrijf redirect URLs
+      // Negatieve lookahead voorkomt ook hier dubbel prefixing
       if (ct.includes('application/json')) {
         const text = buffer.toString('utf8');
         if (text.includes('"redirect"') || text.includes('"url"')) {
-          return text.replace(/"(redirect|url)":\s*"\/([^"]*)"/g,
+          return text.replace(/"(redirect|url)":\s*"\/((?!audiomuse\/)[^"]*)"/g,
             '"$1": "/audiomuse/$2"');
         }
       }

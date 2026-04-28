@@ -575,26 +575,52 @@ def check_admin_needed():
 
 def auth_setup_barrier():
     """Single before_request guard: setup -> auth -> admin."""
-    if request.path.startswith('/static/') or request.path in ('/api/health', '/analysis_status'):
+    path = request.path
+
+    # ── Altijd vrij toegankelijk ─────────────────────────────────────────────
+    # Statische bestanden en interne health/status endpoints.
+    if path.startswith('/static/') or path in ('/api/health', '/analysis_status'):
         return
 
-    if check_setup_needed():
-        if request.path in ('/setup', '/api/setup'):
+    # Setup-wizard en login/auth pagina's mogen nooit geblokkeerd worden,
+    # ook niet als de reverse-proxy ze al via /audiomuse/* bereikt.
+    if path in ('/setup', '/login', '/auth', '/logout'):
+        return
+
+    # Alle /api/setup subroutes zijn onderdeel van de setup-wizard.
+    if path == '/api/setup' or path.startswith('/api/setup/'):
+        return
+
+    # /api/users POST: vrijstellen zolang er nog geen admin-account bestaat,
+    # zodat de eerste admin via de setup-wizard aangemaakt kan worden zonder
+    # dat de auth-barrier het request blokkeert.
+    if path == '/api/users' and request.method == 'POST':
+        try:
+            if count_admin_users() <= 0:
+                return
+        except Exception as exc:
+            current_app.logger.error(
+                'auth_setup_barrier: kon admin count niet ophalen: %s', exc, exc_info=True
+            )
+            # Bij twijfel doorlaten zodat setup nooit in een dood punt belandt.
             return
-        if request.path.startswith('/api/'):
+
+    # ── Setup check ──────────────────────────────────────────────────────────
+    if check_setup_needed():
+        if path.startswith('/api/'):
             current_app.logger.warning(
                 "API access blocked because setup is still required: %s",
-                request.path,
+                path,
             )
             return jsonify({"error": "Setup required"}), 403
         return redirect(url_for('setup_page'))
 
-    if request.path in ('/login', '/auth', '/logout'):
-        return
+    # ── Auth check ───────────────────────────────────────────────────────────
     auth_response = check_auth_needed(_jwt_secret())
     if auth_response:
         return auth_response
 
+    # ── Admin check ──────────────────────────────────────────────────────────
     admin_response = check_admin_needed()
     if admin_response:
         return admin_response
