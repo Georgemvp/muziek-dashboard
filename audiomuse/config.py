@@ -16,6 +16,10 @@ EMBY_URL = os.environ.get("EMBY_URL", "") # Replace with your default URL
 EMBY_USER_ID = os.environ.get("EMBY_USER_ID", "")  # Replace with a suitable default or handle missing case
 EMBY_TOKEN = os.environ.get("EMBY_TOKEN", "")  # Replace with a suitable default or handle missing case
 
+# Plex Media Server credentials
+PLEX_URL = os.environ.get("PLEX_URL", "")   # e.g. http://localhost:32400
+PLEX_TOKEN = os.environ.get("PLEX_TOKEN", "")  # X-Plex-Token from Plex web UI
+
 
 # NEW: Allow specifying music libraries/folders for analysis across all media servers.
 # Comma-separated list of library/folder names or paths. If empty, all music libraries/folders are scanned.
@@ -52,6 +56,7 @@ MEDIASERVER_FIELDS_BY_TYPE = {
     'navidrome': ['NAVIDROME_URL', 'NAVIDROME_USER', 'NAVIDROME_PASSWORD'],
     'lyrion': ['LYRION_URL'],
     'emby': ['EMBY_URL', 'EMBY_USER_ID', 'EMBY_TOKEN'],
+    'plex': ['PLEX_URL', 'PLEX_TOKEN'],
 }
 
 MEDIASERVER_OBSOLETE_FIELDS_BY_TYPE = {
