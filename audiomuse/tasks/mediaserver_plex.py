@@ -183,7 +183,12 @@ def get_recent_albums(limit):
 
     fetch_all = (limit == 0)
     size = limit if not fetch_all else 200
-    url = f"{_plex_base_url()}/library/sections/{section_id}/recentlyAdded"
+    if fetch_all:
+        # Use /all endpoint for full library scan (supports full pagination)
+        url = f"{_plex_base_url()}/library/sections/{section_id}/all"
+    else:
+        # Use /recentlyAdded for incremental scans
+        url = f"{_plex_base_url()}/library/sections/{section_id}/recentlyAdded"
     params = {
         'type': 9,
         'X-Plex-Container-Start': 0,
