@@ -184,6 +184,8 @@ RUN apk add --no-cache --virtual .musl-rebuild \
         postgresql-dev python3-dev build-base && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary --force-reinstall \
         "numpy" "scipy" "scikit-learn" "psycopg2-binary" && \
+    /app/venv/bin/pip install --no-cache-dir --no-deps --force-reinstall \
+        "pozalabs-pydub==0.37.0" && \
     apk del .musl-rebuild
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
