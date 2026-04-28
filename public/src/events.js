@@ -387,8 +387,138 @@ document.addEventListener('click', async e => {
     return;
   }
 
+  // ── AudioMuse: Vergelijkbare nummers knop ──────────────────────────────
+  const amSimBtn = e.target.closest('.am-similar-btn');
+  if (amSimBtn) {
+    e.stopPropagation();
+    const artist = amSimBtn.dataset.amArtist || '';
+    const title  = amSimBtn.dataset.amTitle  || '';
+    if (artist || title) {
+      showAudioMuseSimilarModal(artist, title);
+    }
+    return;
+  }
+
 });
 
+
+// ── AudioMuse Similar Songs Modal ────────────────────────────────────────────
+// Globale modal die vergelijkbare nummers toont voor een gegeven artiest/track.
+// Geactiveerd via event delegation op .am-similar-btn knoppen (overal in de UI).
+
+let _amModal = null;
+
+function _ensureAmModal() {
+  if (_amModal) return _amModal;
+  _amModal = document.createElement('div');
+  _amModal.id = 'am-similar-modal';
+  _amModal.className = 'am-modal-overlay';
+  _amModal.setAttribute('role', 'dialog');
+  _amModal.setAttribute('aria-modal', 'true');
+  _amModal.setAttribute('aria-label', 'Vergelijkbare nummers');
+  _amModal.innerHTML = `
+    <div class="am-modal-box">
+      <div class="am-modal-header">
+        <div class="am-modal-title" id="am-modal-title">Vergelijkbare nummers</div>
+        <button class="am-modal-close" id="am-modal-close" aria-label="Sluiten">✕</button>
+      </div>
+      <div class="am-modal-body" id="am-modal-body">
+        <div class="am-loading-small"><div class="spinner"></div>Laden…</div>
+      </div>
+    </div>`;
+  document.body.appendChild(_amModal);
+
+  // Sluiten
+  _amModal.querySelector('#am-modal-close').addEventListener('click', _closeAmModal);
+  _amModal.addEventListener('click', e => {
+    if (e.target === _amModal) _closeAmModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _amModal.classList.contains('open')) _closeAmModal();
+  });
+  return _amModal;
+}
+
+function _closeAmModal() {
+  if (_amModal) _amModal.classList.remove('open');
+}
+
+async function showAudioMuseSimilarModal(artist, title) {
+  const modal = _ensureAmModal();
+  modal.classList.add('open');
+
+  const titleEl = modal.querySelector('#am-modal-title');
+  const body    = modal.querySelector('#am-modal-body');
+  if (titleEl) titleEl.textContent = `Vergelijkbaar met "${title}"`;
+  if (body)    body.innerHTML = `<div class="am-loading-small"><div class="spinner"></div>Zoeken…</div>`;
+
+  try {
+    const { findSimilarForTrack, renderTrackList } = await import('./modules/audiomuse-api.js');
+    const { playOnZone } = await import('./components/plexRemote.js');
+    const { apiFetch } = await import('./api.js');
+
+    const result = await findSimilarForTrack(artist, title);
+    if (!body) return; // modal gesloten
+
+    if (!result) {
+      body.innerHTML = `
+        <div class="am-empty">
+          <strong>${artist} – ${title}</strong> niet gevonden in AudioMuse.<br>
+          Zorg dat AudioMuse bereikbaar is en de analyse voltooid is.
+        </div>`;
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="am-results-header">
+        Gevonden als: <strong>${result.source.title || title}</strong>
+        ${result.source.artist ? ` · ${result.source.artist}` : ''}
+      </div>
+      <div class="am-track-list" id="am-modal-tracks">
+        ${renderTrackList(result.similar)}
+      </div>`;
+
+    // Wire play buttons
+    body.querySelectorAll('.am-play-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ratingKey = btn.dataset.playRatingkey;
+        if (ratingKey) { playOnZone(ratingKey); return; }
+        const a = btn.dataset.amArtist || '';
+        const t = btn.dataset.amTitle  || '';
+        if (!a && !t) return;
+        btn.disabled = true;
+        const orig = btn.innerHTML;
+        btn.textContent = '…';
+        try {
+          const data = await apiFetch(`/api/plex/search?q=${encodeURIComponent(`${a} ${t}`)}`);
+          const found = (data.tracks || data.results || []).find(r =>
+            (r.title || '').toLowerCase().includes(t.toLowerCase())
+          );
+          if (found?.ratingKey) {
+            playOnZone(found.ratingKey);
+          } else {
+            btn.textContent = '?';
+            setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 2000);
+          }
+        } catch {
+          btn.disabled = false; btn.innerHTML = orig;
+        }
+      });
+    });
+
+    // Vergelijkbare nummers van resultaten (nested similar)
+    body.querySelectorAll('.am-similar-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const a = btn.dataset.amArtist || '';
+        const t = btn.dataset.amTitle  || '';
+        if (a || t) showAudioMuseSimilarModal(a, t);
+      });
+    });
+  } catch (err) {
+    if (body) body.innerHTML = `<div class="am-empty">Fout: ${err.message}</div>`;
+  }
+}
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────
 document.addEventListener('keydown', async e => {

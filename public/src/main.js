@@ -117,6 +117,37 @@ function prefetchBackgroundData() {
   }
 }
 
+// ── AudioMuse status indicator ─────────────────────────────────────────────
+
+async function _refreshAudioMuseTopbar() {
+  // Dynamisch importeren zodat de module alleen geladen wordt als nodig
+  try {
+    const { getAnalysisStatus } = await import('./modules/audiomuse-api.js');
+    const status = await getAnalysisStatus();
+    const dot   = document.getElementById('am-topbar-dot');
+    const label = document.getElementById('am-topbar-label');
+    if (!dot || !label) return;
+
+    if (!status) {
+      dot.className = 'am-status-dot am-dot-red';
+      label.textContent = 'AM';
+      label.title = 'AudioMuse offline';
+      return;
+    }
+    const s = (status.status || '').toLowerCase();
+    if (s === 'analyzing' || s === 'running' || s === 'processing') {
+      dot.className = 'am-status-dot am-dot-orange';
+      const pct = status.percent ?? 0;
+      label.textContent = `${pct}%`;
+      label.title = `AudioMuse: analyse bezig (${pct}%)`;
+    } else {
+      dot.className = 'am-status-dot am-dot-green';
+      label.textContent = 'AM';
+      label.title = 'AudioMuse: analyse klaar';
+    }
+  } catch { /* stil falen */ }
+}
+
 // ── Bootstrap application ──────────────────────────────────────────────────
 async function start() {
   // Initialize state and storage
@@ -147,6 +178,15 @@ async function start() {
   // Controleer nieuwe releases en toon badge (non-blocking)
   checkNewReleases().catch(() => {});
 
+  // AudioMuse status in topbar — poll direct + elke 30s
+  _refreshAudioMuseTopbar().catch(() => {});
+  setInterval(() => _refreshAudioMuseTopbar().catch(() => {}), 30_000);
+
+  // Klik op AM-status-knop → navigeer naar AudioMuse view
+  document.getElementById('am-topbar-status')?.addEventListener('click', () => {
+    switchView('audiomuse');
+  });
+
   // Load downloads tidarr status (fire-and-forget, non-blocking)
   try {
     const downloads = await import('./views/downloads.js');
@@ -159,10 +199,23 @@ async function start() {
   }
 
   // Periodic now playing sync (outside Nu tab)
+  // Bug 4: detecteer track-wissel en dispatch 'plex-np-update' event voor home indicator
+  let _lastNPKey = null;
   setInterval(async () => {
     if (state.activeView !== 'nu') {
       await loadPlexNP();
     }
+    // Check NP voor home indicator (altijd, ook als Nu-tab actief is)
+    try {
+      const np = await fetch('/api/plex/nowplaying').then(r => r.json()).catch(() => null);
+      if (np) {
+        const npKey = np.playing ? `${np.track}||${np.artist}` : null;
+        if (npKey !== _lastNPKey) {
+          _lastNPKey = npKey;
+          window.dispatchEvent(new CustomEvent('plex-np-update', { detail: np }));
+        }
+      }
+    } catch { /* stil falen */ }
   }, 30_000);
 }
 

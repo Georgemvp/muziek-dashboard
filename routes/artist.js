@@ -454,4 +454,22 @@ module.exports = function(app, deps) {
       });
     }
   });
+
+  // ── /api/imageproxy/artist/:name ───────────────────────────────────────────
+  // Haal Deezer artiest-foto op en stuur door als redirect.
+  // Gebruikt als onerror-fallback in de frontend wanneer Last.fm afbeelding ontbreekt.
+  app.get('/api/imageproxy/artist/:name', async (req, res) => {
+    const name = decodeURIComponent(req.params.name || '').trim();
+    if (!name) return res.status(400).end();
+    try {
+      const d = await getDeezerArtist(name);
+      if (d?.picture_medium && !d.picture_medium.includes('/artist//')) {
+        res.set('Cache-Control', 'public, max-age=86400');
+        return res.redirect(302, d.picture_medium);
+      }
+      return res.status(404).end();
+    } catch {
+      return res.status(404).end();
+    }
+  });
 };

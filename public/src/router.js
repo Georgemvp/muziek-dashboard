@@ -29,7 +29,8 @@ const viewMeta = {
   'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
   'mediasage-iframe':      { title: 'Muziek · MediaSage (iframe versie)' },
   tidarr:             { title: 'Muziek · Tidarr' },
-  audiomuse:          { title: 'Muziek · AudioMuse' },
+  audiomuse:                   { title: 'Muziek · AudioMuse' },
+  'audiomuse-smart-playlists': { title: 'Muziek · Smart Playlists' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -59,6 +60,7 @@ const viewLoaders = {
   'mediasage-iframe':      () => import('./views/mediasage-iframe.js'),
   tidarr:               () => import('./views/downloads.js'),
   audiomuse:            () => import('./views/audiomuse.js'),
+  'audiomuse-smart-playlists': () => import('./views/audiomuse-smart-playlists.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -155,8 +157,9 @@ export async function switchView(viewName, params = null) {
       viewName === 'mediasage-playlist'   ? viewModule.loadMediaSagePlaylist :
       viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :
       viewName === 'mediasage-iframe'     ? viewModule.loadMediaSageIframe :
-      viewName === 'tidarr'              ? viewModule.loadDownloads :
-      viewName === 'audiomuse'           ? viewModule.loadAudioMuse :
+      viewName === 'tidarr'                       ? viewModule.loadDownloads :
+      viewName === 'audiomuse'                    ? viewModule.loadAudioMuse :
+      viewName === 'audiomuse-smart-playlists'    ? viewModule.loadAudioMuseSmartPlaylists :
       null;
 
     if (renderFn) {
