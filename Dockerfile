@@ -125,7 +125,9 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && 
 
 # ── Tidarr: Python-afhankelijkheden (tiddl downloader) ──────────────────────
 COPY tidarr/docker/requirements.txt /tidarr/docker/requirements.txt
-RUN apk add --no-cache --virtual .pydeps python3-dev build-base && \
+# tiddl==3.2.3 bestaat niet op PyPI (hoogste versie = 2.8.0); vervang inline
+RUN sed -i 's/tiddl==3\.2\.3/tiddl==2.8.0/' /tidarr/docker/requirements.txt && \
+    apk add --no-cache --virtual .pydeps python3-dev build-base && \
     python -m pip install --no-cache-dir -r /tidarr/docker/requirements.txt && \
     apk del .pydeps
 
