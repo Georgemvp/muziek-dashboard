@@ -153,6 +153,8 @@ RUN mkdir -p /mediasage/data
 # Noot: voyager heeft geen release voor Python >=3.11 — regel verwijderd.
 # Noot: scipy en scikit-learn pins vereisen Python >=3.11 (nieuwe versies);
 #        versiepin verwijderd zodat pip de hoogste compatibele versie kiest.
+# Noot: onnxruntime heeft geen musllinux/aarch64 wheels; aparte installatie via
+#        'pip download --platform manylinux_2_17_aarch64' + gcompat compat-laag.
 COPY audiomuse/requirements/ /tmp/audiomuse-req/
 RUN apk add --no-cache --virtual .audiomuse-build \
         python3-dev build-base libsndfile-dev postgresql-dev libffi-dev && \
@@ -162,13 +164,24 @@ RUN apk add --no-cache --virtual .audiomuse-build \
     echo "zstandard" >> /tmp/audiomuse-merged.txt && \
     sed -i \
         -e '/^voyager/d' \
+        -e '/^onnxruntime/d' \
         -e 's/scipy==[0-9.]*/scipy/' \
         -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
+    pip download \
+        --platform manylinux_2_17_aarch64 \
+        --python-version 311 \
+        --implementation cp \
+        --abi cp311 \
+        --only-binary=:all: \
+        --no-deps \
+        -d /tmp/ort-wheel \
+        "onnxruntime==1.19.2" && \
+    /app/venv/bin/pip install --no-cache-dir --no-deps /tmp/ort-wheel/onnxruntime*.whl && \
     apk del .audiomuse-build && \
-    rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
+    rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /tmp/ort-wheel /root/.cache/pip
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
