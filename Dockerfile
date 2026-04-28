@@ -90,16 +90,22 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # als binary wheel installeren. De venv wordt gekopieerd naar het Alpine
 # productie-image; gcompat zorgt voor runtime-compatibiliteit.
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.11-slim-bookworm AS audiomuse_venv
+FROM python:3.11-alpine3.21 AS audiomuse_venv
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake libsndfile1-dev libpq-dev libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Alpine build-deps voor C-extensies (numpy, scipy, psycopg2, libsndfile, etc.)
+# Moderne pakketten (numpy≥1.26, scipy≥1.11, sklearn≥1.3, onnxruntime≥1.17)
+# hebben musllinux wheels op PyPI — pip --prefer-binary pikt ze automatisch op.
+RUN apk add --no-cache \
+        build-base cmake \
+        libsndfile-dev \
+        postgresql-dev \
+        libffi-dev \
+        musl-dev \
+        linux-headers \
+        python3-dev
 
 COPY audiomuse/requirements/ /tmp/audiomuse-req/
 
-# Patches identiek aan de Alpine-variant; op Debian lost pip alles op via
-# manylinux wheels dus geen platform-trucjes nodig voor onnxruntime.
 RUN python -m venv /app/venv && \
     grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
     cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
@@ -108,6 +114,7 @@ RUN python -m venv /app/venv && \
         -e '/^voyager/d' \
         -e 's/scipy==[0-9.]*/scipy/' \
         -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
+        -e 's/numpy==[0-9.]*/numpy/' \
         /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
@@ -175,12 +182,6 @@ RUN mkdir -p /mediasage/data
 # ── AudioMuse-AI: Python virtualenv (pre-gebouwd in audiomuse_venv stage) ────
 # gcompat (al aanwezig) zorgt dat de manylinux binaries draaien op Alpine musl.
 COPY --from=audiomuse_venv /app/venv /app/venv
-
-# psycopg2-binary uit de Debian build-stage is glibc-gebonden en werkt niet op
-# Alpine musl — ook niet met gcompat. Hercompileer psycopg2 natively op Alpine.
-RUN apk add --no-cache --virtual .pg-build postgresql-dev python3-dev build-base && \
-    /app/venv/bin/pip install --no-cache-dir --force-reinstall psycopg2 && \
-    apk del .pg-build
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
