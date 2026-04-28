@@ -87,7 +87,7 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.13-alpine3.21
+FROM python:3.12-alpine3.21
 
 WORKDIR /tidarr
 
@@ -112,7 +112,8 @@ RUN apk update && apk upgrade && \
         rsgain \
         supervisor \
         libsndfile \
-        postgresql-libs && \
+        postgresql-libs \
+        gcompat && \
     rm -rf /var/cache/apk/*
 
 # Node.js 20 — exact dezelfde binary als in app_builder (V8 ABI match)
@@ -155,7 +156,7 @@ RUN apk add --no-cache --virtual .audiomuse-build \
     cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
     echo "zstandard" >> /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /app/venv/bin/pip install --no-cache-dir -r /tmp/audiomuse-merged.txt && \
+    /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
     apk del .audiomuse-build && \
     rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
 
