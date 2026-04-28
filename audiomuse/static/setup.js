@@ -259,7 +259,7 @@ function renderAdvancedFields(fields) {
 }
 
 function loadSetupData() {
-    fetch('/api/setup').then(function(response) {
+    fetch('api/setup').then(function(response) {
         if (!response.ok) {
             throw new Error('Failed to load setup data');
         }
@@ -454,7 +454,7 @@ function testConnection() {
     testFeedback.style.display = 'block';
     testFeedback.textContent = 'Testing connection...';
     var config = collectConfigFromForm(true);
-    fetch('/api/setup', {
+    fetch('api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config: config, test_connection: true })
@@ -517,7 +517,7 @@ setupForm.addEventListener('submit', function(event) {
         }
     }
     var config = collectConfigFromForm();
-    fetch('/api/setup', {
+    fetch('api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config: config })
