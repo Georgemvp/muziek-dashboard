@@ -1,3 +1,9 @@
+# --- Flask 2.3+ compatibility: Markup is verplaatst naar markupsafe ---
+import markupsafe
+import flask
+if not hasattr(flask, 'Markup'):
+    flask.Markup = markupsafe.Markup
+
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
