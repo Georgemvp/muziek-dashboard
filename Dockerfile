@@ -87,7 +87,7 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 4 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.11-alpine3.21
+FROM python:3.10-alpine3.21
 
 WORKDIR /tidarr
 
