@@ -1,5 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 1 — Bouw Tidarr (frontend React + backend Node/TypeScript)
+# Alleen build-artefacten (JS dist) worden meegenomen; geen binaries.
+# Alpine is hier prima: de output zijn platformonafhankelijke JS-bestanden.
 # ═══════════════════════════════════════════════════════════════════════════
 FROM node:20-alpine AS tidarr_builder
 
@@ -16,13 +18,18 @@ RUN yarn install --prefer-offline --frozen-lockfile && \
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 2 — Bouw lastfm-app (frontend bundle + productie node_modules)
+# BELANGRIJK: node:20-slim (Debian/glibc) zodat de gekopieerde Node-binary
+# en native modules (better-sqlite3, sharp) compatibel zijn met het Debian
+# productie-image in Stage 5. Een Alpine (musl) binary draait NIET op glibc.
 # ═══════════════════════════════════════════════════════════════════════════
-FROM node:20-alpine AS app_builder
+FROM node:20-slim AS app_builder
 
 WORKDIR /app
 
 # Build-tools voor native modules (better-sqlite3, sharp)
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Layer-cache: package-bestanden eerst → npm ci draait alleen opnieuw bij
 # gewijzigde dependencies, niet bij gewijzigde broncode
@@ -86,38 +93,36 @@ RUN echo "=== Gedownloade modellen ===" && ls -lh /app/audiomuse/model/
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 4 — AudioMuse Python venv (Debian: alle manylinux wheels beschikbaar)
-# Debian heeft glibc zodat onnxruntime, llvmlite, sentencepiece etc. gewoon
-# als binary wheel installeren. De venv wordt gekopieerd naar het Alpine
-# productie-image; gcompat zorgt voor runtime-compatibiliteit.
+# Debian/glibc: onnxruntime, llvmlite, sentencepiece, voyager etc. installeren
+# allemaal als native manylinux binary wheel. Geen workarounds nodig.
+# De venv wordt direct gekopieerd naar het Debian productie-image (Stage 5).
 # ═══════════════════════════════════════════════════════════════════════════
 FROM python:3.11-slim-bookworm AS audiomuse_venv
 
-# Debian build-deps — nodig voor onnxruntime dat GEEN musllinux wheel heeft.
-# onnxruntime draait in de finale Alpine image via gcompat (al aanwezig).
+# Debian build-deps voor C-extensies in de requirements
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake libsndfile1-dev libpq-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY audiomuse/requirements/ /tmp/audiomuse-req/
 
+# Alle packages worden op hun originele pins geïnstalleerd — op Debian/glibc
+# zijn manylinux wheels beschikbaar voor alle dependencies incl. voyager,
+# scipy, scikit-learn en onnxruntime. Geen sed-patches nodig.
 RUN python -m venv /app/venv && \
     grep -v "^zstandard===\s*$" /tmp/audiomuse-req/common.txt > /tmp/audiomuse-merged.txt && \
     cat /tmp/audiomuse-req/cpu.txt >> /tmp/audiomuse-merged.txt && \
     echo "zstandard" >> /tmp/audiomuse-merged.txt && \
-    sed -i \
-        -e '/^voyager/d' \
-        -e 's/scipy==[0-9.]*/scipy/' \
-        -e 's/scikit-learn==[0-9.]*/scikit-learn/' \
-        -e 's/^onnx==[0-9.]*/onnx==1.14.1/' \
-        /tmp/audiomuse-merged.txt && \
     /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /app/venv/bin/pip install --no-cache-dir --prefer-binary -r /tmp/audiomuse-merged.txt && \
     rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Stage 5 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
+# Base: python:3.11-slim-bookworm (Debian/glibc) — zelfde libc als de venv-
+# builder en de Node-builder, zodat alle binaries native draaien zonder shims.
 # ═══════════════════════════════════════════════════════════════════════════
-FROM python:3.11-alpine3.21
+FROM python:3.11-slim-bookworm
 
 WORKDIR /tidarr
 
@@ -128,25 +133,24 @@ ENV SHELL=bash \
     NODE_ENV=production \
     PORT=80
 
-# Systeempakketten — nodejs/npm NIET via apk: apk installeert Node 22 op
-# Alpine 3.21, maar native modules zijn gecompileerd tegen Node 20 (app_builder).
+# Systeempakketten — nodejs/npm NIET via apt: dat installeert een andere Node-
+# versie, maar native modules zijn gecompileerd tegen Node 20 (app_builder).
 # Andere V8-versie = ABI-mismatch = crash. Node wordt hieronder gekopieerd.
-RUN apk update && apk upgrade && \
-    apk add --no-cache \
-        libstdc++ \
+# Nota: libstdc++ en libssl3 zijn al aanwezig in slim-bookworm.
+#       rsgain is niet beschikbaar als Debian-pakket en wordt weggelaten.
+#       su-exec bestaat niet op Debian; gosu is het equivalent.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
         ffmpeg \
         bash \
-        su-exec \
+        gosu \
         curl \
         wget \
-        rsgain \
         supervisor \
-        libsndfile \
-        postgresql-libs \
-        gcompat && \
-    rm -rf /var/cache/apk/*
+        libsndfile1 \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 — exact dezelfde binary als in app_builder (V8 ABI match)
+# Node.js 20 — exact dezelfde binary als in app_builder (zelfde glibc, V8 ABI match)
 COPY --from=app_builder /usr/local/bin/node          /usr/local/bin/node
 COPY --from=app_builder /usr/local/lib/node_modules  /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
@@ -157,16 +161,19 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && 
 COPY tidarr/docker/requirements.txt /tidarr/docker/requirements.txt
 # tiddl: submodule heeft mogelijk een oude pin; normaliseer naar 2.8.0 (Python 3.11 compat)
 RUN sed -i 's/tiddl==[0-9.]*/tiddl==2.8.0/' /tidarr/docker/requirements.txt && \
-    apk add --no-cache --virtual .pydeps python3-dev build-base && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        python3-dev build-essential && \
     python -m pip install --no-cache-dir -r /tidarr/docker/requirements.txt && \
-    apk del .pydeps
+    apt-get purge -y python3-dev build-essential && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ── MediaSage: Python-afhankelijkheden (FastAPI + LLM aanbevelingen) ─────────
 COPY mediasage/requirements.txt /mediasage/requirements.txt
-RUN apk add --no-cache --virtual .mediasage-pydeps \
-        python3-dev build-base libxml2-dev libxslt-dev libffi-dev openssl-dev && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-dev build-essential libxml2-dev libxslt1-dev libffi-dev libssl-dev && \
     python -m pip install --no-cache-dir -r /mediasage/requirements.txt && \
-    apk del .mediasage-pydeps
+    apt-get purge -y python3-dev build-essential libxml2-dev libxslt1-dev libffi-dev libssl-dev && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ── MediaSage: broncode, frontend en persistente datamap ─────────────────────
 COPY mediasage/backend/  /mediasage/backend/
@@ -174,20 +181,9 @@ COPY mediasage/frontend/ /mediasage/frontend/
 RUN mkdir -p /mediasage/data
 
 # ── AudioMuse-AI: Python virtualenv (pre-gebouwd in audiomuse_venv stage) ────
-# gcompat (al aanwezig) zorgt dat de manylinux binaries draaien op Alpine musl.
+# Beide images zijn Debian/glibc: alle manylinux/glibc binaries draaien direct.
+# Geen force-reinstall of musl-workaround nodig.
 COPY --from=audiomuse_venv /app/venv /app/venv
-
-# De Debian-gebouwde venv bevat glibc-binaries. onnxruntime heeft geen
-# musllinux wheel en draait via gcompat. De overige zware C-extensies
-# (numpy, scipy, scikit-learn, psycopg2) hebben wél musllinux wheels en
-# worden hier opnieuw als musl-native geïnstalleerd.
-RUN apk add --no-cache --virtual .musl-rebuild \
-        postgresql-dev python3-dev build-base && \
-    /app/venv/bin/pip install --no-cache-dir --prefer-binary --force-reinstall \
-        "numpy" "scipy" "scikit-learn" "psycopg2-binary" && \
-    /app/venv/bin/pip install --no-cache-dir --no-deps --force-reinstall \
-        "pozalabs-pydub==0.37.0" && \
-    apk del .musl-rebuild
 
 # ── AudioMuse-AI: broncode + ONNX-modellen (uit model-stage) ─────────────────
 COPY audiomuse/ /app/audiomuse/
@@ -205,10 +201,12 @@ COPY tidarr/yarn.lock                              /tidarr/yarn.lock
 COPY tidarr/api/package.json                       /tidarr/api/package.json
 
 # Tidarr productie Node-modules
-RUN apk add --no-cache --virtual .nodedeps python3-dev build-base && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-dev build-essential && \
     mkdir -p /shared/.processing && \
     yarn install --frozen-lockfile --production --ignore-optional && \
-    apk del .nodedeps && \
+    apt-get purge -y python3-dev build-essential && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && \
     rm -rf /root/.npm /tmp/* /var/tmp/*
 
 # ── Muziekdashboard (lastfm-app) ────────────────────────────────────────────
