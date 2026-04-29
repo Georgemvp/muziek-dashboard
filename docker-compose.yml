@@ -59,8 +59,12 @@ services:
       - PLEX_URL_EXTERNAL=http://10.94.184.22:32400
       # Tidarr instellingen
       - ADMIN_PASSWORD=${TIDARR_API_KEY}
+      # Tidal levert "high" tracks momenteel als 320kbps AAC in plaats van FLAC.
+      # "max" is betrouwbaarder totdat tiddl dit upstream fixt (zie tidarr#749).
       - LOCK_QUALITY=high
       - ENABLE_HISTORY=true
+      # Tiddl auth fix — nieuwe Tidal API keys (zie tidarr#749 / tiddl#333)
+      - TIDDL_AUTH=${TIDDL_AUTH:-}
       # MediaSage AI providers (optioneel, kies er één)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
