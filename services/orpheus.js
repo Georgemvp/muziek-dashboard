@@ -418,7 +418,14 @@ async function getOrpheusSettings() {
   try {
     if (fs.existsSync(ORPHEUS_CONFIG_PATH)) {
       const raw = fs.readFileSync(ORPHEUS_CONFIG_PATH, 'utf8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Migreer verouderde "module_settings" key naar "modules" (bug-fix)
+      if (parsed.module_settings && !parsed.modules) {
+        parsed.modules = parsed.module_settings;
+        delete parsed.module_settings;
+        fs.writeFileSync(ORPHEUS_CONFIG_PATH, JSON.stringify(parsed, null, 2), 'utf8');
+      }
+      return parsed;
     }
     // Bestand bestaat niet → schrijf defaults en geef terug
     const defaults = loadDefaultSettings();
@@ -455,6 +462,11 @@ async function saveOrpheusSettings(data) {
     }
     // Deep merge: top-level secties worden samengevoegd, niet overschreven
     const merged = deepMerge(existing, data);
+    // Migreer verouderde "module_settings" key → "modules" bij elke schrijfoperatie
+    if (merged.module_settings && !merged.modules) {
+      merged.modules = merged.module_settings;
+    }
+    delete merged.module_settings;
     fs.mkdirSync(path.dirname(ORPHEUS_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(ORPHEUS_CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
   } catch (fileErr) {

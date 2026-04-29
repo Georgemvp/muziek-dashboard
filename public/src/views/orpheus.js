@@ -265,6 +265,20 @@ function startJobPoll(jobId, cardEl) {
           dlBtn.disabled = false;
           dlBtn.textContent = '⬇ Download';
         }
+        // Bij een fout: extraheer relevante log-regels en toon ze in de kaart
+        if (job.status === 'error' && progressWrap) {
+          const errorKeywords = /401|403|unauthorized|authentication|invalid.*token|error|failed|exception/i;
+          const logLines = (job.log || [])
+            .map(l => typeof l === 'string' ? l : (l?.message || l?.text || String(l || '')))
+            .filter(l => errorKeywords.test(l))
+            .slice(-5); // maximaal 5 regels
+          if (logLines.length) {
+            const errEl = document.createElement('div');
+            errEl.className = 'orpheus-error-log';
+            errEl.innerHTML = logLines.map(l => `<div class="oph-err-line">${esc(l)}</div>`).join('');
+            progressWrap.appendChild(errEl);
+          }
+        }
         // Verwijder uit actieve jobs en ververs sectie
         if (state.activeOrpheusJobs) {
           state.activeOrpheusJobs = state.activeOrpheusJobs.filter(j => j.jobId !== jobId);

@@ -432,6 +432,31 @@
   cursor: not-allowed;
 }
 
+/* ── Fout-log weergave ───────────────────────────────────────────────────── */
+
+.orpheus-error-log {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--red, #e53935) 10%, var(--surface2));
+  border-left: 3px solid var(--red, #e53935);
+  border-radius: 0 var(--radius-1) var(--radius-1) 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--red, #e53935);
+  overflow: hidden;
+}
+
+.oph-err-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  padding: 1px 0;
+}
+
+.oph-err-line + .oph-err-line {
+  border-top: 1px solid color-mix(in srgb, var(--red, #e53935) 20%, transparent);
+}
+
 /* ── Responsief ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

@@ -27,7 +27,7 @@
       "proprietary_codecs": false
     }
   },
-  "module_settings": {
+  "modules": {
     "tidal": {
       "quality_format": "hifi",
       "tv_atmos_token": "",
@@ -42,7 +42,8 @@
       "user_id": "",
       "auth_token": "",
       "app_id": "798273057",
-      "app_secret": "abb21364945c0583309667d13ca3d93a"
+      "app_secret": "abb21364945c0583309667d13ca3d93a",
+      "use_id_token": true
     },
     "deezer": {
       "quality_format": "lossless",
