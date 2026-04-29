@@ -118,7 +118,41 @@ RUN python -m venv /app/venv && \
     rm -rf /tmp/audiomuse-req /tmp/audiomuse-merged.txt /root/.cache/pip
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Stage 5 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
+# Stage 5 — OrpheusDL + modules (multi-source downloader, Flask webui)
+# Debian/glibc zodat pip manylinux wheels installeert zonder compilatie.
+# Modules worden gekloned in /app/orpheusdl/modules/.
+# ═══════════════════════════════════════════════════════════════════════════
+FROM python:3.11-slim-bookworm AS orpheus_builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git ca-certificates build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/orpheusdl
+
+# Kloon OrpheusDL (bascurtiz fork met webui.py)
+RUN git clone https://github.com/bascurtiz/OrpheusDL .
+
+# ── Tidal module (vereist; met submodules voor tidal-dl) ─────────────────
+RUN git clone --recurse-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal
+
+# ── Optionele modules — verwijder commentaar om te activeren ─────────────
+# RUN git clone https://github.com/bascurtiz/orpheusdl-qobuz        modules/qobuz
+# RUN git clone https://github.com/bascurtiz/orpheusdl-deezer        modules/deezer
+# RUN git clone https://github.com/bascurtiz/orpheusdl-spotify       modules/spotify
+# RUN git clone https://github.com/bascurtiz/orpheusdl-soundcloud    modules/soundcloud
+# RUN git clone https://github.com/bascurtiz/orpheusdl-applemusic    modules/applemusic
+# RUN git clone https://github.com/bascurtiz/orpheusdl-youtube       modules/youtube
+
+# Installeer Python-afhankelijkheden + Flask in een eigen venv
+# (isoleert OrpheusDL van AudioMuse's /app/venv in het productie-image)
+RUN python -m venv /orpheus_venv && \
+    /orpheus_venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /orpheus_venv/bin/pip install --no-cache-dir -r requirements.txt flask && \
+    rm -rf /root/.cache/pip
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Stage 6 — Productie-image (Tidarr + muziekdashboard + AudioMuse-AI)
 # Base: python:3.11-slim-bookworm (Debian/glibc) — zelfde libc als de venv-
 # builder en de Node-builder, zodat alle binaries native draaien zonder shims.
 # ═══════════════════════════════════════════════════════════════════════════
@@ -210,6 +244,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get purge -y python3-dev build-essential && \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && \
     rm -rf /root/.npm /tmp/* /var/tmp/*
+
+# ── OrpheusDL: broncode + modules + eigen Python venv ────────────────────────
+COPY --from=orpheus_builder /app/orpheusdl  /app/orpheusdl
+COPY --from=orpheus_builder /orpheus_venv   /orpheus_venv
+RUN mkdir -p /app/orpheusdl/config /app/orpheusdl/downloads
 
 # ── Muziekdashboard (lastfm-app) ────────────────────────────────────────────
 WORKDIR /app

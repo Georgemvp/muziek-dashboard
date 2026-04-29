@@ -80,11 +80,14 @@ services:
       # TIJDELIJK: auth uitgeschakeld zodat de setup-wizard en Plex-verbinding
       # geconfigureerd kunnen worden. Zet terug op true na voltooien van setup.
       - AUTH_ENABLED=false
+      # OrpheusDL multi-source downloader (draait intern op poort 5000)
+      - ORPHEUS_URL=http://localhost:5000
     volumes:
       - ./data:/data
       - ./data/tidarr/config:/shared
       - ./data/mediasage:/mediasage/data
       - ./data/audiomuse:/app/audiomuse/data
+      - ./data/orpheusdl/config:/app/orpheusdl/config
       - /Volumes/4tbdrive/Muziek:/music
     networks:
       - muziek_net
