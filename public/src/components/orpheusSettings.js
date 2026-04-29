@@ -265,7 +265,9 @@ function renderTabContent(def, settings) {
       ? getNestedValue(settings.global || {}, field.key)
       : modSettings[field.key];
 
-    const val = rawVal !== undefined && rawVal !== null ? rawVal : (field.recommended || '');
+    // Gebruik recommended waarde als fallback wanneer veld leeg of ontbrekend is
+    const isEmpty = rawVal === undefined || rawVal === null || rawVal === '';
+    const val = isEmpty ? (field.recommended || '') : rawVal;
 
     let inputHtml;
     if (field.type === 'toggle') {
