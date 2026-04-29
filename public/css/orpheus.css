@@ -1,0 +1,392 @@
+/* ── OrpheusDL view ──────────────────────────────────────────────────────────
+   Stijlen voor de dedicated OrpheusDL pagina (/orpheus view).
+   Hergebruikt bestaande tidal.css klassen voor kaarten en progress bars.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Page layout ─────────────────────────────────────────────────────────── */
+
+.oph-page {
+  padding: var(--space-4) var(--space-4) var(--space-8);
+  max-width: 960px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.oph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.oph-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.oph-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* ── Verbindingsstatus ───────────────────────────────────────────────────── */
+
+.oph-conn-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.oph-conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.oph-conn-dot.connected    { background: var(--new, #22c55e); }
+.oph-conn-dot.disconnected { background: var(--error, #ef4444); }
+
+.oph-conn-label { color: var(--text-secondary); }
+
+.oph-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+/* ── Actieve downloads sectie ────────────────────────────────────────────── */
+
+.oph-active-jobs {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.oph-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.oph-jobs-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.oph-active-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.oph-active-row {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
+  background: var(--surface2);
+  border-radius: var(--radius-md);
+}
+
+.oph-active-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.oph-platform-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.oph-active-text { min-width: 0; }
+
+.oph-active-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oph-active-artist {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oph-active-progress { min-width: 0; }
+
+.oph-active-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+.oph-pct-small {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── URL sectie ──────────────────────────────────────────────────────────── */
+
+.oph-url-section {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.oph-url-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-2);
+}
+
+.oph-url-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.oph-url-input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+}
+.oph-url-input:focus  { border-color: var(--border-hover); background: var(--bg-elevated, var(--surface2)); }
+.oph-url-input::placeholder { color: var(--text-muted); font-family: inherit; }
+
+.oph-url-submit-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* URL kaart (resultaat van directe URL) */
+.oph-url-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.oph-url-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.oph-url-text {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+}
+
+.oph-url-dl-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Zoekbesturing ───────────────────────────────────────────────────────── */
+
+.oph-controls {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Platform pills rij */
+.oph-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.oph-platform-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.oph-platform-pill:hover {
+  border-color: var(--pill-color, var(--border-hover));
+  background: color-mix(in srgb, var(--pill-color, #888) 12%, var(--surface2));
+  color: var(--text-primary);
+}
+
+.oph-platform-pill.active {
+  border-color: var(--pill-color, var(--accent));
+  background: color-mix(in srgb, var(--pill-color, #888) 18%, var(--surface2));
+  color: var(--text-primary);
+}
+
+.oph-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pill-color, #888);
+  flex-shrink: 0;
+}
+
+/* Type + kwaliteitsrij */
+.oph-type-quality-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.oph-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.oph-type-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.oph-type-pill:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.oph-type-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.oph-quality-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.oph-quality-sel {
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.oph-quality-sel:focus { border-color: var(--border-hover); outline: none; }
+
+/* Zoekbalk rij */
+.oph-search-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.oph-search-input { flex: 1; }
+
+.oph-search-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Responsief ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .oph-page { padding: var(--space-3) var(--space-3) var(--space-6); }
+  .oph-active-row { grid-template-columns: 1fr; }
+  .oph-active-progress { display: none; }
+  .oph-type-quality-row { flex-direction: column; align-items: flex-start; }
+  .oph-url-row { flex-direction: column; }
+  .oph-url-submit-btn { width: 100%; justify-content: center; }
+  .oph-search-row { flex-direction: column; }
+  .oph-search-btn { width: 100%; justify-content: center; }
+}

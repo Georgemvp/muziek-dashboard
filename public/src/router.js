@@ -31,6 +31,7 @@ const viewMeta = {
   tidarr:             { title: 'Muziek · Tidarr' },
   audiomuse:                   { title: 'Muziek · AudioMuse' },
   'audiomuse-smart-playlists': { title: 'Muziek · Smart Playlists' },
+  orpheus:                     { title: 'Muziek · OrpheusDL' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -61,6 +62,7 @@ const viewLoaders = {
   tidarr:               () => import('./views/downloads.js'),
   audiomuse:            () => import('./views/audiomuse.js'),
   'audiomuse-smart-playlists': () => import('./views/audiomuse-smart-playlists.js'),
+  orpheus:              () => import('./views/orpheus.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
@@ -160,6 +162,7 @@ export async function switchView(viewName, params = null) {
       viewName === 'tidarr'                       ? viewModule.loadDownloads :
       viewName === 'audiomuse'                    ? viewModule.loadAudioMuse :
       viewName === 'audiomuse-smart-playlists'    ? viewModule.loadAudioMuseSmartPlaylists :
+      viewName === 'orpheus'                      ? viewModule.loadOrpheus :
       null;
 
     if (renderFn) {
