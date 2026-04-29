@@ -124,6 +124,71 @@ function musicBrainzResponse() {
   };
 }
 
+// ── OrpheusDL responses ───────────────────────────────────────────────────
+
+const ORPHEUS_PLATFORMS = [
+  { id: 'tidal',       name: 'Tidal',       authenticated: true,  qualities: ['atmos','hifi','lossless','high','low'] },
+  { id: 'qobuz',       name: 'Qobuz',       authenticated: true,  qualities: ['hifi','lossless','high'] },
+  { id: 'deezer',      name: 'Deezer',      authenticated: false, qualities: ['lossless','high','low'] },
+  { id: 'spotify',     name: 'Spotify',     authenticated: false, qualities: ['high','low'] },
+  { id: 'soundcloud',  name: 'SoundCloud',  authenticated: false, qualities: ['high'] },
+  { id: 'applemusic',  name: 'Apple Music', authenticated: false, qualities: ['high'] },
+  { id: 'beatport',    name: 'Beatport',    authenticated: false, qualities: ['lossless','high','low'] },
+  { id: 'beatsource',  name: 'Beatsource',  authenticated: false, qualities: ['lossless','high','low'] },
+  { id: 'youtube',     name: 'YouTube',     authenticated: true,  qualities: ['lossless','high','low'] },
+];
+
+const ORPHEUS_SEARCH_RESULTS = {
+  tidal: {
+    albums: [
+      { id: '12345', title: 'OK Computer', artist: 'Radiohead', year: 1997, quality: 'lossless', url: 'https://tidal.com/album/12345' },
+    ],
+    tracks: [
+      { id: '67890', title: 'Creep', artist: 'Radiohead', album: 'Pablo Honey', url: 'https://tidal.com/track/67890' },
+    ],
+  },
+  qobuz: {
+    albums: [
+      { id: 'q-111', title: 'OK Computer', artist: 'Radiohead', year: 1997, quality: 'hifi', url: 'https://www.qobuz.com/album/q-111' },
+    ],
+    tracks: [
+      { id: 'q-222', title: 'Creep', artist: 'Radiohead', album: 'Pablo Honey', url: 'https://www.qobuz.com/track/q-222' },
+    ],
+  },
+};
+
+function orpheusResponse(url, method = 'GET', body = null) {
+  // Status
+  if (url.endsWith('/api/status') || url.endsWith('/status')) {
+    return { ok: true, version: '1.0.0', uptime: 3600 };
+  }
+  // Platforms
+  if (url.includes('/api/platforms') || url.includes('/platforms')) {
+    return { platforms: ORPHEUS_PLATFORMS };
+  }
+  // Search
+  if (url.includes('/api/search') || url.includes('/search')) {
+    const parsed = new URL(url);
+    const platform = parsed.searchParams.get('platform') || 'tidal';
+    const type     = parsed.searchParams.get('type')     || 'album';
+    const source   = ORPHEUS_SEARCH_RESULTS[platform] || ORPHEUS_SEARCH_RESULTS.tidal;
+    return { results: source[type + 's'] || source.albums || [] };
+  }
+  // Download (POST)
+  if ((url.includes('/api/download') || url.includes('/download')) && method === 'POST') {
+    return { jobId: 'mock-job-42', status: 'queued', message: 'Download queued' };
+  }
+  // Job status
+  if (url.match(/\/job\/[^/]+$/) && method === 'GET') {
+    return { jobId: 'mock-job-42', status: 'completed', progress: 100, file: '/music/Radiohead - OK Computer.flac' };
+  }
+  // Job stop
+  if (url.match(/\/job\/[^/]+\/stop$/) && method === 'POST') {
+    return { jobId: 'mock-job-42', status: 'cancelled' };
+  }
+  return {};
+}
+
 // ── Hoofd mock-functie ─────────────────────────────────────────────────────
 
 /**
@@ -146,8 +211,13 @@ function mockJson(data, status = 200) {
  * Alle andere URLs (bijv. Plex, Tidarr) krijgen een lege 200-response.
  */
 function setupMocks() {
-  global.fetch = async (url, _options) => {
+  global.fetch = async (url, options) => {
     const urlStr = String(url);
+    const method = (options && options.method) ? options.method.toUpperCase() : 'GET';
+    let body = null;
+    if (options && options.body) {
+      try { body = JSON.parse(options.body); } catch { body = options.body; }
+    }
 
     // ── Last.fm ───────────────────────────────────────────────────────────
     if (urlStr.includes('audioscrobbler.com')) {
@@ -168,6 +238,11 @@ function setupMocks() {
     // ── Spotify ───────────────────────────────────────────────────────────
     if (urlStr.includes('spotify.com') || urlStr.includes('spotify.io')) {
       return mockJson({ access_token: 'mock-token', expires_in: 3600, token_type: 'Bearer' });
+    }
+
+    // ── OrpheusDL ─────────────────────────────────────────────────────────
+    if (urlStr.includes('localhost:5000') || urlStr.includes('orpheus')) {
+      return mockJson(orpheusResponse(urlStr, method, body));
     }
 
     // ── Alles overige (Plex, Tidarr, …): lege success-response ───────────

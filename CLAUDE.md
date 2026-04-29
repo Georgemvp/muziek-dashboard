@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**lastfm-app** is a containerized Node.js music dashboard that integrates Last.fm, Plex, Spotify, and Tidarr (Tidal downloader). The application runs as two coordinated services in a single Docker container orchestrated by supervisord:
+**lastfm-app** is a containerized Node.js music dashboard that integrates Last.fm, Plex, Spotify, Tidarr (Tidal downloader), and OrpheusDL (multi-platform music downloader). The application runs as coordinated services in a single Docker container orchestrated by supervisord:
 
 - **Muziekdashboard (port 80)**: Express.js backend + vanilla JavaScript frontend
 - **Tidarr (port 8484)**: React frontend + Node API for Tidal music downloads (embedded)
+- **OrpheusDL (port 5000)**: Python web UI for multi-platform music downloads (9 platforms: Tidal, Qobuz, Deezer, Spotify, SoundCloud, Apple Music, Beatport, Beatsource, YouTube)
 
 The frontend is a single-page application with multiple tabs (home, artists, albums, downloads, discover, gaps) and real-time features like Plex webhook support and Now Playing syncing.
 
@@ -31,15 +32,16 @@ The frontend is a single-page application with multiple tabs (home, artists, alb
 - **State Management**: In-memory object (public/src/state.js)
 
 **Infrastructure:**
-- **Container**: Docker (multi-stage build with Python layer for Tidarr)
-- **Process Manager**: supervisord (manages both Tidarr and lastfm-app)
-- **Package Management**: npm for lastfm-app, yarn for Tidarr
+- **Container**: Docker (multi-stage build with Python layer for Tidarr and OrpheusDL)
+- **Process Manager**: supervisord (manages OrpheusDL, Tidarr, and lastfm-app)
+- **Package Management**: npm for lastfm-app, yarn for Tidarr, pip for OrpheusDL
 
 **External APIs:**
 - Last.fm (user stats, scrobbles, artist data)
 - Plex (library management, playback control, webhooks)
 - Spotify (mood-based recommendations)
 - Tidarr (Tidal search and downloads)
+- OrpheusDL (multi-platform music downloads via 9 platforms: Tidal, Qobuz, Deezer, Spotify, SoundCloud, Apple Music, Beatport, Beatsource, YouTube)
 - MusicBrainz (artist metadata)
 - Deezer (artist images)
 
@@ -58,6 +60,7 @@ lastfm-app/
 │   ├── artist.js            # Artist detail endpoints (/api/artist/:name, /api/artist/:name/info)
 │   ├── plex.js              # Plex control & library endpoints + SSE webhooks
 │   ├── tidarr.js            # Tidarr search & download endpoints
+│   ├── orpheus.js           # OrpheusDL endpoints (/api/orpheus/*)
 │   ├── spotify.js           # Spotify mood recommendations (/api/spotify/recommendations)
 │   └── misc.js              # Health checks, utility endpoints
 │
@@ -65,6 +68,7 @@ lastfm-app/
 │   ├── lastfm.js            # Last.fm API wrapper with caching
 │   ├── plex.js              # Plex library sync (1156 lines: complex state management)
 │   ├── tidarr.js            # Tidarr API wrapper
+│   ├── orpheus.js           # OrpheusDL API wrapper (9 platforms)
 │   ├── spotify.js           # Spotify auth & recommendations
 │   ├── musicbrainz.js       # MusicBrainz metadata lookups
 │   ├── deezer.js            # Deezer image proxying
@@ -344,6 +348,7 @@ docker compose exec app cat /data/cache.db > cache.db.backup
 - `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — For mood recommendations (hidden in UI if absent)
 - `TIDARR_URL` — Internal Tidarr address (defaults to `http://localhost:8484`)
 - `TIDARR_API_KEY` — Tidarr authentication
+- `ORPHEUS_URL` — Internal OrpheusDL address (defaults to `http://localhost:5000`)
 - `PORT` — Server port (default: 80)
 - `LOG_LEVEL` — Log verbosity (default: info)
 - `NODE_ENV` — Affects logging format (default: production in Docker)
@@ -368,15 +373,36 @@ Key optimizations:
 - Layer caching: `package.json` copied before source files
 - Native module ABI matching: Node binary copied from builder to avoid version mismatches
 - `npm prune --production`: Removes dev dependencies before final image
-- supervisord: Manages both Tidarr and lastfm-app as systemd-like services
+- supervisord: Manages OrpheusDL, Tidarr, and lastfm-app as systemd-like services
 
 ### `supervisord.conf`
 
-Runs two programs:
-- **tidarr** (priority 10): Node app + Python Tidal downloader
-- **lastfm** (priority 20): Express server + Plex webhooks
+Runs three primary music-service programs (in priority order):
+- **orpheusdl** (priority 5): Python web UI for multi-platform downloads on port 5000
+- **tidarr** (priority 10): Node app + Python Tidal downloader on port 8484
+- **lastfm** (priority 20): Express server + Plex webhooks on port 80
+
+All programs redirect stdout/stderr to `/dev/stdout` for Docker log driver capture and are configured with `autorestart=true`.
 
 Both redirect stdout/stderr to `/dev/stdout` for Docker log driver capture.
+
+### OrpheusDL Platform Quality Options
+
+OrpheusDL supports platform-specific audio quality tiers. Use the `quality` parameter when calling `/api/orpheus/download`:
+
+| Platform | Available Quality Options |
+|----------|--------------------------|
+| **Tidal** | `atmos`, `hifi`, `lossless`, `high`, `low` |
+| **Qobuz** | `hifi`, `lossless`, `high` |
+| **Deezer** | `lossless`, `high`, `low` |
+| **Spotify** | `high`, `low` |
+| **SoundCloud** | `high` |
+| **Apple Music** | `high` |
+| **Beatport** | `lossless`, `high`, `low` |
+| **Beatsource** | `lossless`, `high`, `low` |
+| **YouTube** | `lossless` (Opus), `high` (AAC), `low` (MP3) |
+
+Each platform requires its own credentials configured in the OrpheusDL web UI at `http://localhost:5000`. Platform modules that are not authenticated will return a `401` or `403` from the OrpheusDL API.
 
 ---
 

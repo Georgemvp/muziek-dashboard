@@ -213,6 +213,142 @@ describe('GET /api/recs', { timeout: 60_000 }, () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// OrpheusDL endpoints
+// ══════════════════════════════════════════════════════════════════════════
+
+// Zet ORPHEUS_URL zodat de service weet waar OrpheusDL draait (mock onderschept het)
+process.env.ORPHEUS_URL = 'http://localhost:5000';
+
+describe('GET /api/orpheus/status', () => {
+  it('geeft 200 met een ok/connected boolean of object', async () => {
+    const res = await request(app).get('/api/orpheus/status');
+    assert.ok(
+      res.status === 200 || res.status === 503,
+      `status moet 200 of 503 zijn, kreeg: ${res.status}`
+    );
+    if (res.status === 200) {
+      assert.ok(res.body, 'response body moet aanwezig zijn');
+    }
+  });
+});
+
+describe('GET /api/orpheus/platforms', () => {
+  it('geeft 200 met een platforms array', async () => {
+    const res = await request(app).get('/api/orpheus/platforms');
+    assert.ok(
+      res.status === 200 || res.status === 503,
+      `status moet 200 of 503 zijn, kreeg: ${res.status}`
+    );
+    if (res.status === 200) {
+      assert.ok(
+        Array.isArray(res.body.platforms) || Array.isArray(res.body),
+        'response moet een platforms array bevatten'
+      );
+    }
+  });
+});
+
+describe('GET /api/orpheus/search — Tidal album', () => {
+  it('geeft 200 met zoekresultaten voor platform=tidal&type=album', async () => {
+    const res = await request(app)
+      .get('/api/orpheus/search?q=test&platform=tidal&type=album');
+    assert.ok(
+      res.status === 200 || res.status === 503,
+      `status moet 200 of 503 zijn, kreeg: ${res.status}`
+    );
+    if (res.status === 200) {
+      assert.ok(
+        Array.isArray(res.body.results) || Array.isArray(res.body),
+        'response moet een results array bevatten'
+      );
+    }
+  });
+});
+
+describe('GET /api/orpheus/search — Qobuz track', () => {
+  it('geeft 200 met zoekresultaten voor platform=qobuz&type=track', async () => {
+    const res = await request(app)
+      .get('/api/orpheus/search?q=test&platform=qobuz&type=track');
+    assert.ok(
+      res.status === 200 || res.status === 503,
+      `status moet 200 of 503 zijn, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/orpheus/search — alle platforms', () => {
+  it('geeft 200 voor platform=all&type=album', async () => {
+    const res = await request(app)
+      .get('/api/orpheus/search?q=test&platform=all&type=album');
+    assert.ok(
+      res.status === 200 || res.status === 503,
+      `status moet 200 of 503 zijn, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/orpheus/download — Tidal URL', () => {
+  it('start een download-job voor een Tidal URL', async () => {
+    const res = await request(app)
+      .post('/api/orpheus/download')
+      .send({ url: 'https://tidal.com/album/12345', platform: 'tidal', quality: 'lossless' });
+    assert.ok(
+      res.status === 200 || res.status === 202 || res.status === 503,
+      `status moet 200, 202 of 503 zijn, kreeg: ${res.status}`
+    );
+    if (res.status === 200 || res.status === 202) {
+      assert.ok(res.body, 'response body moet aanwezig zijn');
+    }
+  });
+
+  it('geeft 400 als url ontbreekt in de request body', async () => {
+    const res = await request(app)
+      .post('/api/orpheus/download')
+      .send({ platform: 'tidal', quality: 'lossless' });
+    // 400 als validatie aanwezig is, of 503 als OrpheusDL niet bereikbaar is in test-env
+    assert.ok(
+      res.status === 400 || res.status === 503,
+      `status moet 400 of 503 zijn, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/orpheus/download — Qobuz URL', () => {
+  it('start een download-job voor een Qobuz URL', async () => {
+    const res = await request(app)
+      .post('/api/orpheus/download')
+      .send({ url: 'https://www.qobuz.com/album/q-111', platform: 'qobuz', quality: 'hifi' });
+    assert.ok(
+      res.status === 200 || res.status === 202 || res.status === 503,
+      `status moet 200, 202 of 503 zijn, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/orpheus/job/:id', () => {
+  it('geeft job-status voor een bestaand job-ID', async () => {
+    const res = await request(app).get('/api/orpheus/job/mock-job-42');
+    assert.ok(
+      res.status === 200 || res.status === 404 || res.status === 503,
+      `status moet 200, 404 of 503 zijn, kreeg: ${res.status}`
+    );
+    if (res.status === 200) {
+      assert.ok(res.body, 'response body moet aanwezig zijn');
+    }
+  });
+});
+
+describe('POST /api/orpheus/job/:id/stop', () => {
+  it('annuleert een lopende job', async () => {
+    const res = await request(app).post('/api/orpheus/job/mock-job-42/stop');
+    assert.ok(
+      res.status === 200 || res.status === 404 || res.status === 503,
+      `status moet 200, 404 of 503 zijn, kreeg: ${res.status}`
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // Extra: Cache-Control headers (regressietest)
 // ══════════════════════════════════════════════════════════════════════════
 

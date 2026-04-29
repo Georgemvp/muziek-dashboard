@@ -7,6 +7,7 @@ Een persoonlijke muziekdashboard op basis van **Last.fm** met integratie van **P
 - 🎬 Plex media collectie verkennen en afspelen
 - 🎯 Spotify aanbevelingen op basis van stemming
 - 🚀 Tidarr voor muziekdownloads via Tidal
+- 🌐 OrpheusDL voor muziekdownloads via 9 platforms: Tidal, Qobuz, Deezer, Spotify, SoundCloud, Apple Music, Beatport, Beatsource en YouTube
 - 🔍 Artiest-info met foto's, albums, genres en tags
 - 🎨 Genre-overzichten met artiestengrid
 - 💾 SQLite cache voor snellere laadtijden
@@ -205,6 +206,17 @@ docker compose up -d --build
 | `/api/tidarr/add` | POST | Album toevoegen aan queue |
 | `/api/tidarr/remove` | POST | Item verwijderen |
 
+### OrpheusDL Endpoints
+
+| Endpoint | Method | Beschrijving |
+|----------|--------|--------------|
+| `/api/orpheus/status` | GET | OrpheusDL verbindingsstatus |
+| `/api/orpheus/platforms` | GET | Lijst van beschikbare platforms met auth-status |
+| `/api/orpheus/search` | GET | Zoeken (query: `q`, `platform`, `type`) |
+| `/api/orpheus/download` | POST | Download starten (body: `url`, `platform`, `quality`) |
+| `/api/orpheus/job/:id` | GET | Status van een lopende download-job |
+| `/api/orpheus/job/:id/stop` | POST | Lopende job annuleren |
+
 ### Discovery Endpoints
 
 | Endpoint | Method | Beschrijving |
@@ -286,6 +298,7 @@ sqlite> SELECT * FROM cache LIMIT 5;
 | `SPOTIFY_CLIENT_SECRET` | ❌ | Spotify app secret |
 | `TIDARR_URL` | ❌ | Tidarr container URL |
 | `TIDARR_API_KEY` | ❌ | Tidarr API key |
+| `ORPHEUS_URL` | ❌ | OrpheusDL container URL (default: `http://localhost:5000`) |
 | `PORT` | ❌ | Server poort (default: 9090) |
 | `NODE_ENV` | ❌ | Environment (default: production) |
 | `LOG_LEVEL` | ❌ | Log niveau (default: info) |
@@ -347,6 +360,32 @@ Last.fm heeft rate limits. Als je veel requests doet:
 - Cache wordt gebruikt (standaard enabled)
 - Rate limiter is ingesteld op 30 req/min per IP
 - Controleer `LOG_LEVEL=debug` voor meer details
+
+### OrpheusDL per platform
+
+**Tidal — "Browser login opent niet"**
+Check of de OrpheusDL container draait (`docker compose ps`). OrpheusDL start een browser-gebaseerd login-scherm voor Tidal; dit vereist dat de webUI op poort 5000 bereikbaar is.
+
+**Qobuz — "401 Unauthorized"**
+Controleer of het Qobuz email-adres en wachtwoord correct zijn in de OrpheusDL platformconfiguratie. Bij het gebruik van een business-account: voer de juiste `app_id` en `app_secret` in via de OrpheusDL web UI.
+
+**Deezer — "Login failed"**
+Gebruik een ARL-token als fallback in plaats van email/wachtwoord. De ARL is te vinden in de browser-cookies na handmatig inloggen op deezer.com (cookie-naam: `arl`).
+
+**Spotify — "No premium"**
+Een Spotify Premium abonnement is vereist voor downloads. Stel ook de `client_id` en `client_secret` in via de Spotify Developer Dashboard en voer deze in in de OrpheusDL-configuratie.
+
+**SoundCloud — "403 Forbidden"**
+Een SoundCloud Go+ abonnement is vereist. Vernieuw het `oauth_token` in de OrpheusDL SoundCloud-configuratie; tokens verlopen periodiek.
+
+**Apple Music — "Cookie expired"**
+Exporteer een nieuwe `cookies.txt` vanuit een ingelogde sessie in je browser (gebruik bijv. de "Get cookies.txt LOCALLY" extensie) en laad deze opnieuw in via de OrpheusDL web UI.
+
+**Beatport / Beatsource — "Login failed"**
+Een Beatport Professional of Beatsource Pro abonnement is vereist. Controleer of het account de juiste abonnementsstatus heeft en voer email + wachtwoord opnieuw in via de OrpheusDL configuratiepagina.
+
+**YouTube — "403 Error"**
+Vernieuw het `youtube-cookies.txt` bestand vanuit een incognito-browsersessie waarbij je bent ingelogd bij Google. Cookies van een gewone sessie worden soms door YouTube geblokkeerd vanwege anti-bot maatregelen.
 
 ---
 
