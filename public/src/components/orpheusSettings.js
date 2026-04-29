@@ -32,7 +32,7 @@ const PLATFORM_DEFS = [
     label: 'Tidal',
     color: '#33ffe7',
     icon: '🎵',
-    settingsKey: 'module_settings.tidal',
+    settingsKey: 'modules.tidal',
     fields: [
       { key: 'quality_format',            label: 'Kwaliteit',                    type: 'select', options: ['atmos','hifi','lossless','high','low'] },
       { key: 'tv_atmos_token',            label: 'TV Atmos Token',               type: 'text',   placeholder: 'Aanbevolen: laat leeg voor auto-login' },
@@ -49,7 +49,7 @@ const PLATFORM_DEFS = [
     label: 'Qobuz',
     color: '#0070ef',
     icon: '🎶',
-    settingsKey: 'module_settings.qobuz',
+    settingsKey: 'modules.qobuz',
     fields: [
       { key: 'quality_format', label: 'Kwaliteit',       type: 'select',   options: ['hifi','lossless','high'] },
       { key: 'email',          label: 'E-mailadres',     type: 'text',     placeholder: 'jouw@email.com' },
@@ -67,7 +67,7 @@ const PLATFORM_DEFS = [
     label: 'Deezer',
     color: '#a238ff',
     icon: '🎸',
-    settingsKey: 'module_settings.deezer',
+    settingsKey: 'modules.deezer',
     fields: [
       { key: 'quality_format', label: 'Kwaliteit',      type: 'select',   options: ['lossless','high','low'] },
       { key: 'email',          label: 'E-mailadres',    type: 'text',     placeholder: 'jouw@email.com' },
@@ -85,7 +85,7 @@ const PLATFORM_DEFS = [
     label: 'Spotify',
     color: '#1cc659',
     icon: '🎧',
-    settingsKey: 'module_settings.spotify',
+    settingsKey: 'modules.spotify',
     fields: [
       { key: 'quality_format',  label: 'Kwaliteit',       type: 'select', options: ['high','low'] },
       { key: 'username',        label: 'Gebruikersnaam',  type: 'text',   placeholder: 'jouw Spotify-gebruikersnaam' },
@@ -101,7 +101,7 @@ const PLATFORM_DEFS = [
     label: 'SoundCloud',
     color: '#ff5502',
     icon: '☁️',
-    settingsKey: 'module_settings.soundcloud',
+    settingsKey: 'modules.soundcloud',
     fields: [
       { key: 'quality_format', label: 'Kwaliteit',    type: 'select', options: ['high'] },
       { key: 'oauth_token',    label: 'OAuth token',  type: 'password', placeholder: 'haal op uit browser cookies na inloggen' },
@@ -115,7 +115,7 @@ const PLATFORM_DEFS = [
     label: 'Apple Music',
     color: '#FA586A',
     icon: '🍎',
-    settingsKey: 'module_settings.applemusic',
+    settingsKey: 'modules.applemusic',
     fields: [
       { key: 'quality_format',    label: 'Kwaliteit',          type: 'select', options: ['high'] },
       { key: 'cookies_location',  label: 'Cookies bestand',    type: 'text',   placeholder: './config/cookies.txt' },
@@ -129,7 +129,7 @@ const PLATFORM_DEFS = [
     label: 'Beatport',
     color: '#00ff89',
     icon: '🎛️',
-    settingsKey: 'module_settings.beatport',
+    settingsKey: 'modules.beatport',
     fields: [
       { key: 'quality_format', label: 'Kwaliteit',     type: 'select',   options: ['lossless','high','low'] },
       { key: 'username',       label: 'Gebruikersnaam', type: 'text',    placeholder: 'jouw Beatport-email' },
@@ -143,7 +143,7 @@ const PLATFORM_DEFS = [
     label: 'Beatsource',
     color: '#16a8f4',
     icon: '🎚️',
-    settingsKey: 'module_settings.beatsource',
+    settingsKey: 'modules.beatsource',
     fields: [
       { key: 'quality_format', label: 'Kwaliteit',      type: 'select',   options: ['lossless','high','low'] },
       { key: 'username',       label: 'Gebruikersnaam', type: 'text',    placeholder: 'jouw Beatsource-email' },
@@ -157,7 +157,7 @@ const PLATFORM_DEFS = [
     label: 'YouTube',
     color: '#FF0000',
     icon: '▶️',
-    settingsKey: 'module_settings.youtube',
+    settingsKey: 'modules.youtube',
     fields: [
       { key: 'quality_format',    label: 'Kwaliteit',       type: 'select', options: ['lossless','high','low'] },
       { key: 'cookies_location',  label: 'Cookies bestand', type: 'text',   placeholder: './config/youtube-cookies.txt' },

@@ -380,7 +380,7 @@ function loadDefaultSettings() {
       covers:     { embed_cover: true, main_resolution: 1400 },
       lyrics:     { embed_lyrics: true, save_synced_lyrics: true },
     },
-    module_settings: {}
+    modules: {}
   };
 }
 

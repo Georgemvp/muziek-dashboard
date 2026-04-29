@@ -613,6 +613,12 @@ export async function loadOrpheus() {
   searchInput?.addEventListener('keydown', e => {
     if (e.key === 'Enter') doSearch(searchInput.value);
   });
+  // Debounced input: zoek automatisch terwijl de gebruiker typt (320ms vertraging)
+  let _searchDebounce = null;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(() => doSearch(searchInput.value), 320);
+  });
 
   // URL directe download
   const urlInput  = document.getElementById('oph-url-input');
