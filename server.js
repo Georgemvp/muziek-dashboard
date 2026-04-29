@@ -229,6 +229,7 @@ const { getDiscover, refreshDiscover, initDiscover }               = require('./
 const { getGaps, refreshGaps, initGaps, getArtistGaps }            = require('./services/gaps');
 const { getReleases, refreshReleases, initReleases }               = require('./services/releases');
 const { searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory, removeFromQueue, getTidarrStatus, TIDARR_URL, TIDARR_API_KEY } = require('./services/tidarr');
+const { searchOrpheus, downloadOrpheus, downloadFromSearch, getOrpheusJobStatus, stopOrpheusJob, getOrpheusStatus, getOrpheusSettings, saveOrpheusSettings, ORPHEUS_URL, PLATFORMS: ORPHEUS_PLATFORMS, QUALITY_OPTIONS: ORPHEUS_QUALITY_OPTIONS } = require('./services/orpheus');
 const { getCache, setCache, getCacheAge, getWishlist, addToWishlist, removeFromWishlist, addDownload, getDownloads, getDownloadKeys, removeDownload } = require('./db');
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('./services/spotify');
 const { getWikipediaExtract }                                      = require('./services/wikipedia');
@@ -432,6 +433,19 @@ const deps = {
   getDownloadKeys,
   removeDownload,
 
+  // OrpheusDL
+  searchOrpheus,
+  downloadOrpheus,
+  downloadFromSearch,
+  getOrpheusJobStatus,
+  stopOrpheusJob,
+  getOrpheusStatus,
+  getOrpheusSettings,
+  saveOrpheusSettings,
+  ORPHEUS_URL,
+  ORPHEUS_PLATFORMS,
+  ORPHEUS_QUALITY_OPTIONS,
+
   // Image proxy
   proxyImage,
 
@@ -461,6 +475,7 @@ const deps = {
 require('./routes/artist')(app, deps);
 require('./routes/plex')(app, deps);
 require('./routes/tidarr')(app, deps);
+require('./routes/orpheus')(app, deps);
 require('./routes/spotify')(app, deps);
 require('./routes/misc')(app, deps);
 

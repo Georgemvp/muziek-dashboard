@@ -239,6 +239,12 @@ try {
   `);
   // Index voor snelle opzoekacties op artiest+titel
   db.exec('CREATE INDEX IF NOT EXISTS idx_dl_artist_title ON downloads(artist, title)');
+
+  // Migratie: voeg source en platform kolommen toe als ze nog niet bestaan.
+  // SQLite ondersteunt geen IF NOT EXISTS bij ALTER TABLE, dus we gebruiken try/catch.
+  try { db.exec("ALTER TABLE downloads ADD COLUMN source   TEXT"); } catch {}
+  try { db.exec("ALTER TABLE downloads ADD COLUMN platform TEXT"); } catch {}
+
   logger.debug('Downloads table initialized');
 } catch (err) {
   logger.error({ err }, 'Error initializing downloads table');
@@ -273,18 +279,37 @@ const _stmtIsInWishlist = db.prepare('SELECT id FROM wishlist WHERE type = ? AND
 
 // Downloads statements
 const _stmtAddDownload = db.prepare(
-  'INSERT INTO downloads (tidal_id, artist, title, url, quality, queued_at) VALUES (?, ?, ?, ?, ?, ?)'
+  'INSERT INTO downloads (tidal_id, artist, title, url, quality, queued_at, source, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
 );
 const _stmtGetDownloads = db.prepare('SELECT * FROM downloads ORDER BY queued_at DESC');
 const _stmtGetDownloadKeys = db.prepare('SELECT artist, title FROM downloads');
 const _stmtRemoveDownload = db.prepare('DELETE FROM downloads WHERE id = ?');
 
-/** Sla een gedownload album op in de geschiedenis. */
-function addDownload({ tidal_id, artist, title, url, quality }) {
+/**
+ * Sla een gedownload album op in de geschiedenis.
+ * @param {object} opts
+ * @param {string} [opts.tidal_id]  - Tidal track/album ID (legacy veld, ook gebruikt als generiek id)
+ * @param {string} [opts.artist]
+ * @param {string} [opts.title]
+ * @param {string} [opts.url]
+ * @param {string} [opts.quality]
+ * @param {string} [opts.source]    - "tidarr" | "orpheus" (of andere downloader)
+ * @param {string} [opts.platform]  - "tidal" | "qobuz" | "deezer" | "spotify" | ... (platform van de bron-URL)
+ */
+function addDownload({ tidal_id, artist, title, url, quality, source, platform }) {
   try {
-    _stmtAddDownload.run(tidal_id || null, artist || '', title || '', url || null, quality || null, Date.now());
+    _stmtAddDownload.run(
+      tidal_id  || null,
+      artist    || '',
+      title     || '',
+      url       || null,
+      quality   || null,
+      Date.now(),
+      source    || null,
+      platform  || null
+    );
 
-    logger.info({ artist, title, quality, tidal_id }, 'Download added to history');
+    logger.info({ artist, title, quality, tidal_id, source, platform }, 'Download added to history');
   } catch (err) {
     logger.error({ artist, title, err }, 'Error adding download to history');
     throw err;
