@@ -218,6 +218,33 @@ function urlDownloadCardHtml(url, platform) {
 
 // ── Job polling ───────────────────────────────────────────────────────────────
 
+// Foutpatronen voor client-side log-analyse (fallback als backend geen errorMessage geeft)
+const _CLIENT_ERROR_PATTERNS = [
+  { pattern: /401.*authentication|authentication.*required|user authentication/i,
+    message: 'Authenticatie mislukt. Ga naar Instellingen → OrpheusDL en vernieuw je auth_token.' },
+  { pattern: /401/i,
+    message: 'Authenticatie mislukt (401). Controleer je inloggegevens in de OrpheusDL instellingen.' },
+  { pattern: /403.*forbidden|forbidden/i,
+    message: 'Toegang geweigerd (403). Controleer je abonnement en credentials.' },
+  { pattern: /Could not get (album|track|artist|playlist) info/i,
+    message: 'Kon metadata niet ophalen. Controleer de URL en je credentials.' },
+  { pattern: /timed? ?out/i,
+    message: 'Download timeout. Probeer opnieuw.' },
+];
+
+function _extractErrorFromLog(log) {
+  if (!Array.isArray(log)) return null;
+  const lines = log.map(l =>
+    typeof l === 'string' ? l : (l?.message || l?.text || String(l || ''))
+  );
+  for (const { pattern, message } of _CLIENT_ERROR_PATTERNS) {
+    if (lines.some(l => pattern.test(l))) return message;
+  }
+  // Generieke fout als fallback
+  const failLine = lines.find(l => /✗|failed|error/i.test(l));
+  return failLine ? 'Download mislukt. Controleer de logs voor meer details.' : null;
+}
+
 const _pollers = new Map(); // jobId → intervalId
 
 function startJobPoll(jobId, cardEl) {
@@ -258,27 +285,54 @@ function startJobPoll(jobId, cardEl) {
         clearInterval(intervalId);
         _pollers.delete(jobId);
         if (stopBtn) stopBtn.style.display = 'none';
-        if (job.status === 'done' && dlBtn) {
+
+        // Bepaal of de download echt geslaagd is.
+        // OrpheusDL markeert gefaalde downloads ook als "done" met progress 100,
+        // dus we vertrouwen op het success-veld dat de backend uit het log parseert.
+        const isFailed = job.status === 'error' ||
+          (job.status === 'done' && job.success === false);
+
+        if (!isFailed && job.status === 'done' && dlBtn) {
+          // Echte succesvolle download
           dlBtn.textContent = '✓';
           dlBtn.classList.add('dl-done');
-        } else if (dlBtn) {
-          dlBtn.disabled = false;
-          dlBtn.textContent = '⬇ Download';
-        }
-        // Bij een fout: extraheer relevante log-regels en toon ze in de kaart
-        if (job.status === 'error' && progressWrap) {
-          const errorKeywords = /401|403|unauthorized|authentication|invalid.*token|error|failed|exception/i;
-          const logLines = (job.log || [])
-            .map(l => typeof l === 'string' ? l : (l?.message || l?.text || String(l || '')))
-            .filter(l => errorKeywords.test(l))
-            .slice(-5); // maximaal 5 regels
-          if (logLines.length) {
-            const errEl = document.createElement('div');
-            errEl.className = 'orpheus-error-log';
-            errEl.innerHTML = logLines.map(l => `<div class="oph-err-line">${esc(l)}</div>`).join('');
-            progressWrap.appendChild(errEl);
+          if (statusEl) {
+            statusEl.textContent = '✓ Klaar';
+            statusEl.className = 'q-status q-done orpheus-job-status';
+          }
+        } else if (isFailed) {
+          // Mislukte download: toon rode fout-status
+          if (dlBtn) {
+            dlBtn.disabled = false;
+            dlBtn.textContent = '⬇ Download';
+          }
+          if (statusEl) {
+            statusEl.textContent = '✗ Mislukt';
+            statusEl.className = 'q-status q-error orpheus-job-status';
+          }
+          if (barFill) barFill.classList.add('oph-bar-error');
+
+          // Toon foutmelding in de kaart
+          if (progressWrap) {
+            // Verwijder eventuele vorige foutmeldingen
+            progressWrap.querySelectorAll('.orpheus-error-message').forEach(el => el.remove());
+
+            const errorMessage = job.errorMessage || _extractErrorFromLog(job.log);
+            if (errorMessage) {
+              const errEl = document.createElement('div');
+              errEl.className = 'orpheus-error-message';
+              errEl.innerHTML = `<span class="oph-err-icon">⚠</span><span class="oph-err-text">${esc(errorMessage)}</span>`;
+              progressWrap.appendChild(errEl);
+            }
+          }
+        } else {
+          // Gestopt
+          if (dlBtn) {
+            dlBtn.disabled = false;
+            dlBtn.textContent = '⬇ Download';
           }
         }
+
         // Verwijder uit actieve jobs en ververs sectie
         if (state.activeOrpheusJobs) {
           state.activeOrpheusJobs = state.activeOrpheusJobs.filter(j => j.jobId !== jobId);

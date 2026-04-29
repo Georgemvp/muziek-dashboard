@@ -22,6 +22,65 @@ const ALL_PLATFORMS = Object.keys(QUALITY_OPTIONS);
 const ALL_QUALITIES = [...new Set(Object.values(QUALITY_OPTIONS).flat())];
 const VALID_TYPES   = ['all', 'track', 'album', 'artist', 'playlist'];
 
+// ── Fout-detectie in OrpheusDL job logs ────────────────────────────────────────
+// OrpheusDL retourneert status "done" + progress 100 voor ZOWEL geslaagde als
+// gefaalde downloads. We analyseren het log om het echte resultaat te bepalen.
+
+const ERROR_PATTERNS = [
+  { pattern: /401.*authentication|authentication.*required|user authentication/i,
+    message: 'Authenticatie mislukt. Vernieuw je auth_token in de OrpheusDL instellingen.' },
+  { pattern: /401/i,
+    message: 'Authenticatie mislukt (401). Controleer je inloggegevens in de OrpheusDL instellingen.' },
+  { pattern: /403.*forbidden|forbidden/i,
+    message: 'Toegang geweigerd (403). Controleer je abonnement en credentials.' },
+  { pattern: /Could not get (album|track|artist|playlist) info/i,
+    message: 'Kon metadata niet ophalen. Controleer de URL en je credentials.' },
+  { pattern: /timed? ?out/i,
+    message: 'Download timeout. Probeer opnieuw.' },
+  { pattern: /Album failed|Track failed|Playlist failed|Artist failed/i,
+    message: 'Download mislukt. Controleer de logs voor meer details.' },
+  { pattern: /✗|✗/u,
+    message: 'Download mislukt.' },
+];
+
+/**
+ * Analyseer het log-array van een OrpheusDL job en retourneer:
+ *   { success: boolean, errorMessage: string|null }
+ *
+ * success = true  als log "✓ Album completed" of "✓ Track completed" bevat
+ * success = false als log foutpatronen bevat (401, ✗, failed, enz.)
+ * success = null  als de job nog loopt of het log leeg is
+ */
+function parseJobLog(log) {
+  if (!Array.isArray(log) || log.length === 0) return { success: null, errorMessage: null };
+
+  const lines = log.map(l =>
+    typeof l === 'string' ? l : (l?.message || l?.text || String(l || ''))
+  );
+
+  // Geslaagd?
+  const successPattern = /✓\s*(Album|Track|Playlist|Artist)\s+completed/i;
+  if (lines.some(l => successPattern.test(l))) {
+    return { success: true, errorMessage: null };
+  }
+
+  // Fout?
+  for (const { pattern, message } of ERROR_PATTERNS) {
+    const matchLine = lines.find(l => pattern.test(l));
+    if (matchLine) {
+      return { success: false, errorMessage: message, logLine: matchLine };
+    }
+  }
+
+  // "=== ✗" als fallback voor elk ander type mislukking
+  const failLine = lines.find(l => /===\s*✗|=== ✗/.test(l));
+  if (failLine) {
+    return { success: false, errorMessage: 'Download mislukt. Controleer de logs voor meer details.' };
+  }
+
+  return { success: null, errorMessage: null };
+}
+
 /**
  * Detecteer het platform op basis van een URL.
  * Retourneert de platformnaam of null als niet herkend.
@@ -238,6 +297,20 @@ module.exports = function(app, deps) {
 
     try {
       const result = await getOrpheusJobStatus(jobId);
+
+      // Verrijk de response met success/errorMessage door het log te analyseren.
+      // OrpheusDL markeert gefaalde downloads ook als status "done" met progress 100,
+      // dus we kunnen niet op status alleen vertrouwen.
+      if (result.status === 'done') {
+        const { success, errorMessage, logLine } = parseJobLog(result.log);
+        result.success = success !== null ? success : true; // unknown = assume success
+        if (!result.success) {
+          result.errorMessage = errorMessage;
+          if (logLine) result.errorLogLine = logLine;
+          logger.warn({ jobId, errorMessage, logLine }, 'OrpheusDL job als "done" gerapporteerd maar log bevat fout');
+        }
+      }
+
       // Geen cache: dit endpoint wordt actief gepolld voor live updates
       res.set('Cache-Control', 'no-cache');
       res.json(result);

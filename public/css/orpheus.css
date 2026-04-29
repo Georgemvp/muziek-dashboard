@@ -432,7 +432,7 @@
   cursor: not-allowed;
 }
 
-/* ── Fout-log weergave ───────────────────────────────────────────────────── */
+/* ── Fout-log weergave (legacy) ──────────────────────────────────────────── */
 
 .orpheus-error-log {
   margin-top: var(--space-2);
@@ -455,6 +455,39 @@
 
 .oph-err-line + .oph-err-line {
   border-top: 1px solid color-mix(in srgb, var(--red, #e53935) 20%, transparent);
+}
+
+/* ── Foutmelding bij mislukte download ───────────────────────────────────── */
+
+/* Rode voortgangsbalk bij een mislukte download */
+.oph-bar-error {
+  background: var(--red, #e53935) !important;
+}
+
+/* Foutmelding-banner die onder de voortgangsbalk verschijnt */
+.orpheus-error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--red, #e53935) 12%, var(--surface2));
+  border: 1px solid color-mix(in srgb, var(--red, #e53935) 30%, transparent);
+  border-radius: var(--radius-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--red, #e53935);
+}
+
+.oph-err-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.oph-err-text {
+  flex: 1;
+  word-break: break-word;
 }
 
 /* ── Responsief ──────────────────────────────────────────────────────────── */
