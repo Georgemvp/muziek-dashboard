@@ -164,3 +164,78 @@ export async function plexFirstFetch(plexUrl, lastfmUrl) {
   // Beide falen
   return { data: null, source: null };
 }
+
+// ── OrpheusDL API ─────────────────────────────────────────────────────────
+
+/**
+ * Haal de verbindingsstatus van OrpheusDL op.
+ * @returns {Promise} { connected, version, ... }
+ */
+export async function orpheusStatus() {
+  return apiFetch('/api/orpheus/status');
+}
+
+/**
+ * Haal de beschikbare platforms en hun configuratiestatus op.
+ * @returns {Promise} { platforms: [{ id, name, configured }] }
+ */
+export async function orpheusPlatforms() {
+  return apiFetch('/api/orpheus/platforms');
+}
+
+/**
+ * Zoek muziek via OrpheusDL.
+ * @param {string} query       - Zoekterm
+ * @param {string} platform    - Platform: 'all'|'tidal'|'qobuz'|'deezer'|'spotify'|'soundcloud'|'applemusic'|'beatport'|'beatsource'|'youtube'
+ * @param {string} type        - Type: 'all'|'album'|'track'
+ * @returns {Promise} { results: [{ type, id, title, artist, image, url, platform, year, tracks }] }
+ */
+export async function orpheusSearch(query, platform = 'all', type = 'all') {
+  const params = new URLSearchParams({ q: query, platform, type });
+  return apiFetch(`/api/orpheus/search?${params}`);
+}
+
+/**
+ * Start een download via OrpheusDL.
+ * @param {string} url     - URL van het te downloaden item
+ * @param {string} quality - Kwaliteitsoptie (bijv. 'hifi', 'lossless', 'high')
+ * @param {string} title   - Titel voor de weergave
+ * @param {string} artist  - Artiest voor de weergave
+ * @returns {Promise} { ok, jobId, error? }
+ */
+export async function orpheusDownload(url, quality, title, artist) {
+  const res = await fetch('/api/orpheus/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, quality, title, artist })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Serverfout ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Haal de status van een OrpheusDL-taak op.
+ * @param {string} jobId - Job-ID geretourneerd door orpheusDownload()
+ * @returns {Promise} { id, status, progress, title, artist, error? }
+ *   status: 'pending'|'running'|'done'|'error'|'stopped'
+ *   progress: 0–100
+ */
+export async function orpheusJobStatus(jobId) {
+  return apiFetch(`/api/orpheus/job/${encodeURIComponent(jobId)}`);
+}
+
+/**
+ * Stop een lopende OrpheusDL-taak.
+ * @param {string} jobId - Job-ID
+ * @returns {Promise} { ok }
+ */
+export async function orpheusJobStop(jobId) {
+  const res = await fetch(`/api/orpheus/job/${encodeURIComponent(jobId)}/stop`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error(`Serverfout ${res.status}`);
+  return res.json();
+}

@@ -178,14 +178,18 @@ document.getElementById('plex-refresh-btn')?.addEventListener('click', async () 
   finally { btn.classList.remove('spinning'); btn.disabled = false; }
 });
 
-// ── Tidal zoekbalk ────────────────────────────────────────────────────────
+// ── Tidal/OrpheusDL zoekbalk ──────────────────────────────────────────────
 document.addEventListener('input', e => {
   if (e.target?.id !== 'tidal-search') return;
   clearTimeout(state.tidalSearchTimeout);
   const q = e.target.value.trim();
   state.tidalSearchTimeout = setTimeout(() => {
-    if (state.activeView === 'downloads' && state.tidalView === 'search')
-      loadDownloadsModule().then(m => m.renderTidalSearch(q));
+    if (state.activeView === 'downloads' && state.tidalView === 'search') {
+      if (state.downloadEngine === 'orpheus')
+        loadDownloadsModule().then(m => m.renderOrpheusSearch(q));
+      else
+        loadDownloadsModule().then(m => m.renderTidalSearch(q));
+    }
   }, 400);
 });
 
@@ -286,8 +290,40 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  // Download-knop
-  const dlBtn = e.target.closest('.download-btn, .tidal-dl-btn');
+  // OrpheusDL download-knop
+  const orpheusBtn = e.target.closest('.orpheus-dl-btn');
+  if (orpheusBtn && !orpheusBtn.disabled) {
+    e.stopPropagation();
+    const url     = orpheusBtn.dataset.orpheusUrl;
+    const title   = orpheusBtn.dataset.orpheusTitle   || '';
+    const artist  = orpheusBtn.dataset.orpheusArtist  || '';
+    if (!url) return;
+    orpheusBtn.disabled = true;
+    orpheusBtn.textContent = '…';
+    try {
+      const m       = await loadDownloadsModule();
+      const quality = m.getOrpheusQuality();
+      const { orpheusDownload: _od } = await import('./api.js');
+      const result  = await _od(url, quality, title, artist);
+      if (!result.ok) throw new Error(result.error || 'download mislukt');
+      const cardEl = orpheusBtn.closest('.orpheus-card, .orpheus-url-card');
+      if (result.jobId && cardEl) {
+        state.activeOrpheusJobs.push({ jobId: result.jobId, title, artist, status: 'pending', progress: 0 });
+        m.startOrpheusJobPoll(result.jobId, cardEl);
+      } else {
+        orpheusBtn.textContent = '✓ Gestart';
+        orpheusBtn.classList.add('downloaded');
+      }
+    } catch (err) {
+      alert('OrpheusDL downloaden mislukt: ' + err.message);
+      orpheusBtn.disabled = false;
+      orpheusBtn.textContent = '⬇ Download';
+    }
+    return;
+  }
+
+  // Download-knop (Tidarr)
+  const dlBtn = e.target.closest('.download-btn, .tidal-dl-btn:not(.orpheus-dl-btn)');
   if (dlBtn) {
     e.stopPropagation();
     if (dlBtn.classList.contains('tidal-dl-btn')) {

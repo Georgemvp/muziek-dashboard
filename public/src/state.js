@@ -42,6 +42,13 @@ export const state = {
   tidarrQueueItems:   [],
   downloadedSet:      new Set(),
 
+  // ── Download Engine ──────────────────────────────────────────────────────
+  downloadEngine:            'tidarr',   // 'tidarr' | 'orpheus'
+  orpheusConnected:          false,
+  orpheusPlatform:           'all',      // actief geselecteerd platform
+  activeOrpheusJobs:         [],         // [{ jobId, title, artist, status, progress }]
+  availableOrpheusPlatforms: [],         // [{ id, name, configured }]
+
   // ── Spotify ──────────────────────────────────────────────────────────────
   spotifyEnabled: false,
   activeMood:     null,

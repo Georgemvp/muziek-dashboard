@@ -1,8 +1,84 @@
-// ── Tab: Downloads (Tidarr / Tidal) ──────────────────────────────────────
+// ── Tab: Downloads (Tidarr / Tidal + OrpheusDL) ────────────────────────────
 import { state } from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, orpheusSearch, orpheusDownload, orpheusJobStatus, orpheusJobStop } from '../api.js';
 import { esc, gradientFor, initials, fmt, markDownloaded, setContent, p } from '../helpers.js';
 import { skeletonList } from '../modules/skeleton.js';
+
+// ── OrpheusDL platform-configuratie ──────────────────────────────────────
+const ORPHEUS_PLATFORM_COLORS = {
+  tidal:       '#33ffe7',
+  qobuz:       '#0070ef',
+  deezer:      '#a238ff',
+  spotify:     '#1cc659',
+  soundcloud:  '#ff5502',
+  applemusic:  '#FA586A',
+  beatport:    '#00ff89',
+  beatsource:  '#16a8f4',
+  youtube:     '#FF0000',
+};
+
+const ORPHEUS_PLATFORM_LABELS = {
+  tidal: 'Tidal', qobuz: 'Qobuz', deezer: 'Deezer',
+  spotify: 'Spotify', soundcloud: 'SoundCloud', applemusic: 'Apple Music',
+  beatport: 'Beatport', beatsource: 'Beatsource', youtube: 'YouTube',
+};
+
+const ORPHEUS_QUALITY_OPTIONS = {
+  tidal:      [['atmos','Atmos'],['hifi','HiFi'],['lossless','Lossless'],['high','High'],['low','Low']],
+  qobuz:      [['hifi','HiFi'],['lossless','Lossless'],['high','High']],
+  deezer:     [['lossless','Lossless'],['high','High'],['low','Low']],
+  spotify:    [['high','High'],['low','Low']],
+  soundcloud: [['high','High']],
+  applemusic: [['high','High']],
+  beatport:   [['lossless','Lossless'],['high','High'],['low','Low']],
+  beatsource: [['lossless','Lossless'],['high','High'],['low','Low']],
+  youtube:    [['opus','Opus'],['aac','AAC'],['mp3','MP3']],
+  all:        [['hifi','HiFi'],['lossless','Lossless'],['high','High'],['low','Low'],['atmos','Atmos'],['opus','Opus'],['aac','AAC'],['mp3','MP3']],
+};
+
+/** URL-patronen voor directe download via OrpheusDL */
+const ORPHEUS_URL_PATTERNS = [
+  { pattern: /tidal\.com/i,          platform: 'tidal'       },
+  { pattern: /open\.qobuz\.com/i,    platform: 'qobuz'       },
+  { pattern: /deezer\.com/i,         platform: 'deezer'      },
+  { pattern: /open\.spotify\.com/i,  platform: 'spotify'     },
+  { pattern: /soundcloud\.com/i,     platform: 'soundcloud'  },
+  { pattern: /music\.apple\.com/i,   platform: 'applemusic'  },
+  { pattern: /beatport\.com/i,       platform: 'beatport'    },
+  { pattern: /beatsource\.com/i,     platform: 'beatsource'  },
+  { pattern: /youtube\.com|youtu\.be/i, platform: 'youtube'  },
+];
+
+/** Detect platform uit URL */
+function detectPlatformFromUrl(url) {
+  for (const { pattern, platform } of ORPHEUS_URL_PATTERNS) {
+    if (pattern.test(url)) return platform;
+  }
+  return null;
+}
+
+/** Kwaliteitsopties voor het actieve platform */
+export function getOrpheusQuality() {
+  return localStorage.getItem('orpheusQuality') || 'hifi';
+}
+
+function setOrpheusQuality(val) {
+  localStorage.setItem('orpheusQuality', val);
+}
+
+/** Render kwaliteitsopties als <select> voor een platform */
+function orpheusQualitySelectHtml(platform) {
+  const opts = ORPHEUS_QUALITY_OPTIONS[platform] || ORPHEUS_QUALITY_OPTIONS.all;
+  const saved = getOrpheusQuality();
+  return `
+    <label class="orpheus-quality-wrap" title="Download kwaliteit">
+      <select id="orpheus-quality" class="orpheus-quality-sel" aria-label="Kwaliteit kiezen">
+        ${opts.map(([val, label]) =>
+          `<option value="${val}"${val === saved ? ' selected' : ''}>${label}</option>`
+        ).join('')}
+      </select>
+    </label>`;
+}
 
 // ── Download-kwaliteit ─────────────────────────────────────────────────────
 export function getDownloadQuality() {
@@ -73,6 +149,205 @@ export function tidalResultCard(item) {
       </div>
       <button class="tidal-dl-btn" data-dlurl="${esc(item.url)}" title="Download via Tidarr">⬇ Download</button>
     </div>`;
+}
+
+// ── OrpheusDL zoekresultaat card ──────────────────────────────────────────
+export function orpheusResultCard(item) {
+  const platform = item.platform || 'unknown';
+  const color = ORPHEUS_PLATFORM_COLORS[platform] || '#888';
+  const label = ORPHEUS_PLATFORM_LABELS[platform] || platform;
+  const imgEl = item.image
+    ? `<img class="tidal-img" src="${esc(item.image)}" alt="${esc(item.title)} by ${esc(item.artist)}" loading="lazy" decoding="async"
+         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="tidal-ph" style="display:none;background:${gradientFor(item.title)}">${initials(item.title)}</div>`
+    : `<div class="tidal-ph" style="background:${gradientFor(item.title)}">${initials(item.title)}</div>`;
+  const meta = [
+    item.type === 'album' ? 'Album' : 'Nummer',
+    item.year,
+    item.album && item.type === 'track' ? item.album : null,
+    item.tracks ? `${item.tracks} nummers` : null
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="tidal-card orpheus-card" data-orpheus-jobid="">
+      <div class="tidal-cover">${imgEl}</div>
+      <div class="tidal-info">
+        <div class="tidal-title">${esc(item.title)}</div>
+        <div class="tidal-artist artist-link" data-artist="${esc(item.artist)}">${esc(item.artist)}</div>
+        <div class="tidal-meta">${esc(meta)}</div>
+      </div>
+      <div class="orpheus-card-actions">
+        <span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(label)}</span>
+        <button class="tidal-dl-btn orpheus-dl-btn"
+                data-orpheus-url="${esc(item.url || '')}"
+                data-orpheus-title="${esc(item.title)}"
+                data-orpheus-artist="${esc(item.artist)}"
+                data-orpheus-platform="${esc(platform)}"
+                title="Download via OrpheusDL">⬇ Download</button>
+      </div>
+      <div class="orpheus-progress-wrap" style="display:none">
+        <div class="q-bar"><div class="q-bar-fill orpheus-bar-fill" style="width:0%"></div></div>
+        <div class="orpheus-progress-row">
+          <span class="q-status q-pending orpheus-job-status">In wachtrij</span>
+          <span class="orpheus-pct">0%</span>
+          <button class="orpheus-stop-btn" title="Stop download" aria-label="Stop download">■</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── OrpheusDL job polling ─────────────────────────────────────────────────
+const _orpheusPollers = new Map(); // jobId → intervalId
+
+export function startOrpheusJobPoll(jobId, cardEl) {
+  if (_orpheusPollers.has(jobId)) return;
+
+  const progressWrap = cardEl?.querySelector('.orpheus-progress-wrap');
+  const barFill      = cardEl?.querySelector('.orpheus-bar-fill');
+  const statusEl     = cardEl?.querySelector('.orpheus-job-status');
+  const pctEl        = cardEl?.querySelector('.orpheus-pct');
+  const dlBtn        = cardEl?.querySelector('.orpheus-dl-btn');
+  const stopBtn      = cardEl?.querySelector('.orpheus-stop-btn');
+
+  if (progressWrap) progressWrap.style.display = '';
+  if (dlBtn) { dlBtn.disabled = true; dlBtn.textContent = '…'; }
+
+  const intervalId = setInterval(async () => {
+    try {
+      const job = await orpheusJobStatus(jobId);
+      const pct = typeof job.progress === 'number' ? Math.round(job.progress) : 0;
+      if (barFill) barFill.style.width = `${pct}%`;
+      if (pctEl)   pctEl.textContent   = `${pct}%`;
+
+      const statusMap = {
+        pending: { label: 'In wachtrij', cls: 'q-pending' },
+        running: { label: 'Downloaden…', cls: 'q-active'  },
+        done:    { label: '✓ Klaar',     cls: 'q-done'    },
+        error:   { label: '⚠ Fout',      cls: 'q-error'   },
+        stopped: { label: '■ Gestopt',   cls: 'q-pending'  },
+      };
+      const s = statusMap[job.status] || { label: job.status, cls: 'q-pending' };
+      if (statusEl) {
+        statusEl.textContent = s.label;
+        statusEl.className = `q-status ${s.cls} orpheus-job-status`;
+      }
+
+      if (job.status === 'done' || job.status === 'error' || job.status === 'stopped') {
+        clearInterval(intervalId);
+        _orpheusPollers.delete(jobId);
+        if (stopBtn) stopBtn.style.display = 'none';
+        if (job.status === 'done' && dlBtn) {
+          dlBtn.textContent = '✓';
+          dlBtn.classList.add('dl-done');
+        } else if (dlBtn) {
+          dlBtn.disabled = false;
+          dlBtn.textContent = '⬇ Download';
+        }
+        // Update activeOrpheusJobs
+        state.activeOrpheusJobs = state.activeOrpheusJobs.filter(j => j.jobId !== jobId);
+      } else {
+        // Update activeOrpheusJobs progress
+        const jobEntry = state.activeOrpheusJobs.find(j => j.jobId === jobId);
+        if (jobEntry) { jobEntry.progress = pct; jobEntry.status = job.status; }
+      }
+    } catch {
+      clearInterval(intervalId);
+      _orpheusPollers.delete(jobId);
+    }
+  }, 800);
+
+  _orpheusPollers.set(jobId, intervalId);
+
+  // Stop-knop handler
+  stopBtn?.addEventListener('click', async () => {
+    try { await orpheusJobStop(jobId); } catch { /* stil falen */ }
+    clearInterval(intervalId);
+    _orpheusPollers.delete(jobId);
+    if (statusEl) { statusEl.textContent = '■ Gestopt'; statusEl.className = 'q-status q-pending orpheus-job-status'; }
+    if (dlBtn) { dlBtn.disabled = false; dlBtn.textContent = '⬇ Download'; }
+  }, { once: true });
+}
+
+// ── OrpheusDL zoeken ──────────────────────────────────────────────────────
+export async function renderOrpheusSearch(query) {
+  const target = document.getElementById('tidal-content');
+  if (!target) return;
+  const q = (query || '').trim();
+
+  // Controleer of het een directe URL is
+  const urlPlatform = q.startsWith('http') ? detectPlatformFromUrl(q) : null;
+  if (urlPlatform) {
+    renderOrpheusUrlDownload(q, urlPlatform, target);
+    return;
+  }
+
+  if (q.length < 2) {
+    target.innerHTML = `<div class="empty">Begin met typen om te zoeken via OrpheusDL.</div>`;
+    return;
+  }
+  target.innerHTML = `<div class="loading"><div class="spinner"></div>Zoeken via OrpheusDL (${ORPHEUS_PLATFORM_LABELS[state.orpheusPlatform] || state.orpheusPlatform})…</div>`;
+  try {
+    const d = await orpheusSearch(q, state.orpheusPlatform);
+    const results = d.results || [];
+    if (d.error) { target.innerHTML = `<div class="error-box">⚠️ ${esc(d.error)}</div>`; return; }
+    if (!results.length) {
+      target.innerHTML = `<div class="empty">Geen resultaten voor "<strong>${esc(q)}</strong>" via OrpheusDL.</div>`;
+      return;
+    }
+    const albums = results.filter(r => r.type === 'album');
+    const tracks = results.filter(r => r.type === 'track');
+    // Kwaliteitsselector boven resultaten
+    const ql = orpheusQualitySelectHtml(state.orpheusPlatform);
+    let html = `<div class="orpheus-quality-row">${ql}</div>`;
+    if (albums.length)
+      html += `<div class="section-title">Albums (${albums.length})</div>
+        <div class="tidal-grid">${albums.map(orpheusResultCard).join('')}</div>`;
+    if (tracks.length)
+      html += `<div class="section-title" style="margin-top:1.5rem">Nummers (${tracks.length})</div>
+        <div class="tidal-grid">${tracks.map(orpheusResultCard).join('')}</div>`;
+    target.innerHTML = html;
+
+    // Kwaliteitswijziging opslaan
+    target.querySelector('#orpheus-quality')?.addEventListener('change', e => {
+      setOrpheusQuality(e.target.value);
+    });
+  } catch (e) {
+    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
+  }
+}
+
+/** Render een directe URL download kaart (OrpheusDL) */
+function renderOrpheusUrlDownload(url, platform, target) {
+  const label   = ORPHEUS_PLATFORM_LABELS[platform] || platform;
+  const color   = ORPHEUS_PLATFORM_COLORS[platform] || '#888';
+  const ql      = orpheusQualitySelectHtml(platform);
+  target.innerHTML = `
+    <div class="orpheus-url-card">
+      <div class="orpheus-url-info">
+        <span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(label)}</span>
+        <div class="orpheus-url-text">${esc(url)}</div>
+      </div>
+      <div class="orpheus-url-actions">
+        ${ql}
+        <button class="tidal-dl-btn orpheus-dl-btn orpheus-url-dl-btn"
+                data-orpheus-url="${esc(url)}"
+                data-orpheus-title="${esc(url)}"
+                data-orpheus-artist=""
+                data-orpheus-platform="${esc(platform)}">
+          ⬇ Direct downloaden
+        </button>
+      </div>
+      <div class="orpheus-progress-wrap" style="display:none">
+        <div class="q-bar"><div class="q-bar-fill orpheus-bar-fill" style="width:0%"></div></div>
+        <div class="orpheus-progress-row">
+          <span class="q-status q-pending orpheus-job-status">In wachtrij</span>
+          <span class="orpheus-pct">0%</span>
+          <button class="orpheus-stop-btn" title="Stop download">■</button>
+        </div>
+      </div>
+    </div>`;
+  target.querySelector('#orpheus-quality')?.addEventListener('change', e => {
+    setOrpheusQuality(e.target.value);
+  });
 }
 
 // ── Tidal zoeken ──────────────────────────────────────────────────────────
@@ -230,8 +505,11 @@ export function setTidalView(view) {
   });
   const sw = document.getElementById('tidal-search-wrap');
   if (sw) sw.style.display = view === 'search' ? '' : 'none';
-  if (view === 'search')
-    renderTidalSearch(document.getElementById('tidal-search')?.value || '');
+  if (view === 'search') {
+    const q = document.getElementById('tidal-search')?.value || '';
+    if (state.downloadEngine === 'orpheus') renderOrpheusSearch(q);
+    else renderTidalSearch(q);
+  }
   else if (view === 'queue')   renderTidalQueue();
   else if (view === 'history') renderTidalHistory();
 }
@@ -512,6 +790,12 @@ export async function triggerTidarrDownload(artist, album, btn) {
 
 // ── Tidal tab loader ──────────────────────────────────────────────────────
 export async function loadTidal() {
+  const isOrpheus = state.downloadEngine === 'orpheus';
+  const platformLabel = ORPHEUS_PLATFORM_LABELS[state.orpheusPlatform] || state.orpheusPlatform;
+  const searchPlaceholder = isOrpheus
+    ? `Zoek via OrpheusDL${state.orpheusPlatform !== 'all' ? ' · ' + platformLabel : ''}… of plak een URL`
+    : 'Zoek albums of tracks op Tidal…';
+
   setContent(`
     <div class="tidal-page">
       <div class="tidal-tabs-row">
@@ -522,19 +806,57 @@ export async function loadTidal() {
         </div>
         <div class="tidal-tabs-actions">
           <span class="tidarr-status-pill off" id="tidarr-status-pill"><span class="tidarr-dot"></span><span id="tidarr-status-text">Tidarr status…</span></span>
+          ${isOrpheus ? `<span class="tidarr-status-pill off" id="orpheus-status-pill"><span class="tidarr-dot"></span><span id="orpheus-status-text">OrpheusDL status…</span></span>` : ''}
           <button class="tool-btn" id="btn-open-tidarr" type="button">Open Tidarr</button>
         </div>
       </div>
+      ${isOrpheus ? `<div class="orpheus-engine-banner">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+        Download engine: <strong>OrpheusDL</strong>${state.orpheusPlatform !== 'all' ? ` · Platform: <strong>${esc(platformLabel)}</strong>` : ''}
+        — <button class="orpheus-engine-settings-link" type="button">Wijzig in ⚙ Instellingen</button>
+      </div>` : ''}
       <div class="tidal-search-wrap" id="tidal-search-wrap">
-        <input id="tidal-search" class="tidal-search" type="search" placeholder="Zoek albums of tracks op Tidal…" autocomplete="off">
+        <input id="tidal-search" class="tidal-search" type="search"
+               placeholder="${esc(searchPlaceholder)}" autocomplete="off">
       </div>
-      <div id="tidal-content"><div class="empty">Begin met typen om te zoeken op Tidal.</div></div>
+      <div id="tidal-content"><div class="empty">Begin met typen om te zoeken${isOrpheus ? ' via OrpheusDL' : ' op Tidal'}.</div></div>
     </div>
   `);
+
+  // Instellingen-link in banner
+  document.querySelector('.orpheus-engine-settings-link')?.addEventListener('click', () => {
+    document.querySelector('.sidebar-settings-btn')?.click();
+  });
+
+  // Herlaad bij engine/platform wisseling
+  const reloadHandler = () => {
+    if (state.activeView === 'downloads') loadTidal();
+  };
+  document.addEventListener('engine:changed',   reloadHandler, { once: true });
+  document.addEventListener('platform:changed', reloadHandler, { once: true });
+
   await loadTidarrStatus();
+  if (isOrpheus) await loadOrpheusStatusPill();
   await refreshTidarrQueueBadge();
   setTidalView(state.tidalView);
   startTidarrQueuePolling();
+}
+
+async function loadOrpheusStatusPill() {
+  const pill = document.getElementById('orpheus-status-pill');
+  const text = document.getElementById('orpheus-status-text');
+  if (!pill || !text) return;
+  try {
+    const { apiFetch: _apiFetch } = await import('../api.js');
+    const d = await _apiFetch('/api/orpheus/status');
+    state.orpheusConnected = !!d.connected;
+    pill.className = `tidarr-status-pill ${d.connected ? 'on' : 'off'}`;
+    text.textContent = d.connected ? 'OrpheusDL · verbonden' : 'OrpheusDL offline';
+  } catch {
+    state.orpheusConnected = false;
+    if (pill) pill.className = 'tidarr-status-pill off';
+    if (text) text.textContent = 'OrpheusDL offline';
+  }
 }
 
 export function loadDownloads() {

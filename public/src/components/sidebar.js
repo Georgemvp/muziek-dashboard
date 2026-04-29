@@ -3,7 +3,7 @@
 // Desktop: collapsed/open inline, Mobiel: off-canvas overlay
 
 import { state } from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, orpheusStatus, orpheusPlatforms } from '../api.js';
 import { esc } from '../helpers.js';
 
 const appShell = document.querySelector('.app-shell');
@@ -65,10 +65,184 @@ export function initSidebar() {
   // ── Listen for router close event ──────────────────────────────────────
   document.addEventListener('sidebar:close', () => setSidebarOpen(false));
 
+  // ── Settings panel ────────────────────────────────────────────────────
+  initSettingsPanel();
+
   // ── Load sidebar playlists ────────────────────────────────────────────
   loadSidebarPlaylists().catch(err => {
     console.error('Failed to load sidebar playlists:', err);
   });
+}
+
+// ── Settings Panel ────────────────────────────────────────────────────────
+
+const PLATFORMS = [
+  { id: 'all',         label: 'All',         color: '#888' },
+  { id: 'tidal',       label: 'Tidal',       color: '#33ffe7' },
+  { id: 'qobuz',       label: 'Qobuz',       color: '#0070ef' },
+  { id: 'deezer',      label: 'Deezer',      color: '#a238ff' },
+  { id: 'spotify',     label: 'Spotify',     color: '#1cc659' },
+  { id: 'soundcloud',  label: 'SoundCloud',  color: '#ff5502' },
+  { id: 'applemusic',  label: 'Apple Music', color: '#FA586A' },
+  { id: 'beatport',    label: 'Beatport',    color: '#00ff89' },
+  { id: 'beatsource',  label: 'Beatsource',  color: '#16a8f4' },
+  { id: 'youtube',     label: 'YouTube',     color: '#FF0000' },
+];
+
+function initSettingsPanel() {
+  const sidebarEl = document.getElementById('sidebar');
+  if (!sidebarEl) return;
+
+  // Herstel geselecteerde engine + platform uit localStorage
+  const savedEngine   = localStorage.getItem('downloadEngine')   || 'tidarr';
+  const savedPlatform = localStorage.getItem('orpheusPlatform')  || 'all';
+  state.downloadEngine  = savedEngine;
+  state.orpheusPlatform = savedPlatform;
+
+  // ── Bouw settings panel HTML ──────────────────────────────────────────
+  const panel = document.createElement('div');
+  panel.className = 'sidebar-settings-panel';
+  panel.id = 'sidebar-settings-panel';
+  panel.setAttribute('aria-hidden', 'true');
+  panel.innerHTML = `
+    <div class="ssp-header">
+      <span class="ssp-title">Instellingen</span>
+      <button class="ssp-close-btn" aria-label="Instellingen sluiten">✕</button>
+    </div>
+
+    <div class="ssp-group">
+      <div class="ssp-group-label">Download engine</div>
+      <div class="ssp-engine-toggle">
+        <button class="ssp-engine-btn${savedEngine === 'tidarr' ? ' active' : ''}" data-engine="tidarr">
+          <span class="ssp-status-dot" id="dot-tidarr"></span>Tidarr
+        </button>
+        <button class="ssp-engine-btn${savedEngine === 'orpheus' ? ' active' : ''}" data-engine="orpheus">
+          <span class="ssp-status-dot" id="dot-orpheus"></span>OrpheusDL
+        </button>
+      </div>
+    </div>
+
+    <div class="ssp-group" id="ssp-platform-group" style="${savedEngine === 'orpheus' ? '' : 'display:none'}">
+      <div class="ssp-group-label">Zoekplatform</div>
+      <div class="ssp-pills" id="ssp-platform-pills">
+        ${PLATFORMS.map(p => `
+          <button class="ssp-pill${savedPlatform === p.id ? ' active' : ''}"
+                  data-platform="${p.id}"
+                  style="${p.id !== 'all' ? `--platform-color:${p.color}` : ''}">
+            ${p.id !== 'all' ? `<span class="ssp-pill-dot" style="background:${p.color}"></span>` : ''}
+            ${p.label}
+          </button>`).join('')}
+      </div>
+      <div class="ssp-platform-list" id="ssp-platform-list">
+        <div class="ssp-loading-text">Platforms laden…</div>
+      </div>
+    </div>
+  `;
+  sidebarEl.appendChild(panel);
+
+  // ── Sluiten via close-knop ────────────────────────────────────────────
+  panel.querySelector('.ssp-close-btn').addEventListener('click', closeSettingsPanel);
+
+  // ── Settings-knop opent panel ─────────────────────────────────────────
+  document.querySelector('.sidebar-settings-btn')?.addEventListener('click', toggleSettingsPanel);
+
+  // ── Engine toggle ─────────────────────────────────────────────────────
+  panel.querySelectorAll('.ssp-engine-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const engine = btn.dataset.engine;
+      state.downloadEngine = engine;
+      localStorage.setItem('downloadEngine', engine);
+      panel.querySelectorAll('.ssp-engine-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.engine === engine));
+      const platformGroup = document.getElementById('ssp-platform-group');
+      if (platformGroup) platformGroup.style.display = engine === 'orpheus' ? '' : 'none';
+      // Vernieuw zoekresultaten als downloads-view actief is
+      document.dispatchEvent(new CustomEvent('engine:changed', { detail: { engine } }));
+    });
+  });
+
+  // ── Platform pills ────────────────────────────────────────────────────
+  panel.querySelectorAll('.ssp-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const platform = btn.dataset.platform;
+      state.orpheusPlatform = platform;
+      localStorage.setItem('orpheusPlatform', platform);
+      panel.querySelectorAll('.ssp-pill').forEach(b =>
+        b.classList.toggle('active', b.dataset.platform === platform));
+      document.dispatchEvent(new CustomEvent('platform:changed', { detail: { platform } }));
+    });
+  });
+
+  // ── Laad verbindingsstatus ────────────────────────────────────────────
+  updateEngineStatus();
+}
+
+function toggleSettingsPanel() {
+  const panel = document.getElementById('sidebar-settings-panel');
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
+  panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  if (isOpen) updateEngineStatus();
+}
+
+function closeSettingsPanel() {
+  const panel = document.getElementById('sidebar-settings-panel');
+  if (!panel) return;
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+}
+
+/**
+ * Controleer verbindingsstatus van Tidarr en OrpheusDL en update de status-dots.
+ */
+export async function updateEngineStatus() {
+  // Tidarr status
+  try {
+    const d = await apiFetch('/api/tidarr/status');
+    const dot = document.getElementById('dot-tidarr');
+    if (dot) dot.classList.toggle('connected', !!d.connected);
+  } catch {
+    const dot = document.getElementById('dot-tidarr');
+    if (dot) dot.classList.remove('connected');
+  }
+
+  // OrpheusDL status
+  try {
+    const d = await orpheusStatus();
+    state.orpheusConnected = !!d.connected;
+    const dot = document.getElementById('dot-orpheus');
+    if (dot) dot.classList.toggle('connected', !!d.connected);
+  } catch {
+    state.orpheusConnected = false;
+    const dot = document.getElementById('dot-orpheus');
+    if (dot) dot.classList.remove('connected');
+  }
+
+  // Platform lijst
+  loadOrpheusPlatformList();
+}
+
+async function loadOrpheusPlatformList() {
+  const listEl = document.getElementById('ssp-platform-list');
+  if (!listEl) return;
+  try {
+    const data = await orpheusPlatforms();
+    const platforms = data.platforms || [];
+    state.availableOrpheusPlatforms = platforms;
+    if (!platforms.length) {
+      listEl.innerHTML = '<div class="ssp-loading-text">Geen platforms gevonden</div>';
+      return;
+    }
+    listEl.innerHTML = platforms.map(p => `
+      <div class="ssp-platform-row">
+        <span class="ssp-platform-name">${esc(p.name)}</span>
+        <span class="ssp-platform-badge ${p.configured ? 'configured' : 'unconfigured'}">
+          ${p.configured ? '✓ Actief' : '✗ Niet geconfigureerd'}
+        </span>
+      </div>`).join('');
+  } catch {
+    listEl.innerHTML = '<div class="ssp-loading-text">Status ophalen mislukt</div>';
+  }
 }
 
 /**
