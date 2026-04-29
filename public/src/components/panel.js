@@ -1,6 +1,6 @@
 // ── Artiest detail-panel ──────────────────────────────────────────────────
 import { state } from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, orpheusSearch, orpheusDownload } from '../api.js';
 import {
   esc, initials, gradientFor, sanitizeArtistName,
   countryFlag, tagsHtml, bookmarkBtn, downloadBtn, proxyImg
@@ -59,8 +59,17 @@ export function openArtistPanel(name) {
         const plexPlayBtn = state.plexOk && a.inPlex && a.ratingKey
           ? `<button class="plex-play-album-btn" data-rating-key="${esc(a.ratingKey)}" title="Afspelen op Plex">▶ Speel af</button>`
           : '';
+        // Download-knoppen: alleen tonen als het album NIET al in Plex staat.
+        // Tidarr-knop via de bestaande downloadBtn helper;
+        // Orpheus-knop doet direct zoeken + downloaden vanuit het panel.
+        const orpheusBtn = !a.inPlex
+          ? `<button class="panel-orpheus-btn"
+               data-oph-artist="${esc(name)}"
+               data-oph-album="${esc(a.name)}"
+               title="Zoeken en downloaden via OrpheusDL">⬇ Orpheus</button>`
+          : '';
         albumsHtml += `<div class="panel-album-row">${imgEl}
-          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${plexPlayBtn}${downloadBtn(name, a.name, a.inPlex)}</div>`;
+          <span class="panel-album-name">${esc(a.name)}</span>${plexMark}${plexPlayBtn}${downloadBtn(name, a.name, a.inPlex)}${orpheusBtn}</div>`;
       }
       albumsHtml += `</div>`;
     }
@@ -98,6 +107,50 @@ export function openArtistPanel(name) {
           btn.disabled = false;
           btn.textContent = ok ? '▶ Speelt af' : '▶ Speel af';
           if (ok) setTimeout(() => { btn.textContent = '▶ Speel af'; }, 3000);
+        }
+      });
+    });
+
+    // Orpheus album download knoppen
+    // Zoekt het album op via OrpheusDL en start direct een download
+    // van het eerste gevonden resultaat op het geselecteerde platform.
+    panelContent.querySelectorAll('.panel-orpheus-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const artist  = btn.dataset.ophArtist;
+        const album   = btn.dataset.ophAlbum;
+        const origText = btn.textContent;
+        btn.disabled   = true;
+        btn.textContent = '…';
+
+        try {
+          // Zoek het album op alle platforms (type=album)
+          const searchResult = await orpheusSearch(`${artist} ${album}`, 'all', 'album');
+          const results = searchResult?.results || [];
+          if (!results.length || !results[0]?.url) {
+            throw new Error('Geen resultaten gevonden in OrpheusDL');
+          }
+
+          const first   = results[0];
+          const quality = localStorage.getItem('orpheusQuality') || 'hifi';
+          const dlResult = await orpheusDownload(first.url, quality, first.title || album, first.artist || artist);
+
+          if (!dlResult?.ok) throw new Error(dlResult?.error || 'Download mislukt');
+
+          btn.textContent = '✓ Gestart';
+          setTimeout(() => {
+            btn.disabled    = false;
+            btn.textContent = origText;
+          }, 3000);
+        } catch (err) {
+          btn.disabled    = false;
+          btn.textContent = origText;
+          // Toon fout als kleine toast onder de knop
+          const errEl = document.createElement('div');
+          errEl.style.cssText = 'color:var(--color-error,#e05a2b);font-size:10px;margin-top:2px';
+          errEl.textContent   = '⚠ ' + err.message;
+          btn.parentNode.appendChild(errEl);
+          setTimeout(() => errEl.remove(), 4000);
         }
       });
     });

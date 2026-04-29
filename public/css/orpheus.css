@@ -378,6 +378,60 @@
   white-space: nowrap;
 }
 
+/* ── Plex-status in zoekresultaten ──────────────────────────────────────── */
+
+/* Kaart die al in Plex staat: iets gedempter weergegeven */
+.oph-in-plex {
+  opacity: 0.65;
+}
+.oph-in-plex:hover {
+  opacity: 0.9;
+}
+
+/* Plex-badge in de kaart-acties kolom */
+.oph-plex-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #1cc659 18%, var(--surface2));
+  border: 1px solid color-mix(in srgb, #1cc659 35%, transparent);
+  color: #1cc659;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+/* Panel download-knop voor Orpheus (in artiest-panel album-rij) */
+.panel-orpheus-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.panel-orpheus-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface2));
+}
+.panel-orpheus-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Responsief ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

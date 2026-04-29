@@ -133,6 +133,7 @@ function resultCardHtml(item) {
   const platform = item.platform || getActivePlatform() || 'unknown';
   const color    = PLATFORM_COLORS[platform] || '#888';
   const label    = PLATFORM_LABELS[platform] || platform;
+  const inPlex   = !!item.inPlex;
   const imgEl    = item.image
     ? `<img class="tidal-img" src="${esc(item.image)}" alt="${esc(item.title)} by ${esc(item.artist || '')}"
            loading="lazy" decoding="async"
@@ -145,8 +146,22 @@ function resultCardHtml(item) {
                   : 'Track';
   const meta = [typeLabel, item.year, item.tracks ? `${item.tracks} nrs` : null]
     .filter(Boolean).join(' · ');
+
+  // Acties: toon Plex-badge als het item al in de bibliotheek staat,
+  // anders de normale download-knop.
+  const actionsHtml = inPlex
+    ? `<span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(label)}</span>
+       <span class="oph-plex-badge" title="Al in je Plex bibliotheek">▶ In Plex</span>`
+    : `<span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(label)}</span>
+       <button class="tidal-dl-btn orpheus-dl-btn oph-dl-btn"
+               data-orpheus-url="${esc(item.url || '')}"
+               data-orpheus-title="${esc(item.title)}"
+               data-orpheus-artist="${esc(item.artist || '')}"
+               data-orpheus-platform="${esc(platform)}"
+               title="Download via OrpheusDL">⬇ Download</button>`;
+
   return `
-    <div class="tidal-card orpheus-card oph-result-card" data-orpheus-jobid="">
+    <div class="tidal-card orpheus-card oph-result-card${inPlex ? ' oph-in-plex' : ''}" data-orpheus-jobid="">
       <div class="tidal-cover">${imgEl}</div>
       <div class="tidal-info">
         <div class="tidal-title">${esc(item.title)}</div>
@@ -154,13 +169,7 @@ function resultCardHtml(item) {
         <div class="tidal-meta">${esc(meta)}</div>
       </div>
       <div class="orpheus-card-actions">
-        <span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(label)}</span>
-        <button class="tidal-dl-btn orpheus-dl-btn oph-dl-btn"
-                data-orpheus-url="${esc(item.url || '')}"
-                data-orpheus-title="${esc(item.title)}"
-                data-orpheus-artist="${esc(item.artist || '')}"
-                data-orpheus-platform="${esc(platform)}"
-                title="Download via OrpheusDL">⬇ Download</button>
+        ${actionsHtml}
       </div>
       <div class="orpheus-progress-wrap" style="display:none">
         <div class="q-bar"><div class="q-bar-fill orpheus-bar-fill" style="width:0%"></div></div>

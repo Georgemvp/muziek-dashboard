@@ -66,6 +66,8 @@ module.exports = function(app, deps) {
     addDownload,
     getCache,
     setCache,
+    albumInPlex,
+    artistInPlex,
   } = deps;
 
   // ── GET /api/orpheus/status ─────────────────────────────────────────────────
@@ -152,6 +154,20 @@ module.exports = function(app, deps) {
 
     try {
       const result = await searchOrpheus(q, platform, type);
+
+      // Verrijk elk resultaat met een inPlex vlag zodat de frontend
+      // dubbele downloads kan voorkomen.
+      if (Array.isArray(result.results)) {
+        for (const item of result.results) {
+          if (type === 'artist') {
+            item.inPlex = artistInPlex ? artistInPlex(item.title || item.name || '') : false;
+          } else {
+            // album, track en playlist: controleer op artiest + titel combinatie
+            item.inPlex = albumInPlex ? albumInPlex(item.artist || '', item.title || '') : false;
+          }
+        }
+      }
+
       res.set('Cache-Control', 'private, max-age=300');
       res.json(result);
     } catch (e) {
