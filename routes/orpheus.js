@@ -20,7 +20,7 @@ const QUALITY_OPTIONS = {
 
 const ALL_PLATFORMS = Object.keys(QUALITY_OPTIONS);
 const ALL_QUALITIES = [...new Set(Object.values(QUALITY_OPTIONS).flat())];
-const VALID_TYPES   = ['track', 'album', 'artist', 'playlist'];
+const VALID_TYPES   = ['all', 'track', 'album', 'artist', 'playlist'];
 
 /**
  * Detecteer het platform op basis van een URL.

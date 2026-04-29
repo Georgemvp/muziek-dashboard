@@ -168,13 +168,37 @@ function parseSearchLog(logLines) {
 // ── Publieke functies ─────────────────────────────────────────────────────────
 
 /**
+ * Voer één zoekopdracht uit voor een specifiek type en retourneer genormaliseerde resultaten.
+ * Interne hulpfunctie gebruikt door searchOrpheus.
+ *
+ * @param {string} q        - Zoekterm (al getrimd)
+ * @param {string} platform - Platform (of "all")
+ * @param {string} type     - Specifiek type: "track" | "album" | "artist" | "playlist"
+ * @returns {Promise<{ results: Array, jobId: string, status: string }>}
+ */
+async function searchOrpheusSingle(q, platform, type) {
+  const { job_id: jobId } = await orpheusFetch('/api/search', {
+    method: 'POST',
+    body:   JSON.stringify({ platform, type, query: q })
+  });
+
+  if (!jobId) throw new Error(`OrpheusDL retourneerde geen job_id voor zoekopdracht (type=${type})`);
+
+  const job = await pollJob(jobId, { interval: 800, maxWait: 60_000 });
+  const results = parseSearchLog(job.log || []);
+  return { results, jobId, status: job.status };
+}
+
+/**
  * Start een zoekopdracht via OrpheusDL, wacht tot de job klaar is en
  * retourneert genormaliseerde resultaten.
  *
  * @param {string} query    - Zoekterm
  * @param {string} platform - Platform (of "all" voor alle tegelijk)
- * @param {string} type     - "track" | "album" | "artist" | "playlist"
- * @returns {Promise<{ results: Array, jobId: string }>}
+ * @param {string} type     - "all" | "track" | "album" | "artist" | "playlist"
+ *                            "all" voert parallelle zoekopdrachten uit voor elk type
+ *                            en voegt de resultaten samen.
+ * @returns {Promise<{ results: Array, jobId: string|null }>}
  */
 async function searchOrpheus(query, platform = 'all', type = 'track') {
   const q = (query || '').trim();
@@ -184,22 +208,39 @@ async function searchOrpheus(query, platform = 'all', type = 'track') {
   const cached   = getCache(cacheKey, 300_000); // 5 min
   if (cached) return cached;
 
-  // Start de zoekopdracht
-  const { job_id: jobId } = await orpheusFetch('/api/search', {
-    method: 'POST',
-    body:   JSON.stringify({ platform, type, query: q })
-  });
+  // type=all → parallelle zoekopdrachten per type, resultaten samenvoegen
+  if (type === 'all') {
+    const types   = ['track', 'album', 'artist', 'playlist'];
+    const settled = await Promise.allSettled(
+      types.map(t => searchOrpheusSingle(q, platform, t))
+    );
 
-  if (!jobId) throw new Error('OrpheusDL retourneerde geen job_id voor zoekopdracht');
+    const allResults = [];
+    let   lastJobId  = null;
 
-  // Poll totdat klaar (zoeken duurt usually <10s)
-  const job = await pollJob(jobId, { interval: 800, maxWait: 60_000 });
+    for (let i = 0; i < settled.length; i++) {
+      const { status, value } = settled[i];
+      if (status === 'fulfilled' && value.results.length > 0) {
+        allResults.push(...value.results);
+        lastJobId = value.jobId;
+      }
+    }
 
-  const results = parseSearchLog(job.log || []);
-  const payload = { results, jobId, status: job.status };
+    const payload = { results: allResults, jobId: lastJobId, status: 'done' };
+
+    if (allResults.length > 0) {
+      setCache(cacheKey, payload);
+    }
+
+    return payload;
+  }
+
+  // Enkel type → één zoekopdracht
+  const { results, jobId, status } = await searchOrpheusSingle(q, platform, type);
+  const payload = { results, jobId, status };
 
   // Alleen cachen als de job succesvol was
-  if (job.status === 'done' && results.length > 0) {
+  if (status === 'done' && results.length > 0) {
     setCache(cacheKey, payload);
   }
 
