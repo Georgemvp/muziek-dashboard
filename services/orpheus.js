@@ -88,21 +88,21 @@ async function pollJob(jobId, { interval = 1_000, maxWait = 120_000 } = {}) {
 /**
  * Parse OrpheusDL job-logregels naar genormaliseerde zoekresultaten.
  *
- * OrpheusDL-webui plaatst per resultaat een blok getagde regels in de log:
- *   1. Artiest - Titel (Jaar)
- *   |ID|12345|
- *   |PLATFORM|qobuz|
- *   |TYPE|album|
- *   |ARTIST|Artiest Naam|
- *   |TITLE|Album Titel|
- *   |YEAR|2023|
- *   |IMAGE|https://...|
- *   |URL|https://open.qobuz.com/album/12345|
+ * OrpheusDL plaatst alle tags op DEZELFDE regel als het genummerde resultaat:
+ *   1. Parachutes |ARTIST|Coldplay| |PLATFORM|qobuz| [41:44] [2000] [10 tracks] |ID|0190295978075| |IMAGE|https://...|
+ *
+ * Er zijn geen aparte |TITLE|, |TYPE| of |URL| tags:
+ * - Titel: tekst tussen het nummer en de eerste |TAG|
+ * - Type:  afgeleid uit de search_type van de job (parameter searchType)
+ * - URL:   niet beschikbaar in de log-output
  *
  * Retourneert array van genormaliseerde resultaten:
  *   [{ type, id, title, artist, image, url, year, platform, index }]
+ *
+ * @param {string[]} logLines   - Log-regels van de OrpheusDL job
+ * @param {string}   searchType - Type van de zoekopdracht ('album', 'track', enz.)
  */
-function parseSearchLog(logLines) {
+function parseSearchLog(logLines, searchType = 'album') {
   if (!Array.isArray(logLines) || logLines.length === 0) return [];
 
   const results = [];
@@ -118,17 +118,23 @@ function parseSearchLog(logLines) {
   for (const rawLine of logLines) {
     const line = typeof rawLine === 'string' ? rawLine : (rawLine?.message || rawLine?.text || String(rawLine || ''));
 
-    // Nummerlijn → begin van een nieuw resultaat  (bijv. "1. Artist - Title")
+    // Nummerlijn → begin van een nieuw resultaat (bijv. "1. Parachutes |ARTIST|Coldplay| ...")
+    // LET OP: geen `continue` hier — alle tags staan op dezelfde regel, dus we moeten
+    //         de tag-extractie hieronder op dézelfde regel uitvoeren.
     if (/^\d+\.\s/.test(line.trim())) {
       if (current && current.id) results.push(current);
       index++;
       current = { index };
-      continue;
+
+      // Extraheer titel: tekst tussen het nummer en de eerste |TAG|
+      const titleMatch = line.trim().match(/^\d+\.\s+(.*?)(?:\s*\|[A-Z]+\|)/);
+      if (titleMatch) current.title = titleMatch[1].trim();
     }
 
     if (!current) continue;
 
-    // Getagde velden
+    // Getagde velden — staan op dezelfde regel als het nummer (huidig formaat)
+    // of op aparte regels (toekomstig / alternatief formaat)
     const id       = tag(line, 'ID');
     const platform = tag(line, 'PLATFORM');
     const type     = tag(line, 'TYPE');
@@ -142,7 +148,7 @@ function parseSearchLog(logLines) {
     if (platform) current.platform = platform.toLowerCase();
     if (type)     current.type     = type.toLowerCase();
     if (artist)   current.artist   = artist;
-    if (title)    current.title    = title;
+    if (title)    current.title    = title; // expliciet |TITLE| tag overschrijft geëxtraheerde titel
     if (year)     current.year     = year;
     if (image)    current.image    = image;
     if (url)      current.url      = url;
@@ -151,10 +157,11 @@ function parseSearchLog(logLines) {
   // Laatste blok toevoegen
   if (current && current.id) results.push(current);
 
-  // Vul ontbrekende velden op met lege standaardwaarden
+  // Vul ontbrekende velden op met standaardwaarden
+  // type: gebruik expliciete tag, anders de search_type van de job
   return results.map(r => ({
     index:    r.index    ?? 0,
-    type:     r.type     || 'unknown',
+    type:     r.type     || searchType,
     id:       r.id       || '',
     title:    r.title    || '',
     artist:   r.artist   || '',
@@ -185,7 +192,7 @@ async function searchOrpheusSingle(q, platform, type) {
   if (!jobId) throw new Error(`OrpheusDL retourneerde geen job_id voor zoekopdracht (type=${type})`);
 
   const job = await pollJob(jobId, { interval: 800, maxWait: 60_000 });
-  const results = parseSearchLog(job.log || []);
+  const results = parseSearchLog(job.log || [], type);
   return { results, jobId, status: job.status };
 }
 
