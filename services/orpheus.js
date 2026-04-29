@@ -83,6 +83,20 @@ async function pollJob(jobId, { interval = 1_000, maxWait = 120_000 } = {}) {
   throw new Error(`OrpheusDL job ${jobId} timed out na ${maxWait / 1000}s`);
 }
 
+// ── URL-constructie per platform (OrpheusDL geeft geen |URL| tag in de log) ───
+
+const PLATFORM_URL_MAP = {
+  qobuz:      id => `https://open.qobuz.com/album/${id}`,
+  tidal:      id => `https://tidal.com/browse/album/${id}`,
+  deezer:     id => `https://www.deezer.com/album/${id}`,
+  spotify:    id => `https://open.spotify.com/album/${id}`,
+  soundcloud: id => `https://soundcloud.com/${id}`,
+  applemusic: id => `https://music.apple.com/album/${id}`,
+  beatport:   id => `https://www.beatport.com/release/${id}`,
+  beatsource: id => `https://www.beatsource.com/release/${id}`,
+  youtube:    id => `https://www.youtube.com/watch?v=${id}`,
+};
+
 // ── Log-parser voor zoekresultaten ────────────────────────────────────────────
 
 /**
@@ -166,7 +180,7 @@ function parseSearchLog(logLines, searchType = 'album') {
     title:    r.title    || '',
     artist:   r.artist   || '',
     image:    r.image    || null,
-    url:      r.url      || '',
+    url:      r.url || (r.platform && r.id && PLATFORM_URL_MAP[r.platform] ? PLATFORM_URL_MAP[r.platform](r.id) : ''),
     year:     r.year     || null,
     platform: r.platform || null,
   }));
