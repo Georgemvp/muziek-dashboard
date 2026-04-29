@@ -250,6 +250,12 @@ COPY --from=orpheus_builder /app/orpheusdl  /app/orpheusdl
 COPY --from=orpheus_builder /orpheus_venv   /orpheus_venv
 RUN mkdir -p /app/orpheusdl/config /app/orpheusdl/downloads
 
+# Kopieer standaard OrpheusDL settings — wordt alleen gebruikt als settings.json
+# nog niet bestaat (bijv. eerste start of lege volume).
+COPY config/orpheusdl_default_settings.json /app/orpheusdl/config/default_settings.json
+RUN test -f /app/orpheusdl/config/settings.json || \
+    cp /app/orpheusdl/config/default_settings.json /app/orpheusdl/config/settings.json
+
 # ── Muziekdashboard (lastfm-app) ────────────────────────────────────────────
 WORKDIR /app
 

@@ -5,6 +5,7 @@
 import { state } from '../state.js';
 import { apiFetch, orpheusStatus, orpheusPlatforms } from '../api.js';
 import { esc } from '../helpers.js';
+import { openOrpheusSettingsModal } from './orpheusSettings.js';
 
 const appShell = document.querySelector('.app-shell');
 const sidebar = document.getElementById('sidebar');
@@ -122,6 +123,16 @@ function initSettingsPanel() {
       </div>
     </div>
 
+    <div class="ssp-group" id="ssp-orpheus-config-group" style="${savedEngine === 'orpheus' ? '' : 'display:none'}">
+      <button class="ssp-orpheus-settings-btn" id="ssp-orpheus-settings-btn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+        </svg>
+        OrpheusDL Instellingen
+      </button>
+    </div>
+
     <div class="ssp-group" id="ssp-platform-group" style="${savedEngine === 'orpheus' ? '' : 'display:none'}">
       <div class="ssp-group-label">Zoekplatform</div>
       <div class="ssp-pills" id="ssp-platform-pills">
@@ -156,6 +167,8 @@ function initSettingsPanel() {
         b.classList.toggle('active', b.dataset.engine === engine));
       const platformGroup = document.getElementById('ssp-platform-group');
       if (platformGroup) platformGroup.style.display = engine === 'orpheus' ? '' : 'none';
+      const configGroup = document.getElementById('ssp-orpheus-config-group');
+      if (configGroup) configGroup.style.display = engine === 'orpheus' ? '' : 'none';
       // Vernieuw zoekresultaten als downloads-view actief is
       document.dispatchEvent(new CustomEvent('engine:changed', { detail: { engine } }));
     });
@@ -171,6 +184,12 @@ function initSettingsPanel() {
         b.classList.toggle('active', b.dataset.platform === platform));
       document.dispatchEvent(new CustomEvent('platform:changed', { detail: { platform } }));
     });
+  });
+
+  // ── OrpheusDL Instellingen knop ──────────────────────────────────────
+  document.getElementById('ssp-orpheus-settings-btn')?.addEventListener('click', () => {
+    closeSettingsPanel();
+    openOrpheusSettingsModal();
   });
 
   // ── Laad verbindingsstatus ────────────────────────────────────────────

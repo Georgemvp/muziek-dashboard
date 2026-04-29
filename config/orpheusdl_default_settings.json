@@ -1,0 +1,85 @@
+{
+  "global": {
+    "general": {
+      "download_path": "/music",
+      "download_quality": "hifi",
+      "search_limit": 20
+    },
+    "formatting": {
+      "album_format": "{artist}/{name}{explicit}",
+      "track_filename_format": "{track_number}. {name}",
+      "playlist_format": "Playlists/{name}",
+      "playlist_track_filename_format": "{track_number}. {artist} - {name}"
+    },
+    "covers": {
+      "embed_cover": true,
+      "main_resolution": 1400,
+      "secondary_resolutions": []
+    },
+    "lyrics": {
+      "embed_lyrics": true,
+      "save_synced_lyrics": true
+    },
+    "advanced": {
+      "codec_conversions": {},
+      "conversion_flags": {},
+      "spatial_codec": false,
+      "proprietary_codecs": false
+    }
+  },
+  "module_settings": {
+    "tidal": {
+      "quality_format": "hifi",
+      "tv_atmos_token": "",
+      "tv_atmos_secret": "",
+      "mobile_atmos_hires_token": "",
+      "mobile_hires_token": ""
+    },
+    "qobuz": {
+      "quality_format": "hifi",
+      "email": "",
+      "password": "",
+      "user_id": "",
+      "auth_token": "",
+      "app_id": "798273057",
+      "app_secret": "abb21364945c0583309667d13ca3d93a"
+    },
+    "deezer": {
+      "quality_format": "lossless",
+      "email": "",
+      "password": "",
+      "arl": "",
+      "client_id": "613143",
+      "client_secret": "e635f790edfbc8f7574447214e3271e7",
+      "bf_secret": "g93bsW9bwfo79ml6"
+    },
+    "spotify": {
+      "quality_format": "high",
+      "username": "",
+      "client_id": "",
+      "client_secret": ""
+    },
+    "soundcloud": {
+      "quality_format": "high",
+      "oauth_token": ""
+    },
+    "applemusic": {
+      "quality_format": "high",
+      "cookies_location": "./config/cookies.txt"
+    },
+    "beatport": {
+      "quality_format": "lossless",
+      "username": "",
+      "password": ""
+    },
+    "beatsource": {
+      "quality_format": "lossless",
+      "username": "",
+      "password": ""
+    },
+    "youtube": {
+      "quality_format": "lossless",
+      "cookies_location": "./config/youtube-cookies.txt"
+    }
+  }
+}

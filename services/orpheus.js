@@ -2,9 +2,13 @@
 // Integratie met OrpheusDL WebUI (https://github.com/OrpheusDL/orpheus-webui)
 // voor het zoeken en downloaden van muziek via meerdere platforms:
 // tidal, qobuz, deezer, spotify, soundcloud, applemusic, beatport, beatsource, youtube.
+const fs   = require('fs');
+const path = require('path');
 const { getCache, setCache } = require('../db');
 
-const ORPHEUS_URL = (process.env.ORPHEUS_URL || 'http://localhost:5000').replace(/\/$/, '');
+const ORPHEUS_URL         = (process.env.ORPHEUS_URL || 'http://localhost:5000').replace(/\/$/, '');
+const ORPHEUS_CONFIG_PATH = process.env.ORPHEUS_CONFIG_PATH || '/app/orpheusdl/config/settings.json';
+const ORPHEUS_DEFAULT_PATH = path.join(path.dirname(ORPHEUS_CONFIG_PATH), 'default_settings.json');
 
 /** Ondersteunde platforms */
 const PLATFORMS = ['tidal', 'qobuz', 'deezer', 'spotify', 'soundcloud', 'applemusic', 'beatport', 'beatsource', 'youtube'];
@@ -318,16 +322,62 @@ async function getOrpheusStatus() {
 }
 
 /**
- * Haal de volledige OrpheusDL-configuratie op (inclusief per-module credentials).
+ * Laad de standaard instellingen (uit default_settings.json of ingebouwde fallback).
+ * @returns {object}
+ */
+function loadDefaultSettings() {
+  try {
+    if (fs.existsSync(ORPHEUS_DEFAULT_PATH)) {
+      return JSON.parse(fs.readFileSync(ORPHEUS_DEFAULT_PATH, 'utf8'));
+    }
+  } catch { /* negeer leesfouten */ }
+  // Minimale ingebouwde fallback
+  return {
+    global: {
+      general:    { download_path: '/music', download_quality: 'hifi', search_limit: 20 },
+      formatting: { album_format: '{artist}/{name}{explicit}', track_filename_format: '{track_number}. {name}' },
+      covers:     { embed_cover: true, main_resolution: 1400 },
+      lyrics:     { embed_lyrics: true, save_synced_lyrics: true },
+    },
+    module_settings: {}
+  };
+}
+
+/**
+ * Haal de volledige OrpheusDL-configuratie op.
+ * Leest eerst het lokale settings.json; als dat niet bestaat wordt de default
+ * aangemaakt. Valt terug op de OrpheusDL WebUI-API als het bestand niet
+ * beschikbaar is (bijv. in dev-omgeving zonder volume).
  *
  * @returns {Promise<object>}
  */
 async function getOrpheusSettings() {
-  return orpheusFetch('/api/settings', { timeout: 10_000 });
+  // Probeer bestand direct te lezen (snel, geen OrpheusDL vereist)
+  try {
+    if (fs.existsSync(ORPHEUS_CONFIG_PATH)) {
+      const raw = fs.readFileSync(ORPHEUS_CONFIG_PATH, 'utf8');
+      return JSON.parse(raw);
+    }
+    // Bestand bestaat niet → schrijf defaults en geef terug
+    const defaults = loadDefaultSettings();
+    fs.mkdirSync(path.dirname(ORPHEUS_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(ORPHEUS_CONFIG_PATH, JSON.stringify(defaults, null, 2), 'utf8');
+    return defaults;
+  } catch (fileErr) {
+    // Bestandstoegang mislukt (bijv. dev zonder volume) → probeer WebUI
+    try {
+      return await orpheusFetch('/api/settings', { timeout: 10_000 });
+    } catch {
+      // Retourneer defaults als alles mislukt
+      return loadDefaultSettings();
+    }
+  }
 }
 
 /**
- * Bewaar OrpheusDL-configuratie (inclusief per-module credentials).
+ * Bewaar OrpheusDL-configuratie.
+ * Schrijft direct naar settings.json zodat OrpheusDL de wijzigingen oppikt bij
+ * de volgende download. Probeert ook de WebUI te notificeren als die actief is.
  *
  * @param {object} data - Volledige of gedeeltelijke configuratie
  * @returns {Promise<object>}
@@ -335,11 +385,43 @@ async function getOrpheusSettings() {
 async function saveOrpheusSettings(data) {
   if (!data || typeof data !== 'object') throw new Error('data moet een object zijn');
 
-  return orpheusFetch('/api/settings', {
-    method:  'POST',
-    body:    JSON.stringify(data),
-    timeout: 10_000
-  });
+  // Schrijf naar bestand (diep mergen zodat bestaande keys bewaard blijven)
+  try {
+    let existing = {};
+    if (fs.existsSync(ORPHEUS_CONFIG_PATH)) {
+      existing = JSON.parse(fs.readFileSync(ORPHEUS_CONFIG_PATH, 'utf8'));
+    }
+    // Deep merge: top-level secties worden samengevoegd, niet overschreven
+    const merged = deepMerge(existing, data);
+    fs.mkdirSync(path.dirname(ORPHEUS_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(ORPHEUS_CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
+  } catch (fileErr) {
+    throw new Error(`Kan settings.json niet schrijven: ${fileErr.message}`);
+  }
+
+  // Probeer ook WebUI te notificeren (niet kritiek, negeer fouten)
+  orpheusFetch('/api/settings', {
+    method: 'POST', body: JSON.stringify(data), timeout: 5_000
+  }).catch(() => {});
+
+  return { ok: true };
+}
+
+/**
+ * Recursieve deep-merge van twee objecten.
+ * Arrays worden vervangen (niet samengevoegd).
+ */
+function deepMerge(target, source) {
+  const out = Object.assign({}, target);
+  for (const [k, v] of Object.entries(source)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) &&
+        target[k] && typeof target[k] === 'object' && !Array.isArray(target[k])) {
+      out[k] = deepMerge(target[k], v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
