@@ -133,16 +133,16 @@ WORKDIR /app/orpheusdl
 # Kloon OrpheusDL (bascurtiz fork met webui.py)
 RUN git clone https://github.com/bascurtiz/OrpheusDL .
 
-# ── Tidal module (vereist; met submodules voor tidal-dl) ─────────────────
+# ── Alle download-modules ─────────────────────────────────────────────────
+RUN git clone https://github.com/bascurtiz/orpheusdl-applemusic    modules/applemusic
+RUN git clone https://github.com/bascurtiz/orpheusdl-beatport       modules/beatport
+RUN git clone https://github.com/bascurtiz/orpheusdl-beatsource     modules/beatsource
+RUN git clone https://github.com/bascurtiz/orpheusdl-deezer         modules/deezer
+RUN git clone https://github.com/bascurtiz/orpheusdl-qobuz          modules/qobuz
+RUN git clone https://github.com/bascurtiz/orpheusdl-soundcloud     modules/soundcloud
+RUN git clone https://github.com/bascurtiz/orpheusdl-spotify        modules/spotify
 RUN git clone --recurse-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal
-
-# ── Optionele modules — verwijder commentaar om te activeren ─────────────
-# RUN git clone https://github.com/bascurtiz/orpheusdl-qobuz        modules/qobuz
-# RUN git clone https://github.com/bascurtiz/orpheusdl-deezer        modules/deezer
-# RUN git clone https://github.com/bascurtiz/orpheusdl-spotify       modules/spotify
-# RUN git clone https://github.com/bascurtiz/orpheusdl-soundcloud    modules/soundcloud
-# RUN git clone https://github.com/bascurtiz/orpheusdl-applemusic    modules/applemusic
-# RUN git clone https://github.com/bascurtiz/orpheusdl-youtube       modules/youtube
+RUN git clone https://github.com/bascurtiz/orpheusdl-youtube        modules/youtube
 
 # Installeer Python-afhankelijkheden + Flask in een eigen venv
 # (isoleert OrpheusDL van AudioMuse's /app/venv in het productie-image)
