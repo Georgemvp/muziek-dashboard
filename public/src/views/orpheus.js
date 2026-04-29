@@ -463,12 +463,98 @@ function rebuildQualitySelect(platform) {
   ).join('');
 }
 
+// ── Event binding (wordt aangeroepen nadat setContent de DOM heeft bijgewerkt) ─
+
+function _bindOrpheusEvents() {
+  // Actieve jobs tonen
+  _refreshActiveJobsSection();
+
+  // Verbindingsstatus ophalen
+  updateConnectionStatus();
+
+  // Instellingen knop
+  document.getElementById('oph-settings-btn')?.addEventListener('click', () => {
+    openOrpheusSettingsModal();
+  });
+
+  // Platform pills
+  document.getElementById('oph-platform-pills')?.addEventListener('click', e => {
+    const pill = e.target.closest('[data-platform]');
+    if (!pill) return;
+    const p = pill.dataset.platform;
+    state.orpheusPlatform = p;
+    syncPlatformPills(p);
+    rebuildQualitySelect(p);
+    const q = document.getElementById('oph-search-input')?.value || '';
+    if (q.trim().length >= 2) doSearch(q);
+  });
+
+  // Type pills
+  document.getElementById('oph-type-pills')?.addEventListener('click', e => {
+    const pill = e.target.closest('[data-type]');
+    if (!pill) return;
+    state.orpheusType = pill.dataset.type;
+    syncTypePills(state.orpheusType);
+    const q = document.getElementById('oph-search-input')?.value || '';
+    if (q.trim().length >= 2) doSearch(q);
+  });
+
+  // Kwaliteit
+  document.getElementById('oph-quality-sel')?.addEventListener('change', e => {
+    setSavedQuality(e.target.value);
+  });
+
+  // Zoekbalk
+  const searchInput = document.getElementById('oph-search-input');
+  document.getElementById('oph-search-btn')?.addEventListener('click', () => {
+    doSearch(searchInput?.value || '');
+  });
+  searchInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch(searchInput.value);
+  });
+  // Debounced input: zoek automatisch terwijl de gebruiker typt (320ms vertraging)
+  let _searchDebounce = null;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(() => doSearch(searchInput.value), 320);
+  });
+
+  // URL directe download
+  const urlInput  = document.getElementById('oph-url-input');
+  const urlSubmit = document.getElementById('oph-url-submit');
+
+  const handleUrlDownload = () => {
+    const url = urlInput?.value?.trim();
+    if (!url || !url.startsWith('http')) return;
+    const resultsEl = document.getElementById('oph-results');
+    if (!resultsEl) return;
+    const detected = detectPlatform(url);
+    resultsEl.innerHTML = urlDownloadCardHtml(url, detected || 'all');
+    resultsEl.querySelector('#oph-url-quality')?.addEventListener('change', e => setSavedQuality(e.target.value));
+    bindDownloadButtons(resultsEl);
+  };
+
+  urlSubmit?.addEventListener('click', handleUrlDownload);
+  urlInput?.addEventListener('keydown', e => { if (e.key === 'Enter') handleUrlDownload(); });
+
+  // Zoek direct als er een zoekopdracht is gepast
+  const savedQuery = state.orpheusLastQuery;
+  if (savedQuery?.length >= 2) {
+    if (searchInput) searchInput.value = savedQuery;
+    doSearch(savedQuery);
+  }
+}
+
 // ── View loader (exporteer deze functie) ──────────────────────────────────────
 
 export async function loadOrpheus() {
   const platform = getActivePlatform();
   const type     = getActiveType();
 
+  // BELANGRIJK: geef _bindOrpheusEvents mee als callback zodat event listeners pas
+  // worden gebonden nadat setContent() de innerHTML heeft bijgewerkt. Zonder callback
+  // gebruikt setContent() document.startViewTransition(), waarvan de update-callback
+  // asynchroon wordt aangeroepen — de elementen bestaan dan nog niet in de DOM.
   setContent(`
     <div class="oph-page">
 
@@ -565,83 +651,5 @@ export async function loadOrpheus() {
       </div>
 
     </div>
-  `);
-
-  // Actieve jobs tonen
-  _refreshActiveJobsSection();
-
-  // Verbindingsstatus ophalen
-  updateConnectionStatus();
-
-  // Instellingen knop
-  document.getElementById('oph-settings-btn')?.addEventListener('click', () => {
-    openOrpheusSettingsModal();
-  });
-
-  // Platform pills
-  document.getElementById('oph-platform-pills')?.addEventListener('click', e => {
-    const pill = e.target.closest('[data-platform]');
-    if (!pill) return;
-    const p = pill.dataset.platform;
-    state.orpheusPlatform = p;
-    syncPlatformPills(p);
-    rebuildQualitySelect(p);
-    const q = document.getElementById('oph-search-input')?.value || '';
-    if (q.trim().length >= 2) doSearch(q);
-  });
-
-  // Type pills
-  document.getElementById('oph-type-pills')?.addEventListener('click', e => {
-    const pill = e.target.closest('[data-type]');
-    if (!pill) return;
-    state.orpheusType = pill.dataset.type;
-    syncTypePills(state.orpheusType);
-    const q = document.getElementById('oph-search-input')?.value || '';
-    if (q.trim().length >= 2) doSearch(q);
-  });
-
-  // Kwaliteit
-  document.getElementById('oph-quality-sel')?.addEventListener('change', e => {
-    setSavedQuality(e.target.value);
-  });
-
-  // Zoekbalk
-  const searchInput = document.getElementById('oph-search-input');
-  document.getElementById('oph-search-btn')?.addEventListener('click', () => {
-    doSearch(searchInput?.value || '');
-  });
-  searchInput?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') doSearch(searchInput.value);
-  });
-  // Debounced input: zoek automatisch terwijl de gebruiker typt (320ms vertraging)
-  let _searchDebounce = null;
-  searchInput?.addEventListener('input', () => {
-    clearTimeout(_searchDebounce);
-    _searchDebounce = setTimeout(() => doSearch(searchInput.value), 320);
-  });
-
-  // URL directe download
-  const urlInput  = document.getElementById('oph-url-input');
-  const urlSubmit = document.getElementById('oph-url-submit');
-
-  const handleUrlDownload = () => {
-    const url = urlInput?.value?.trim();
-    if (!url || !url.startsWith('http')) return;
-    const resultsEl = document.getElementById('oph-results');
-    if (!resultsEl) return;
-    const detected = detectPlatform(url);
-    resultsEl.innerHTML = urlDownloadCardHtml(url, detected || 'all');
-    resultsEl.querySelector('#oph-url-quality')?.addEventListener('change', e => setSavedQuality(e.target.value));
-    bindDownloadButtons(resultsEl);
-  };
-
-  urlSubmit?.addEventListener('click', handleUrlDownload);
-  urlInput?.addEventListener('keydown', e => { if (e.key === 'Enter') handleUrlDownload(); });
-
-  // Zoek direct als er een zoekopdracht is gepast
-  const savedQuery = state.orpheusLastQuery;
-  if (savedQuery?.length >= 2) {
-    if (searchInput) searchInput.value = savedQuery;
-    doSearch(savedQuery);
-  }
+  `, _bindOrpheusEvents);
 }
