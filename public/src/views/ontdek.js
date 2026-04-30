@@ -192,7 +192,7 @@ async function renderRecsTab() {
     recs.forEach((r, i) => {
       const pct = Math.round(r.match * 100);
       html += `<div class="rec-card" data-inplex="${r.inPlex}" id="rc-${i}">
-        <div class="rec-photo" id="rph-${i}">
+        <div class="rec-photo artist-link" id="rph-${i}" data-artist="${esc(r.name)}" title="${esc(r.name)} openen" style="cursor:pointer">
           <div class="rec-photo-ph skeleton" style="background:${gradientFor(r.name)}">${initials(r.name)}</div></div>
         <div class="rec-body">
           <div class="rec-header">
@@ -250,6 +250,9 @@ async function renderRecsTab() {
         const r = recs[i];
         const ph = document.getElementById(`rph-${i}`);
         if (ph && info.image) {
+          // Bewaar data-artist en cursor op het foto-element (voor klikbaarheid)
+          ph.setAttribute('data-artist', r.name);
+          ph.style.cursor = 'pointer';
           ph.innerHTML = `<img src="${proxyImg(info.image, 120) || info.image}" alt="${esc(r.name)}" loading="lazy" decoding="async"
             onerror="this.parentElement.innerHTML='<div class=\\'rec-photo-ph\\' style=\\'background:${gradientFor(r.name)}\\'>${initials(r.name)}</div>'">`;
         }

@@ -2,7 +2,7 @@
 // Comprehensive artist page with progressive loading for hero, bio, albums, gaps, and similar artists
 
 import { state } from '../state.js';
-import { apiFetch } from '../api.js';
+import { apiFetch, orpheusSearch, orpheusDownload } from '../api.js';
 import {
   esc, fmt, initials, gradientFor, tagsHtml, bookmarkBtn, countryFlag,
   albumCard, showLoading, showError, proxyImg, p, downloadBtn
@@ -280,6 +280,54 @@ function renderGapsSection(artistName, gapsData) {
       ${gapsData.missing.map(g => renderGapCard(artistName, g)).join('')}
     </div>
   `;
+
+  // Wire OrpheusDL download buttons
+  setupOrpheusHandlers(sectionEl);
+}
+
+/**
+ * Wire OrpheusDL download handlers on .panel-orpheus-btn elements within a container.
+ * Kopiëert het patroon uit panel.js: search + direct download.
+ */
+function setupOrpheusHandlers(container) {
+  container.querySelectorAll('.panel-orpheus-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const artist   = btn.dataset.ophArtist;
+      const album    = btn.dataset.ophAlbum;
+      const origText = btn.textContent;
+      btn.disabled   = true;
+      btn.textContent = '…';
+
+      try {
+        const searchResult = await orpheusSearch(`${artist} ${album}`, 'all', 'album');
+        const results = searchResult?.results || [];
+        if (!results.length || !results[0]?.url) {
+          throw new Error('Geen resultaten gevonden in OrpheusDL');
+        }
+
+        const first   = results[0];
+        const quality = localStorage.getItem('orpheusQuality') || 'hifi';
+        const dlResult = await orpheusDownload(first.url, quality, first.title || album, first.artist || artist);
+
+        if (!dlResult?.ok) throw new Error(dlResult?.error || 'Download mislukt');
+
+        btn.textContent = '✓ Gestart';
+        setTimeout(() => {
+          btn.disabled    = false;
+          btn.textContent = origText;
+        }, 3000);
+      } catch (err) {
+        btn.disabled    = false;
+        btn.textContent = origText;
+        const errEl = document.createElement('div');
+        errEl.style.cssText = 'color:var(--color-error,#e05a2b);font-size:10px;margin-top:2px';
+        errEl.textContent   = '⚠ ' + err.message;
+        btn.parentNode.appendChild(errEl);
+        setTimeout(() => errEl.remove(), 4000);
+      }
+    });
+  });
 }
 
 /**
@@ -397,20 +445,27 @@ function renderGapCard(artistName, gap) {
   const typeLabel = gap.albumType || 'Album';
   const yearHtml = gap.releaseDate ? `<div class="album-year">${gap.releaseDate.slice(0, 4)}</div>` : '';
 
-  // Download button via Tidarr
-  const dlBtn = gap.url
-    ? `<button class="tidal-dl-btn" data-dlurl="${esc(gap.url)}" title="Download via Tidarr">⬇</button>`
-    : '';
+  // Tidarr download button (via bestaande helper — werkt op artiesten-/albumnaam)
+  const tidarrBtn = downloadBtn(artistName, gap.name, false);
+
+  // OrpheusDL download button (search + download bij klikken)
+  const orpheusBtn = `<button class="panel-orpheus-btn"
+    data-oph-artist="${esc(artistName)}"
+    data-oph-album="${esc(gap.name)}"
+    title="Zoeken en downloaden via OrpheusDL">⬇ Orpheus</button>`;
 
   return `
     <div class="album-card">
       <div class="album-cover">
         ${imgEl}
-        ${dlBtn}
       </div>
       <div class="album-info">
         <div class="album-name">${esc(gap.name)}</div>
         <div class="album-meta">${typeLabel} ${yearHtml.trim()}</div>
+        <div class="album-dl-actions">
+          ${tidarrBtn}
+          ${orpheusBtn}
+        </div>
       </div>
     </div>
   `;

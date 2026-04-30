@@ -307,6 +307,21 @@
   margin-top: 0.25rem;
 }
 
+/* Download-actieknoppen (Tidarr + OrpheusDL) in gap cards */
+.album-dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.album-dl-actions .download-btn,
+.album-dl-actions .panel-orpheus-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+  flex-shrink: 0;
+}
+
 /* ── Top Tracks List ────────────────────────────────────────────────────────── */
 
 .detail-tracks-list {
