@@ -58,15 +58,23 @@ function getFilteredAndSorted(releases) {
 
 // ── Render functions ─────────────────────────────────────────────────────────
 
+/**
+ * Image met Cover Art Archive als primaire bron, Deezer artist image als fallback,
+ * en ♫ placeholder als beide falen. Gebruikt _imgFb() die al in de app gedefinieerd is.
+ */
+function releaseImgEl(r) {
+  const proxyUrl = r.image ? proxyImg(r.image, 250) : null;
+  const deezerFb = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
+  const src = proxyUrl || deezerFb;
+  return `<img src="${esc(src)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
+    data-fb="${esc(deezerFb)}"
+    onerror="_imgFb(this,'♫')"
+    style="opacity:0;transition:opacity 0.35s;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1"
+    onload="this.style.opacity='1'">`;
+}
+
 function renderCard(r) {
   const bg = gradientFor(r.album || r.artist || '');
-  const imgUrl = r.image ? proxyImg(r.image, 240) : null;
-  const imgHtml = imgUrl
-    ? `<img src="${esc(imgUrl)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
-         style="opacity:0;transition:opacity 0.35s;position:relative;z-index:1"
-         onload="this.style.opacity='1'"
-         onerror="this.style.display='none'">`
-    : '';
   const ph = initials(r.album || r.artist || '?');
   const label = typeLabel(r.type);
   const dateStr = formatDate(r.releaseDate);
@@ -78,8 +86,12 @@ function renderCard(r) {
     <div class="releases-card">
       <div class="releases-cover" style="background:${bg}">
         <div class="releases-cover-ph">${esc(ph)}</div>
-        ${imgHtml}
+        ${releaseImgEl(r)}
         <span class="releases-type-badge releases-type-badge--${esc((r.type||'album').toLowerCase())}">${esc(label)}</span>
+        <button class="releases-download-btn"
+          data-artist="${esc(r.artist)}"
+          data-album="${esc(r.album)}"
+          title="Download via Tidarr / OrpheusDL">⬇</button>
       </div>
       <div class="releases-info">
         <div class="releases-album" title="${esc(r.album)}">${esc(r.album)}</div>
@@ -160,6 +172,64 @@ function renderGrid() {
   grid.querySelectorAll('.releases-artist[data-artist]').forEach(el => {
     el.addEventListener('click', () => {
       switchView('artist-detail', { name: el.dataset.artist });
+    });
+  });
+
+  // Download knoppen
+  grid.querySelectorAll('.releases-download-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const artist = btn.dataset.artist;
+      const album  = btn.dataset.album;
+      btn.disabled = true;
+      btn.textContent = '…';
+
+      try {
+        // Probeer eerst Tidarr
+        const searchData = await apiFetch(`/api/tidarr/search?q=${encodeURIComponent(`${artist} ${album}`)}`);
+        const results = searchData?.albums || searchData?.results || [];
+
+        if (results.length) {
+          const quality = localStorage.getItem('downloadQuality') || 'high';
+          await apiFetch('/api/tidarr/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: results[0].id, type: 'album', quality })
+          });
+          btn.textContent = '✓';
+          btn.style.color = '#4caf50';
+          return;
+        }
+
+        // Fallback: OrpheusDL
+        const orpheusSearch = await apiFetch(`/api/orpheus/search?q=${encodeURIComponent(`${artist} ${album}`)}&type=album`);
+        const orpheusResults = orpheusSearch?.results || [];
+        if (orpheusResults.length) {
+          const quality = localStorage.getItem('downloadQuality') || 'high';
+          await apiFetch('/api/orpheus/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: orpheusResults[0].url, platform: orpheusResults[0].platform, quality })
+          });
+          btn.textContent = '✓';
+          btn.style.color = '#4caf50';
+          return;
+        }
+
+        btn.textContent = '✗';
+        btn.title = 'Niet gevonden in Tidarr of OrpheusDL';
+      } catch (err) {
+        console.error('Download mislukt:', err);
+        btn.textContent = '✗';
+      } finally {
+        setTimeout(() => {
+          if (btn.textContent !== '✓') {
+            btn.disabled = false;
+            btn.textContent = '⬇';
+            btn.style.color = '';
+          }
+        }, 3000);
+      }
     });
   });
 }
@@ -343,6 +413,7 @@ function injectStyles() {
       background: var(--bg-secondary);
       transition: transform 0.15s ease, box-shadow 0.15s ease;
       cursor: default;
+      position: relative;
     }
     .releases-card:hover {
       transform: translateY(-2px);
@@ -356,13 +427,6 @@ function injectStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-    .releases-cover img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
     }
     .releases-cover-ph {
       font-size: 28px;
@@ -451,6 +515,32 @@ function injectStyles() {
     }
     .releases-empty-icon { font-size: 36px; opacity: 0.4; }
     .releases-empty-text { font-size: 14px; }
+
+    /* ── Releases: Download button ───────────────────────────────────── */
+    .releases-download-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.15s;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .releases-download-btn:hover { background: rgba(0,0,0,0.85); }
+    .releases-download-btn:disabled { cursor: default; }
+    .releases-card:hover .releases-download-btn,
+    .releases-download-btn:focus { opacity: 1; }
 
     /* ── Toolbar: filter buttons active state ─────────────────────────── */
     .toolbar-btn.releases-filter-btn.active {
