@@ -14,7 +14,8 @@ let db;
 try {
   const dbPath = path.join(dataDir, 'cache.db');
   db = new Database(dbPath);
-  logger.info({ dbPath }, 'SQLite database connected');
+  const walResult = db.pragma('journal_mode = WAL');
+  logger.info({ dbPath, walMode: walResult }, 'SQLite database connected');
 } catch (err) {
   logger.fatal({ err }, 'Failed to initialize database');
   process.exit(1);

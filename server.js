@@ -34,6 +34,7 @@ const path       = require('path');
 const rateLimit  = require('express-rate-limit');
 const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const app        = express();
+app.use(compression());
 const PORT    = process.env.PORT || 80;
 
 // ── Tidarr UI proxy ────────────────────────────────────────────────────────
@@ -232,8 +233,6 @@ app.use('/audiomuse', createProxyMiddleware({
   }
 }));
 
-app.use(compression());
-
 // ── Globale security headers ───────────────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -271,7 +270,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 // ── Request logging middleware ─────────────────────────────────────────────
 // Logt elke inkomende request met method, pad, statuscode en responstijd.

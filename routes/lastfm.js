@@ -342,13 +342,17 @@ module.exports = function(app, deps) {
       const top8    = topRecs.slice(0, 8);
 
       // ── 3. Album- én track-aanbevelingen PARALLEL via Deezer ─────────────
-      // Vervangt Last.fm artist.gettopalbums en artist.gettoptracks
+      // Één getDeezerArtist()-lookup per artiest, resultaat hergebruikt voor
+      // zowel albums als tracks — voorkomt dubbele Deezer API-calls.
+      const deezerArtistResults = await Promise.allSettled(
+        top8.map(rec => getDeezerArtist(rec.name))
+      );
+
       const [albumResults, trackResults] = await Promise.all([
         Promise.allSettled(
-          top8.map(async rec => {
+          top8.map(async (rec, i) => {
             try {
-              // Zoek Deezer ID op en haal albums op
-              const deezerArtist = await getDeezerArtist(rec.name);
+              const deezerArtist = deezerArtistResults[i].value;
               if (!deezerArtist?.id) return [];
 
               const albums = await getDeezerArtistAlbums(deezerArtist.id);
@@ -367,10 +371,9 @@ module.exports = function(app, deps) {
           })
         ),
         Promise.allSettled(
-          top8.map(async rec => {
+          top8.map(async (rec, i) => {
             try {
-              // Zoek Deezer ID op en haal top tracks op
-              const deezerArtist = await getDeezerArtist(rec.name);
+              const deezerArtist = deezerArtistResults[i].value;
               if (!deezerArtist?.id) return [];
 
               const tracks = await getDeezerArtistTopTracks(deezerArtist.id);
