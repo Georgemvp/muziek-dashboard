@@ -746,6 +746,64 @@ export async function executeDownload(chosen, wantedArtist, wantedAlbum, btn) {
   await refreshTidarrQueueBadge();
 }
 
+export async function triggerOrpheusDownload(artist, album, btn) {
+  if (!state.orpheusConnected) {
+    alert('OrpheusDL is niet verbonden. Controleer de OrpheusDL-instellingen.');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const query = [artist, album].filter(Boolean).join(' ');
+    const d = await orpheusSearch(query, state.orpheusPlatform || 'all');
+    const results = (d.results || []).filter(r => r.type === 'album');
+
+    if (!results.length) {
+      alert(`Niet gevonden via OrpheusDL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer handmatig via de Downloads-tab.`);
+      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
+      return;
+    }
+
+    const quality = getOrpheusQuality();
+
+    const doDownload = async (chosen) => {
+      const result = await orpheusDownload(chosen.url, quality, chosen.title, chosen.artist);
+      if (!result.ok) throw new Error(result.error || 'download mislukt');
+      markDownloaded(chosen.artist || artist, chosen.title || album);
+      const cardEl = btn?.closest('.orpheus-card, .gaps-artist-card');
+      if (result.jobId && cardEl) {
+        state.activeOrpheusJobs = state.activeOrpheusJobs || [];
+        state.activeOrpheusJobs.push({
+          jobId: result.jobId, title: chosen.title, artist: chosen.artist, status: 'pending', progress: 0
+        });
+        startOrpheusJobPoll(result.jobId, cardEl);
+      } else if (btn) {
+        btn.textContent = '✓';
+        btn.classList.add('dl-done');
+        btn.disabled = false;
+      }
+    };
+
+    const best = results[0];
+    if (artist && !artistMatches(best.artist, artist)) {
+      if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
+      const candidates = results.slice(0, 3).map((r, i) => ({
+        title: r.title, artist: r.artist, url: r.url,
+        image: r.image, year: r.year,
+        score: Math.max(10, 90 - i * 20)
+      }));
+      const { chosen } = await openDownloadConfirm(candidates, artist, album, btn);
+      if (!chosen) return;
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+      await doDownload(chosen);
+    } else {
+      await doDownload(best);
+    }
+  } catch (e) {
+    alert('OrpheusDL downloaden mislukt: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
+  }
+}
+
 export async function triggerTidarrDownload(artist, album, btn) {
   if (!state.tidarrOk) {
     alert('Tidarr is niet verbonden. Controleer TIDARR_URL en TIDARR_API_KEY.');

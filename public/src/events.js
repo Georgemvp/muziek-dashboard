@@ -349,7 +349,12 @@ document.addEventListener('click', async e => {
       return;
     }
     const { dlartist, dlalbum } = dlBtn.dataset;
-    await (await loadDownloadsModule()).triggerTidarrDownload(dlartist, dlalbum, dlBtn);
+    const m = await loadDownloadsModule();
+    if (state.downloadEngine === 'orpheus') {
+      await m.triggerOrpheusDownload(dlartist, dlalbum, dlBtn);
+    } else {
+      await m.triggerTidarrDownload(dlartist, dlalbum, dlBtn);
+    }
     return;
   }
 

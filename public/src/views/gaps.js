@@ -24,7 +24,8 @@ function renderGapAlbumCard(album, artist = '') {
   const typeLabel = album.albumType || 'Album';
   const alreadyDl = artist ? isDownloaded(artist, album.title || '') : false;
 
-  const dlHtml = (state.tidarrOk && artist && !album.inPlex)
+  const canDownload = state.tidarrOk || state.orpheusConnected;
+  const dlHtml = (canDownload && artist && !album.inPlex)
     ? alreadyDl
       ? `<button class="album-dl-btn download-btn dl-done" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title||'')}" title="Al gedownload">✓</button>`
       : `<button class="album-dl-btn download-btn" data-dlartist="${esc(artist)}" data-dlalbum="${esc(album.title||'')}" title="Download via Tidarr">⬇</button>`
@@ -110,7 +111,7 @@ function renderArtistCard(artist) {
         </div>
         <div class="gaps-artist-actions">
           ${bookmarkBtn('artist', artist.title, artist.title, artist.thumb || '')}
-          ${state.tidarrOk && gapCount > 0 ? `<button class="gaps-dl-all-btn download-btn" data-dlartist="${esc(artist.title)}" data-dl-all-gaps="true" title="Download alle ${gapCount} ontbrekende albums">⬇ Alles (${gapCount})</button>` : ''}
+          ${(state.tidarrOk || state.orpheusConnected) && gapCount > 0 ? `<button class="gaps-dl-all-btn download-btn" data-dlartist="${esc(artist.title)}" data-dl-all-gaps="true" title="Download alle ${gapCount} ontbrekende albums">⬇ Alles (${gapCount})</button>` : ''}
           <button class="gaps-toggle-btn" data-id="${artist.artistId}">
             ${isExpanded ? '▼' : '▶'} ${gapCount} ontbreken
           </button>
@@ -222,9 +223,13 @@ async function renderGaps() {
         btn.textContent = 'Bezig…';
 
         try {
-          const { triggerTidarrDownload } = await import('./downloads.js');
+          const dl = await import('./downloads.js');
           for (const album of missing) {
-            await triggerTidarrDownload(artistName, album.title, null);
+            if (state.downloadEngine === 'orpheus') {
+              await dl.triggerOrpheusDownload(artistName, album.title, null);
+            } else {
+              await dl.triggerTidarrDownload(artistName, album.title, null);
+            }
           }
           btn.textContent = '✓ Klaar';
         } catch (err) {
