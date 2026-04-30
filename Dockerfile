@@ -158,7 +158,7 @@ RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-youtube        mo
 # (isoleert OrpheusDL van AudioMuse's /app/venv in het productie-image)
 RUN python -m venv /orpheus_venv && \
     /orpheus_venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /orpheus_venv/bin/pip install --no-cache-dir -r requirements.txt flask && \
+    /orpheus_venv/bin/pip install --no-cache-dir -r requirements.txt flask librespot && \
     rm -rf /root/.cache/pip
 
 # ═══════════════════════════════════════════════════════════════════════════
