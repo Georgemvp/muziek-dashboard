@@ -763,6 +763,42 @@ export async function triggerOrpheusDownload(artist, album, btn) {
       return;
     }
 
+    // Score elk resultaat op artiest-match, titel-match, type en platform
+    const scoreResult = (r) => {
+      let score = 0;
+      const rArtist    = (r.artist || '').toLowerCase();
+      const rTitle     = (r.title  || '').toLowerCase();
+      const wantArtist = (artist   || '').toLowerCase();
+      const wantAlbum  = (album    || '').toLowerCase();
+
+      // Artiest-match is het belangrijkst
+      if (rArtist && wantArtist) {
+        if (rArtist === wantArtist)                                             score += 100;
+        else if (rArtist.includes(wantArtist) || wantArtist.includes(rArtist)) score += 60;
+        else                                                                    score -= 50;
+      }
+
+      // Titel-match
+      if (rTitle && wantAlbum) {
+        if (rTitle === wantAlbum)                                              score += 80;
+        else if (rTitle.includes(wantAlbum) || wantAlbum.includes(rTitle))    score += 40;
+      }
+
+      // Voorkeur voor albums boven tracks/playlists
+      if (r.type === 'album') score += 30;
+
+      // Voorkeur voor lossless platforms
+      if (['qobuz', 'tidal', 'deezer'].includes(r.platform)) score += 20;
+
+      // Straf voor remixes / live / original mix tenzij dat ook gewenst is
+      if (/remix|original mix|live|remaster/i.test(rTitle) &&
+          !/remix|live|remaster/i.test(wantAlbum)) score -= 30;
+
+      return score;
+    };
+
+    results.sort((a, b) => scoreResult(b) - scoreResult(a));
+
     const quality = getOrpheusQuality();
 
     const doDownload = async (chosen) => {
@@ -786,10 +822,10 @@ export async function triggerOrpheusDownload(artist, album, btn) {
     const best = results[0];
     if (artist && !artistMatches(best.artist, artist)) {
       if (btn) { btn.disabled = false; btn.textContent = '⬇'; }
-      const candidates = results.slice(0, 3).map((r, i) => ({
+      const candidates = results.slice(0, 3).map((r) => ({
         title: r.title, artist: r.artist, url: r.url,
         image: r.image, year: r.year,
-        score: Math.max(10, 90 - i * 20)
+        score: scoreResult(r)
       }));
       const { chosen } = await openDownloadConfirm(candidates, artist, album, btn);
       if (!chosen) return;
