@@ -11,7 +11,23 @@ if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
   logger.fatal('LASTFM_API_KEY en LASTFM_USER zijn verplicht. Controleer je .env bestand.');
   process.exit(1);
 }
+
+if (!process.env.API_KEY) {
+  logger.fatal('API_KEY is niet ingesteld. Stel een sterk geheim in via API_KEY in je .env bestand. De server weigert te starten zonder dit.');
+  process.exit(1);
+}
+
 logger.info('Required environment variables validated');
+
+// ── HTML escape helper (XSS-bescherming in proxy error handlers) ──────────
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const express    = require('express');
 const compression = require('compression');
@@ -82,7 +98,7 @@ app.use('/mediasage', createProxyMiddleware({
         <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
           <h2>⚠️ MediaSage niet bereikbaar</h2>
           <p>MediaSage is nog niet opgestart of er is een fout opgetreden.</p>
-          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <p style="color:#888;font-size:13px">Fout: ${escapeHtml(err.message)}</p>
           <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
         </div>
       `);
@@ -112,7 +128,7 @@ app.use('/tidarr-ui', createProxyMiddleware({
         <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
           <h2>⚠️ Tidarr niet bereikbaar</h2>
           <p>Tidarr is nog niet opgestart of er is een fout opgetreden.</p>
-          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <p style="color:#888;font-size:13px">Fout: ${escapeHtml(err.message)}</p>
           <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
         </div>
       `);
@@ -209,7 +225,7 @@ app.use('/audiomuse', createProxyMiddleware({
         <div style="font-family:sans-serif;padding:40px;color:#ccc;background:#1a1a2e;height:100vh;box-sizing:border-box">
           <h2>⚠️ AudioMuse niet bereikbaar</h2>
           <p>AudioMuse is nog niet opgestart of er is een fout opgetreden.</p>
-          <p style="color:#888;font-size:13px">Fout: ${err.message}</p>
+          <p style="color:#888;font-size:13px">Fout: ${escapeHtml(err.message)}</p>
           <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer">↻ Opnieuw proberen</button>
         </div>
       `);
@@ -218,6 +234,12 @@ app.use('/audiomuse', createProxyMiddleware({
 }));
 
 app.use(compression());
+
+// ── Globale security headers ───────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
 
 // ── Services ───────────────────────────────────────────────────────────────
 const { proxyImage }                                                = require('./services/imageproxy');
@@ -294,6 +316,21 @@ app.use('/api', rateLimit({
   legacyHeaders:   false,
   handler:         rateLimitHandler
 }));
+
+// ── API-key authenticatie ──────────────────────────────────────────────────
+// Controleert X-API-Key header of ?api_key= query param op alle /api/* routes.
+// Uitzonderingen: /api/plex/webhook (Plex kent de key niet) — beveiligd via secret URL.
+const _API_KEY = process.env.API_KEY;
+app.use('/api', (req, res, next) => {
+  // Sla webhook uit (ook met secret-param in het pad)
+  if (req.path.startsWith('/plex/webhook')) return next();
+
+  const provided = req.headers['x-api-key'] || req.query.api_key;
+  if (!provided || provided !== _API_KEY) {
+    return res.status(401).json({ error: 'Ontbrekende of ongeldige API-sleutel' });
+  }
+  next();
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

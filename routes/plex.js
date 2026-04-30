@@ -41,11 +41,51 @@ module.exports = function(app, deps) {
     try { return JSON.parse(m[1].trim()); } catch { return null; }
   }
 
-  // ── /api/plex/webhook ─────────────────────────────────────────────────────
+  // ── /api/plex/thumb (image proxy) ────────────────────────────────────────
+  // Haalt Plex-thumbnails server-side op zodat PLEX_TOKEN nooit de browser bereikt.
+  // Geaccepteerde paden: /library/... en /photo/... (SSRF-bescherming).
+  app.get('/api/plex/thumb', async (req, res) => {
+    const thumbPath = req.query.path;
+    if (!thumbPath || typeof thumbPath !== 'string' || !thumbPath.startsWith('/')) {
+      return res.status(400).end();
+    }
+    // Sta alleen bekende Plex-paden toe (SSRF-beperking)
+    if (!/^\/(library|photo)\//.test(thumbPath)) {
+      return res.status(400).end();
+    }
+    try {
+      const separator = thumbPath.includes('?') ? '&' : '?';
+      const url = `${PLEX_URL}${thumbPath}${separator}X-Plex-Token=${PLEX_TOKEN}`;
+      const plexRes = await fetch(url);
+      if (!plexRes.ok) return res.status(plexRes.status).end();
+
+      const ct = plexRes.headers.get('content-type') || 'image/jpeg';
+      res.setHeader('Content-Type', ct);
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+
+      const { Readable } = require('stream');
+      Readable.from(plexRes.body).pipe(res);
+    } catch (e) {
+      logger.warn({ err: e }, 'Plex thumb proxy fout');
+      res.status(502).end();
+    }
+  });
+
+  // ── /api/plex/webhook/:secret ─────────────────────────────────────────────
+  // Beveiligd via een geheim pad-segment (PLEX_WEBHOOK_SECRET). Als het secret
+  // niet klopt, retourneert de server 403 zodat Plex geen bruikbare informatie
+  // over het endpoint krijgt.
   const express = require('express');
-  app.post('/api/plex/webhook',
+  const PLEX_WEBHOOK_SECRET = process.env.PLEX_WEBHOOK_SECRET || '';
+  app.post('/api/plex/webhook/:secret',
     express.raw({ type: ['multipart/form-data', 'application/x-www-form-urlencoded', '*/*'], limit: '10mb' }),
     (req, res) => {
+      // Valideer het secret in het URL-pad
+      if (!PLEX_WEBHOOK_SECRET || req.params.secret !== PLEX_WEBHOOK_SECRET) {
+        logger.warn({ ip: req.ip }, 'Plex webhook: ongeldig of ontbrekend secret');
+        return res.sendStatus(403);
+      }
+
       const contentType = req.headers['content-type'] || '';
       const payload = parsePlexWebhook(req.body, contentType);
       if (!payload) {
@@ -60,10 +100,8 @@ module.exports = function(app, deps) {
       if (!meta || meta.type !== 'track') return res.sendStatus(200);
 
       if (['media.play','media.resume','media.pause','media.stop','media.scrobble'].includes(event)) {
-        const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-        const thumb = meta.parentThumb
-          ? `${plexStreamUrl}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
-          : (meta.grandparentThumb ? `${plexStreamUrl}${meta.grandparentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null);
+        const _tp = meta.parentThumb || meta.grandparentThumb || null;
+        const thumb = _tp ? `/api/plex/thumb?path=${encodeURIComponent(_tp)}` : null;
 
         _webhookState = {
           event,
@@ -160,8 +198,7 @@ module.exports = function(app, deps) {
         res.set('Cache-Control', 'private, max-age=30');
         return res.json({ playing: false });
       }
-      const thumb = music.parentThumb || music.grandparentThumb;
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
+      const _thumbPath = music.parentThumb || music.grandparentThumb || null;
       res.set('Cache-Control', 'private, max-age=30');
       res.json({
         playing:        music.Player?.state !== 'paused',
@@ -171,7 +208,7 @@ module.exports = function(app, deps) {
         album:          music.parentTitle,
         ratingKey:      music.ratingKey      || null,
         albumRatingKey: music.parentRatingKey || null,
-        thumb:          thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        thumb:          _thumbPath ? `/api/plex/thumb?path=${encodeURIComponent(_thumbPath)}` : null,
         duration:       music.duration   || null,
         viewOffset:     music.viewOffset || null,
         state:          music.Player?.state || 'playing',
@@ -193,7 +230,6 @@ module.exports = function(app, deps) {
     if (!PLEX_TOKEN) return res.json({ tracks: [], currentRatingKey: null });
     try {
       const machineId = req.query.machineId || null;
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
 
       // Zoek actieve muziek-sessie
       const sessionsData = await plexGet('/status/sessions');
@@ -210,14 +246,14 @@ module.exports = function(app, deps) {
       const playQueueID = session.playQueueID || null;
 
       const _mapTrack = (item) => {
-        const thumb = item.parentThumb || item.grandparentThumb;
+        const _tp = item.parentThumb || item.grandparentThumb || null;
         return {
           ratingKey:      item.ratingKey,
           title:          item.title || '',
           artist:         item.grandparentTitle || item.originalTitle || '',
           album:          item.parentTitle || '',
           duration:       item.duration || 0,
-          thumb:          thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          thumb:          _tp ? `/api/plex/thumb?path=${encodeURIComponent(_tp)}` : null,
           playQueueItemID: item.playQueueItemID || null,
         };
       };
@@ -245,13 +281,13 @@ module.exports = function(app, deps) {
           artist:    track.artist || '',
           album:     track.album || '',
           duration:  track.duration || 0,
-          thumb:     track.thumb ? `${plexStreamUrl}${track.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          thumb:     track.thumb ? `/api/plex/thumb?path=${encodeURIComponent(track.thumb)}` : null,
         }));
         return res.json({ tracks, currentRatingKey, source: 'albumTracks' });
       }
 
       // Laatste optie: alleen het huidige nummer teruggeven
-      const thumb = session.parentThumb || session.grandparentThumb;
+      const _stp = session.parentThumb || session.grandparentThumb || null;
       return res.json({
         tracks: [{
           ratingKey: session.ratingKey,
@@ -259,7 +295,7 @@ module.exports = function(app, deps) {
           artist:    session.grandparentTitle || session.originalTitle || '',
           album:     session.parentTitle || '',
           duration:  session.duration || 0,
-          thumb:     thumb ? `${plexStreamUrl}${thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          thumb:     _stp ? `/api/plex/thumb?path=${encodeURIComponent(_stp)}` : null,
         }],
         currentRatingKey,
         source: 'singleTrack',
@@ -306,10 +342,9 @@ module.exports = function(app, deps) {
 
     const { ok, artistCount } = getPlexStatus();
     const total = lib.length;
-    const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
     const slice = lib.slice((page - 1) * limit, page * limit).map(x => ({
       ...x,
-      thumb: x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+      thumb: x.thumb ? `/api/plex/thumb?path=${encodeURIComponent(x.thumb)}` : null
     }));
     res.set('Cache-Control', 'private, max-age=300');
     res.json({ connected: ok, artistCount, total, page, limit, library: slice });
@@ -325,14 +360,13 @@ module.exports = function(app, deps) {
       // Ensure library is synced before returning
       await syncPlexLibrary(false);
       const lib = getPlexLibrary();
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
       // Compact array-formaat: [artist, album, ratingKey, thumb, addedAt] per item
       // Dit is ~60% kleiner dan het object-formaat van /api/plex/library
       const compact = (lib || []).map(x => ([
         x.artist,
         x.album,
         x.ratingKey || '',
-        x.thumb ? `${plexStreamUrl}${x.thumb}?X-Plex-Token=${PLEX_TOKEN}` : '',
+        x.thumb ? `/api/plex/thumb?path=${encodeURIComponent(x.thumb)}` : '',
         x.addedAt || 0  // Unix timestamp
       ]));
       res.set('Cache-Control', 'private, max-age=300');
@@ -548,13 +582,11 @@ module.exports = function(app, deps) {
         const webStream = `/api/plex/stream/audio/${ratingKey}`;
 
         // Extract track metadata
-        // Use external URL for browser-facing responses (thumbs)
-        const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
         const track = meta?.title || null;
         const artist = meta?.grandparentTitle || meta?.originalTitle || null;
         const album = meta?.parentTitle || null;
         const thumb = meta?.parentThumb
-          ? `${plexStreamUrl}${meta.parentThumb}?X-Plex-Token=${PLEX_TOKEN}`
+          ? `/api/plex/thumb?path=${encodeURIComponent(meta.parentThumb)}`
           : null;
         const duration = meta?.duration || null;
 
@@ -653,14 +685,12 @@ module.exports = function(app, deps) {
       // Haal alle artiesten op (type=8)
       const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
       const artistMeta = (data?.MediaContainer?.Metadata || []);
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-
       // Map artiesten naar vereist formaat en sorteer op naam
       const artists = artistMeta
         .map(a => ({
           ratingKey: a.ratingKey,
           title: a.title || '',
-          thumb: a.thumb ? `${plexStreamUrl}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          thumb: a.thumb ? `/api/plex/thumb?path=${encodeURIComponent(a.thumb)}` : null,
           albumCount: a.leafCount || 0,
           genre: (a.Genre && Array.isArray(a.Genre) ? a.Genre.map(g => g.tag).join(', ') : (a.Genre?.tag || ''))
         }))
@@ -707,7 +737,6 @@ module.exports = function(app, deps) {
         }
         const data = await plexGet(`/library/sections/${music.key}/all?type=10`);
         const trackMeta = (data?.MediaContainer?.Metadata || []);
-        const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
         allTracks = trackMeta.map(t => ({
           ratingKey: t.ratingKey,
           title: t.title || '',
@@ -715,7 +744,7 @@ module.exports = function(app, deps) {
           album: t.parentTitle || '',
           duration: t.duration || 0,
           trackNumber: t.index || 0,
-          thumb: t.parentThumb ? `${plexStreamUrl}${t.parentThumb}?X-Plex-Token=${PLEX_TOKEN}` : null
+          thumb: t.parentThumb ? `/api/plex/thumb?path=${encodeURIComponent(t.parentThumb)}` : null
         }));
         setCache(cacheKey, allTracks);
       }
@@ -768,8 +797,6 @@ module.exports = function(app, deps) {
       // Haal alle artiesten op om genres te extraheren
       const data = await plexGet(`/library/sections/${music.key}/all?type=8`);
       const artistMeta = (data?.MediaContainer?.Metadata || []);
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-
       // Groepeer artiesten per genre
       const genreMap = new Map();
       for (const artist of artistMeta) {
@@ -783,7 +810,7 @@ module.exports = function(app, deps) {
           if (genre) {
             genreMap.get(genre).push({
               title: artist.title || '',
-              thumb: artist.thumb ? `${plexStreamUrl}${artist.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+              thumb: artist.thumb ? `/api/plex/thumb?path=${encodeURIComponent(artist.thumb)}` : null,
               ratingKey: artist.ratingKey
             });
           }
@@ -939,8 +966,6 @@ module.exports = function(app, deps) {
         return res.json(cached);
       }
 
-      const plexStreamUrl = process.env.PLEX_URL_EXTERNAL || PLEX_URL;
-
       // Haal artiest-metadata op
       const artistData = await plexGet(`/library/metadata/${ratingKey}`);
       const artistMeta = artistData?.MediaContainer?.Metadata?.[0];
@@ -957,7 +982,7 @@ module.exports = function(app, deps) {
         ratingKey: a.ratingKey,
         title: a.title,
         year: a.year || null,
-        thumb: a.thumb ? `${plexStreamUrl}${a.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+        thumb: a.thumb ? `/api/plex/thumb?path=${encodeURIComponent(a.thumb)}` : null,
         trackCount: a.leafCount || 0
       }));
 
@@ -972,7 +997,7 @@ module.exports = function(app, deps) {
         artist: {
           ratingKey: artistMeta.ratingKey,
           title: artistMeta.title,
-          thumb: artistMeta.thumb ? `${plexStreamUrl}${artistMeta.thumb}?X-Plex-Token=${PLEX_TOKEN}` : null,
+          thumb: artistMeta.thumb ? `/api/plex/thumb?path=${encodeURIComponent(artistMeta.thumb)}` : null,
           albums,
           genres,
           totalTracks
