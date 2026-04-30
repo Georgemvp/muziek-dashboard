@@ -87,9 +87,9 @@ function isInWishlist(type, name) {
 
 function pruneCache() {}
 
-function addDownload({ tidal_id, artist, title, url, quality }) {
+function addDownload({ tidal_id, artist, title, url, quality, source, platform }) {
   const id = ++_downloadSeq;
-  _tables.downloads.push({ id, tidal_id, artist, title, url, quality, downloaded_at: Date.now() });
+  _tables.downloads.push({ id, tidal_id, artist, title, url, quality, source: source || null, platform: platform || null, downloaded_at: Date.now() });
   return id;
 }
 
@@ -105,12 +105,21 @@ function removeDownload(id) {
   _tables.downloads = _tables.downloads.filter(r => r.id !== id);
 }
 
+/** Normaliseer artiest+titel tot een opzoeksleutel (zelfde logica als db.js). */
+function normalizeKey(artist, title) {
+  const n = s => (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  return `${n(artist)}|${n(title)}`;
+}
+
 // ── 3. Injecteer de mock als db.js in require.cache ────────────────────────
 const fakeDbModule    = new Module(DB_JS_PATH, null);
 fakeDbModule.exports  = {
   getCache, setCache, clearCache, getCacheAge,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, pruneCache,
+  normalizeKey,
 };
 fakeDbModule.filename = DB_JS_PATH;
 fakeDbModule.loaded   = true;

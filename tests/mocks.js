@@ -162,11 +162,23 @@ function orpheusResponse(url, method = 'GET', body = null) {
   if (url.endsWith('/api/status') || url.endsWith('/status')) {
     return { ok: true, version: '1.0.0', uptime: 3600 };
   }
+  // Settings (GET of POST)
+  if (url.includes('/api/settings')) {
+    return {
+      modules: {},
+      global: { general: { download_path: '/music', download_quality: 'hifi', search_limit: 20 } }
+    };
+  }
   // Platforms
   if (url.includes('/api/platforms') || url.includes('/platforms')) {
     return { platforms: ORPHEUS_PLATFORMS };
   }
-  // Search
+  // Search POST: start een zoek-job en geef een job_id terug.
+  // De service (searchOrpheusSingle) destructureert { job_id } uit dit antwoord.
+  if (url.includes('/api/search') && method === 'POST') {
+    return { job_id: 'mock-search-001' };
+  }
+  // Search GET (legacy/direct modus)
   if (url.includes('/api/search') || url.includes('/search')) {
     const parsed = new URL(url);
     const platform = parsed.searchParams.get('platform') || 'tidal';
@@ -174,17 +186,27 @@ function orpheusResponse(url, method = 'GET', body = null) {
     const source   = ORPHEUS_SEARCH_RESULTS[platform] || ORPHEUS_SEARCH_RESULTS.tidal;
     return { results: source[type + 's'] || source.albums || [] };
   }
-  // Download (POST)
+  // Download POST: geef job_id terug (snake_case, zoals de service verwacht).
   if ((url.includes('/api/download') || url.includes('/download')) && method === 'POST') {
-    return { jobId: 'mock-job-42', status: 'queued', message: 'Download queued' };
+    return { job_id: 'mock-job-42' };
   }
-  // Job status
-  if (url.match(/\/job\/[^/]+$/) && method === 'GET') {
-    return { jobId: 'mock-job-42', status: 'completed', progress: 100, file: '/music/Radiohead - OK Computer.flac' };
+  // Job stop (URL-formaat: /api/job/stop/{jobId})
+  if (url.match(/\/job\/stop\/[^/]+$/) && method === 'POST') {
+    return { ok: true, status: 'cancelled' };
   }
-  // Job stop
+  // Job stop (alternatief URL-formaat: /api/job/{jobId}/stop)
   if (url.match(/\/job\/[^/]+\/stop$/) && method === 'POST') {
-    return { jobId: 'mock-job-42', status: 'cancelled' };
+    return { ok: true, status: 'cancelled' };
+  }
+  // Job status GET: status MOET 'done' zijn (niet 'completed') zodat pollJob stopt.
+  // Log bevat een geldige zoekresultaat-regel voor parseSearchLog.
+  if (url.match(/\/job\/[^/]+$/) && method === 'GET') {
+    return {
+      jobId:    'mock-job-42',
+      status:   'done',
+      progress: 100,
+      log: ['1. OK Computer |ARTIST|Radiohead| |ID|12345| |PLATFORM|tidal|'],
+    };
   }
   return {};
 }
@@ -193,6 +215,9 @@ function orpheusResponse(url, method = 'GET', body = null) {
 
 /**
  * Bouw een mock JSON-response object.
+ * De content-type header is ingesteld op application/json zodat orpheusFetch
+ * (die de Content-Type header controleert) res.json() aanroept in plaats van
+ * res.text() en een correct object teruggeeft – niet een JSON-string.
  */
 function mockJson(data, status = 200) {
   return {
@@ -200,7 +225,7 @@ function mockJson(data, status = 200) {
     status,
     json:   () => Promise.resolve(data),
     text:   () => Promise.resolve(JSON.stringify(data)),
-    headers: new Map(),
+    headers: new Map([['content-type', 'application/json; charset=utf-8']]),
     body:   null,
   };
 }
