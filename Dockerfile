@@ -131,18 +131,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app/orpheusdl
 
 # Kloon OrpheusDL (bascurtiz fork met webui.py)
-RUN git clone https://github.com/bascurtiz/OrpheusDL .
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/OrpheusDL .
 
 # ── Alle download-modules ─────────────────────────────────────────────────
-RUN git clone https://github.com/bascurtiz/orpheusdl-applemusic    modules/applemusic
-RUN git clone https://github.com/bascurtiz/orpheusdl-beatport       modules/beatport
-RUN git clone https://github.com/bascurtiz/orpheusdl-beatsource     modules/beatsource
-RUN git clone https://github.com/bascurtiz/orpheusdl-deezer         modules/deezer
-RUN git clone https://github.com/bascurtiz/orpheusdl-qobuz          modules/qobuz
-RUN git clone https://github.com/bascurtiz/orpheusdl-soundcloud     modules/soundcloud
-RUN git clone https://github.com/bascurtiz/orpheusdl-spotify        modules/spotify
-RUN git clone --recurse-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal
-RUN git clone https://github.com/bascurtiz/orpheusdl-youtube        modules/youtube
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-applemusic    modules/applemusic
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-beatport       modules/beatport
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-beatsource     modules/beatsource
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-deezer         modules/deezer
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-qobuz          modules/qobuz
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-soundcloud     modules/soundcloud
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-spotify        modules/spotify
+# Getest: 2026-04-30
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal
+# Getest: 2026-04-30
+RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-youtube        modules/youtube
 
 # Installeer Python-afhankelijkheden + Flask in een eigen venv
 # (isoleert OrpheusDL van AudioMuse's /app/venv in het productie-image)

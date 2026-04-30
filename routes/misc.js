@@ -2,11 +2,30 @@
 
 const logger = require('../logger');
 
+/**
+ * Probeert een URL te bereiken binnen maxMs milliseconden.
+ * Geeft altijd { up: boolean, ms: number } terug — gooit nooit.
+ */
+async function checkService(url, maxMs = 3000) {
+  const start = Date.now();
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), maxMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, method: 'HEAD' });
+    clearTimeout(timer);
+    // Elke HTTP-respons (ook 4xx) = service is bereikbaar
+    return { up: res.status < 500, ms: Date.now() - start };
+  } catch (_e) {
+    clearTimeout(timer);
+    return { up: false, ms: Date.now() - start };
+  }
+}
+
 module.exports = function(app, deps) {
   const {
     proxyImage, getDiscover, refreshDiscover, getGaps, refreshGaps, getReleases,
     refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache,
-    getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN
+    getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN, TIDARR_URL, ORPHEUS_URL
   } = deps;
 
   // ── /api/discover, /api/gaps, /api/releases ───────────────────────────────
@@ -90,10 +109,6 @@ module.exports = function(app, deps) {
     }
   });
 
-  // ── /health ───────────────────────────────────────────────────────────────
-  // Note: lastFmDown and lastFmDownSince are passed via deps
-  // The lastfm route module should export these for use here
-
   // ── /api/audiomuse/status ─────────────────────────────────────────────────
   app.get('/api/audiomuse/status', async (req, res) => {
     const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -105,19 +120,45 @@ module.exports = function(app, deps) {
     }
   });
 
-  app.get('/health', (req, res) => {
-    const { ok: plexConnected } = getPlexStatus();
-    const discoverAge = getCacheAge('discover');
-    const gapsAge     = getCacheAge('gaps');
+  // ── /health ───────────────────────────────────────────────────────────────
+  // Geen API-key vereist — wordt ook door de Docker HEALTHCHECK gebruikt.
+  // Controleert alle sub-services parallel (Promise.allSettled) zodat een
+  // falende service de rest niet blokkeert. Respons binnen ~3 seconden.
+  app.get('/health', async (req, res) => {
+    const TIDARR_BASE    = (TIDARR_URL  || 'http://localhost:8484').replace(/\/$/, '');
+    const ORPHEUS_BASE   = (ORPHEUS_URL || 'http://localhost:5000').replace(/\/$/, '');
+    const MEDIASAGE_BASE = (process.env.MEDIASAGE_URL || 'http://localhost:5765').replace(/\/$/, '');
+    const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
-    // Get lastFmDown status from deps if available, otherwise assume up
-    const lastFmDown = deps.lastFmDown ? deps.lastFmDown() : false;
+    const plexStatus      = getPlexStatus();
+    const discoverAge     = getCacheAge('discover');
+    const gapsAge         = getCacheAge('gaps');
+    const lastFmDown      = deps.lastFmDown      ? deps.lastFmDown()      : false;
     const lastFmDownSince = deps.lastFmDownSince ? deps.lastFmDownSince() : null;
 
+    const [tidarrResult, orpheusResult, mediasageResult, audiomuseResult] =
+      await Promise.allSettled([
+        checkService(`${TIDARR_BASE}/`),
+        checkService(`${ORPHEUS_BASE}/`),
+        checkService(`${MEDIASAGE_BASE}/health`),
+        checkService(`${AUDIOMUSE_BASE}/api/health`),
+      ]);
+
+    const svc = (r) => r.status === 'fulfilled' ? r.value : { up: false, ms: 0 };
+
     res.json({
-      status:       'ok',
-      uptime:       Math.round(process.uptime()),
-      plexConnected,
+      ok:     true,
+      uptime: Math.round(process.uptime()),
+      services: {
+        plex:      plexStatus,
+        tidarr:    svc(tidarrResult),
+        orpheus:   svc(orpheusResult),
+        mediasage: svc(mediasageResult),
+        audiomuse: svc(audiomuseResult),
+      },
+      // Behoud bestaande velden voor backward compatibiliteit
+      status:          'ok',
+      plexConnected:   plexStatus.ok === true,
       lastFmDown,
       lastFmDownSince: lastFmDownSince ? new Date(lastFmDownSince).toISOString() : null,
       cache: {
