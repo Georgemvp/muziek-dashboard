@@ -754,8 +754,8 @@ export async function triggerOrpheusDownload(artist, album, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
     const query = [artist, album].filter(Boolean).join(' ');
-    const d = await orpheusSearch(query, state.orpheusPlatform || 'all', 'album');
-    const results = (d.results || []).filter(r => r.type === 'album');
+    const d = await orpheusSearch(query, state.orpheusPlatform || 'all');
+    const results = d.results || [];
 
     if (!results.length) {
       alert(`Niet gevonden via OrpheusDL: "${album}"${artist ? ' van ' + artist : ''}\n\nProbeer handmatig via de Downloads-tab.`);

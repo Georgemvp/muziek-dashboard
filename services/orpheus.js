@@ -200,28 +200,39 @@ function parseSearchLog(logLines, searchType = 'album') {
  */
 async function searchOrpheusSingle(q, platform, type) {
   const body = { platform, type, query: q };
-  logger.info({ body }, 'OrpheusDL search request');
+  logger.debug({ body }, 'OrpheusDL search request');
 
   const response = await orpheusFetch('/api/search', {
     method: 'POST',
     body:   JSON.stringify(body)
   });
-  logger.info({ response }, 'OrpheusDL search response');
 
   const { job_id: jobId } = response;
   if (!jobId) throw new Error(`OrpheusDL retourneerde geen job_id voor zoekopdracht (type=${type})`);
 
   const job = await pollJob(jobId, { interval: 800, maxWait: 60_000 });
-  logger.info({
-    jobId,
-    status:      job.status,
-    logLength:   Array.isArray(job.log) ? job.log.length : typeof job.log,
-    logSample:   Array.isArray(job.log) ? job.log.slice(0, 5) : job.log,
-    rawJobKeys:  Object.keys(job || {}),
-  }, 'OrpheusDL search job completed');
+  const logLines = Array.isArray(job.log) ? job.log : [];
 
-  const results = parseSearchLog(job.log || [], type);
-  logger.info({ resultCount: results.length, results: results.slice(0, 2) }, 'parseSearchLog output');
+  // Detecteer Python-crash in de log
+  const hasError = logLines.some(l => String(l).includes('An unexpected error occurred') || String(l).includes('Traceback'));
+  if (hasError) {
+    logger.error({
+      jobId,
+      status:     job.status,
+      fullLog:    logLines,
+      rawJobKeys: Object.keys(job || {}),
+    }, 'OrpheusDL search job bevat Python-fout');
+
+    // Extraheer de eigenlijke foutmelding (regel na "Error:" of laatste niet-lege regel)
+    const errorLine = logLines.find(l => /^\w+Error:|Exception:/.test(String(l).trim()))
+      || logLines.filter(l => String(l).trim()).slice(-1)[0]
+      || 'Onbekende OrpheusDL fout';
+    throw new Error(`OrpheusDL crash (${type}): ${String(errorLine).trim()}`);
+  }
+
+  logger.debug({ jobId, status: job.status, logLength: logLines.length }, 'OrpheusDL search job completed');
+
+  const results = parseSearchLog(logLines, type);
 
   return { results, jobId, status: job.status };
 }
