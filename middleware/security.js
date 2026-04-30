@@ -22,28 +22,29 @@ const rateLimitHandler = (req, res) => {
  * @param {import('express').Application} app
  */
 function registerSecurity(app) {
-  logger.info({ window: '60s', maxRequests: 300 }, 'Global rate limiter configured');
+  const isImageRequest = (req) =>
+    req.path.startsWith('/api/img') || req.path.startsWith('/api/plex/thumb');
+
+  // Globale rate limiter — slaat image requests over (gecachte lokale afbeeldingen)
+  logger.info({ window: '60s', maxRequests: 300 }, 'Global rate limiter configured (images exempt)');
   app.use(rateLimit({
     windowMs: 60_000,
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
-    skip: (req) => req.path.startsWith('/api/img'),
+    skip: isImageRequest,
   }));
 
-  // Image proxy krijgt een ruimere limiet — het is een interne cache, geen externe API
-  logger.info({ window: '60s', maxRequests: 600 }, 'Image proxy rate limiter configured');
-  app.use('/api/img', rateLimit({ windowMs: 60_000, max: 600, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler }));
-
-  logger.info({ window: '60s', maxRequests: 120 }, 'API rate limiter configured');
+  // API rate limiter — slaat image requests over
+  logger.info({ window: '60s', maxRequests: 120 }, 'API rate limiter configured (images exempt)');
   app.use('/api', rateLimit({
     windowMs: 60_000,
     max: 120,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
-    skip: (req) => req.path.startsWith('/img'),
+    skip: (req) => req.path.startsWith('/img') || req.path.startsWith('/plex/thumb'),
   }));
 
   // API-key check: vrije routes zijn /plex/webhook, /plex/thumb en /health
