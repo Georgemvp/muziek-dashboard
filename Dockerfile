@@ -154,6 +154,29 @@ RUN git clone --depth 1 --recurse-submodules --shallow-submodules https://github
 # Getest: 2026-04-30
 RUN git clone --depth 1 https://github.com/bascurtiz/orpheusdl-youtube        modules/youtube
 
+# Patch: PlaylistId bestaat niet in deze librespot-versie — graceful afvangen
+# zodat music_downloader.py de Spotify-module kan importeren zonder te crashen.
+RUN python3 - <<'EOF'
+import re, pathlib
+
+# spotify_api.py: wrap de PlaylistId-import in een try/except
+p = pathlib.Path('modules/spotify/spotify_api.py')
+src = p.read_text()
+old = 'from librespot.metadata import TrackId, EpisodeId, PlaylistId'
+new = (
+    'try:\n'
+    '    from librespot.metadata import TrackId, EpisodeId, PlaylistId\n'
+    'except ImportError:\n'
+    '    from librespot.metadata import TrackId, EpisodeId\n'
+    '    PlaylistId = None'
+)
+if old in src:
+    p.write_text(src.replace(old, new))
+    print('✓ spotify_api.py gepatcht')
+else:
+    print('⚠ patroon niet gevonden in spotify_api.py — al gepatcht of versie veranderd')
+EOF
+
 # Installeer Python-afhankelijkheden + Flask in een eigen venv
 # (isoleert OrpheusDL van AudioMuse's /app/venv in het productie-image)
 RUN python -m venv /orpheus_venv && \
