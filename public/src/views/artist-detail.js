@@ -8,6 +8,7 @@ import {
   albumCard, showLoading, showError, proxyImg, p, downloadBtn
 } from '../helpers.js';
 import { playOnZone } from '../components/plexRemote.js';
+import { playPreview } from '../components/player.js';
 import { switchView } from '../router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,11 +97,10 @@ function renderHeroAndAlbums(name, info) {
     </div>
   `;
 
-  // Build albums section — splits in owned en not-owned
+  // Build albums section — only owned albums (gaps handled separately below)
   let albumsHtml = '';
   if (info.albums && info.albums.length > 0) {
-    const ownedAlbums    = info.albums.filter(a => a.inPlex);
-    const notOwnedAlbums = info.albums.filter(a => !a.inPlex);
+    const ownedAlbums = info.albums.filter(a => a.inPlex);
 
     if (ownedAlbums.length > 0) {
       albumsHtml += `
@@ -111,20 +111,6 @@ function renderHeroAndAlbums(name, info) {
           </div>
           <div class="detail-grid">
             ${ownedAlbums.map(a => renderAlbumCard(name, a)).join('')}
-          </div>
-        </section>
-      `;
-    }
-
-    if (notOwnedAlbums.length > 0) {
-      albumsHtml += `
-        <section class="detail-section" id="section-quick-download">
-          <div class="section-header">
-            <h2>Nog niet gedownload</h2>
-            <span class="section-count">${notOwnedAlbums.length}</span>
-          </div>
-          <div class="detail-grid">
-            ${notOwnedAlbums.map(a => renderGapCard(name, a)).join('')}
           </div>
         </section>
       `;
@@ -156,10 +142,6 @@ function renderHeroAndAlbums(name, info) {
   `;
 
   document.title = `Muziek · ${name}`;
-
-  // ── Wire OrpheusDL buttons in quick-download section ───────────────────
-  const quickDl = document.getElementById('section-quick-download');
-  if (quickDl) setupOrpheusHandlers(quickDl);
 
   // ── Register event handlers on hero ────────────────────────────────────
   setupEventHandlers();
@@ -275,6 +257,17 @@ function renderTracksSection(artistName, tracks) {
       ${tracks.map((t, idx) => renderTrackRow(artistName, t, idx + 1)).join('')}
     </div>
   `;
+
+  // Wire preview play buttons
+  sectionEl.querySelectorAll('.track-play-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      playPreview(btn, btn.dataset.artist, btn.dataset.track);
+    });
+  });
+
+  // Wire track download buttons (OrpheusDL)
+  setupOrpheusHandlers(sectionEl);
 }
 
 /**
@@ -511,6 +504,13 @@ function renderTrackRow(artistName, track, position) {
     </button>
   `;
 
+  // Download knop: zoek het album als dat bekend is, anders het nummer
+  const dlTarget = track.album?.title || track.name;
+  const orpheusBtn = `<button class="panel-orpheus-btn track-dl-btn"
+    data-oph-artist="${esc(artistName)}"
+    data-oph-album="${esc(dlTarget)}"
+    title="Download via OrpheusDL">⬇</button>`;
+
   return `
     <div class="track-row">
       <div class="track-rank">${position}</div>
@@ -521,6 +521,7 @@ function renderTrackRow(artistName, track, position) {
       </div>
       <div class="track-actions">
         ${playBtn}
+        ${orpheusBtn}
       </div>
     </div>
   `;

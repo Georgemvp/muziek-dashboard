@@ -537,3 +537,17 @@
     padding: 0.75rem;
   }
 }
+
+.track-dl-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border, #ddd);
+  cursor: pointer;
+  color: var(--text2);
+}
+.track-dl-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
