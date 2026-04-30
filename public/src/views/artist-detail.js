@@ -96,12 +96,14 @@ function renderHeroAndAlbums(name, info) {
     </div>
   `;
 
-  // Build albums section
+  // Build albums section — splits in owned en not-owned
   let albumsHtml = '';
   if (info.albums && info.albums.length > 0) {
-    const ownedAlbums = info.albums.filter(a => a.inPlex);
+    const ownedAlbums    = info.albums.filter(a => a.inPlex);
+    const notOwnedAlbums = info.albums.filter(a => !a.inPlex);
+
     if (ownedAlbums.length > 0) {
-      albumsHtml = `
+      albumsHtml += `
         <section class="detail-section" id="section-albums">
           <div class="section-header">
             <h2>Albums die je hebt</h2>
@@ -109,6 +111,20 @@ function renderHeroAndAlbums(name, info) {
           </div>
           <div class="detail-grid">
             ${ownedAlbums.map(a => renderAlbumCard(name, a)).join('')}
+          </div>
+        </section>
+      `;
+    }
+
+    if (notOwnedAlbums.length > 0) {
+      albumsHtml += `
+        <section class="detail-section" id="section-quick-download">
+          <div class="section-header">
+            <h2>Nog niet gedownload</h2>
+            <span class="section-count">${notOwnedAlbums.length}</span>
+          </div>
+          <div class="detail-grid">
+            ${notOwnedAlbums.map(a => renderGapCard(name, a)).join('')}
           </div>
         </section>
       `;
@@ -140,6 +156,10 @@ function renderHeroAndAlbums(name, info) {
   `;
 
   document.title = `Muziek · ${name}`;
+
+  // ── Wire OrpheusDL buttons in quick-download section ───────────────────
+  const quickDl = document.getElementById('section-quick-download');
+  if (quickDl) setupOrpheusHandlers(quickDl);
 
   // ── Register event handlers on hero ────────────────────────────────────
   setupEventHandlers();
@@ -479,6 +499,12 @@ function renderTrackRow(artistName, track, position) {
     ? `<span class="track-playcount" title="${track.playcount} keer beluisterd">${fmt(track.playcount)} × ♪</span>`
     : '';
 
+  // Album art van Deezer (track.album.cover_medium)
+  const albumCover = track.album?.cover_medium;
+  const coverHtml = albumCover
+    ? `<img class="track-cover" src="${esc(proxyImg(albumCover, 40) || albumCover)}" alt="" loading="lazy" decoding="async">`
+    : `<div class="track-cover-ph">♪</div>`;
+
   const playBtn = `
     <button class="track-play-btn" data-artist="${esc(artistName)}" data-track="${esc(track.name)}" title="Speel voorbeeld af">
       ▶
@@ -488,6 +514,7 @@ function renderTrackRow(artistName, track, position) {
   return `
     <div class="track-row">
       <div class="track-rank">${position}</div>
+      ${coverHtml}
       <div class="track-info">
         <div class="track-name">${esc(track.name)}</div>
         ${playcountHtml}

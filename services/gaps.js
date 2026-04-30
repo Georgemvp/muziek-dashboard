@@ -3,7 +3,7 @@ const logger = require('../logger');
 const { lfm }                                     = require('./lastfm');
 const { syncPlexLibrary, artistInPlex, albumInPlex, getPlexStatus } = require('./plex');
 const { getMBZArtist, getMBZAlbums }              = require('./musicbrainz');
-const { getDeezerImage }                          = require('./deezer');
+const { getDeezerImage, getDeezerArtist, getDeezerArtistAlbums } = require('./deezer');
 const { getCache, setCache, getCacheAge }         = require('../db');
 
 const CACHE_TTL = 86_400_000; // 24 uur
@@ -199,16 +199,39 @@ async function getArtistGaps(artistName) {
   }
 
   try {
-    // Check of artiest in Plex staat
-    if (!artistInPlex(artistName)) {
-      return { owned: [], missing: [], ownedCount: 0, totalCount: 0, completeness: 0, notInPlex: true };
-    }
+    const inPlex = artistInPlex(artistName);
 
     // Haal MusicBrainz MBID op
     const mbz = await getMBZArtist(artistName);
     if (!mbz || !mbz.mbid) {
-      logger.warn({ artist: artistName }, 'MusicBrainz MBID niet gevonden');
-      return { owned: [], missing: [], ownedCount: 0, totalCount: 0, completeness: 0, mbidNotFound: true };
+      // FALLBACK: als MusicBrainz niks vindt, haal albums op via Deezer
+      logger.warn({ artist: artistName }, 'MusicBrainz MBID niet gevonden — Deezer fallback');
+      const deezerArtist = await getDeezerArtist(artistName);
+      if (!deezerArtist?.id) {
+        return { owned: [], missing: [], ownedCount: 0, totalCount: 0, completeness: 0, notInPlex: !inPlex };
+      }
+      const deezerAlbums = await getDeezerArtistAlbums(deezerArtist.id);
+      const albums = deezerAlbums
+        .filter(a => a.title && a.title !== '(null)' && (!a.record_type || ['album', 'ep'].includes(a.record_type)))
+        .map(a => ({
+          name:        a.title,
+          title:       a.title,
+          image:       a.cover_medium || null,
+          releaseDate: a.release_date || null,
+          albumType:   a.record_type || 'Album',
+          inPlex:      albumInPlex(artistName, a.title)
+        }));
+      const owned   = albums.filter(a => a.inPlex);
+      const missing = albums.filter(a => !a.inPlex);
+      const result  = {
+        owned, missing,
+        ownedCount:   owned.length,
+        totalCount:   albums.length,
+        completeness: albums.length > 0 ? Math.round((owned.length / albums.length) * 100) : 0,
+        notInPlex:    !inPlex
+      };
+      setCache(cacheKey, result);
+      return result;
     }
 
     // Haal alle albums op van MusicBrainz
@@ -216,13 +239,13 @@ async function getArtistGaps(artistName) {
 
     // Check per album of het in Plex staat (parallel processing met limit van 8)
     const albumTasks = allAlbums.map(album => async () => {
-      const inPlex = albumInPlex(artistName, album.title);
+      const isInPlex = albumInPlex(artistName, album.title);
       const image = album.image || await getDeezerAlbumCover(artistName, album.title).catch(() => null);
       return {
         ...album,
-        name: album.title,  // ← Voeg 'name' property toe
-        image,              // ← Voeg image toe
-        inPlex
+        name:  album.title,
+        image,
+        inPlex: isInPlex
       };
     });
 
@@ -232,17 +255,18 @@ async function getArtistGaps(artistName) {
       .map(r => r.value);
 
     // Verdeel in owned en missing
-    const owned = checkedAlbums.filter(a => a.inPlex);
+    const owned   = checkedAlbums.filter(a => a.inPlex);
     const missing = checkedAlbums.filter(a => !a.inPlex);
 
     const result = {
       owned,
       missing,
-      ownedCount: owned.length,
-      totalCount: checkedAlbums.length,
+      ownedCount:   owned.length,
+      totalCount:   checkedAlbums.length,
       completeness: checkedAlbums.length > 0
         ? Math.round((owned.length / checkedAlbums.length) * 100)
-        : 0
+        : 0,
+      notInPlex: !inPlex
     };
 
     // Cache het resultaat

@@ -5,7 +5,7 @@ module.exports = function(app, deps) {
 
   // ── Helper: bouw albumlijst op basis van Deezer albumdata ─────────────────
   // Filtert studio-albums en singles, mapt naar het interne formaat.
-  async function buildAlbumList(artistName, deezerArtistId, limit = 5) {
+  async function buildAlbumList(artistName, deezerArtistId, limit = 50) {
     if (!deezerArtistId) return [];
     try {
       const albums = await getDeezerArtistAlbums(deezerArtistId);
@@ -63,7 +63,7 @@ module.exports = function(app, deps) {
       }
 
       // Haal albums op via Deezer (geen Last.fm meer nodig)
-      const albums = await buildAlbumList(name, deezerId, 5);
+      const albums = await buildAlbumList(name, deezerId, 50);
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
@@ -120,7 +120,7 @@ module.exports = function(app, deps) {
       }
 
       // Haal albums op via Deezer (geen Last.fm meer nodig)
-      const albums = await buildAlbumList(name, deezerId, 5);
+      const albums = await buildAlbumList(name, deezerId, 50);
 
       const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
       const result = {
@@ -267,7 +267,7 @@ module.exports = function(app, deps) {
           }
 
           // Haal albums op via Deezer
-          const albums = await buildAlbumList(name, deezerId, 5);
+          const albums = await buildAlbumList(name, deezerId, 50);
 
           const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
           return {
@@ -302,7 +302,8 @@ module.exports = function(app, deps) {
                 name:      t.title,
                 playcount: t.rank || 0,   // Deezer rank als vervanger van playcount
                 listeners: 0,             // Deezer geeft geen listeners-telling
-                url:       null
+                url:       null,
+                album:     t.album || null
               }));
           } catch (e) {
             console.warn(`Deezer top tracks mislukt voor "${name}":`, e.message);
@@ -411,7 +412,8 @@ module.exports = function(app, deps) {
           name:      t.title,
           playcount: t.rank || 0,
           listeners: 0,
-          url:       null
+          url:       null,
+          album:     t.album || null
         }));
 
       res.set('Cache-Control', 'private, max-age=3600');
