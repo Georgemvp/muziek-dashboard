@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { apiFetch } from '../api.js';
 import { esc, fmt, initials, gradientFor, proxyImg } from '../helpers.js';
 import { playOnZone, getSelectedZone } from '../components/plexRemote.js';
+import { switchView } from '../router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module-level state
@@ -641,9 +642,21 @@ async function render(container, data) {
 // ── Global click handler (exported voor events.js) ────────────────────────
 
 export async function handleAlbumsClick(e) {
-  // Album card click → open detail view (maar niet bij play-btn)
+  // Artist button click → navigate to artist-detail view
+  const artistBtn = e.target.closest('.albums-artist-btn');
+  if (artistBtn) {
+    e.stopPropagation();
+    const card = artistBtn.closest('.albums-album');
+    const artistName = card?.dataset.artist || artistBtn.title;
+    if (artistName) {
+      switchView('artist-detail', { name: artistName });
+    }
+    return true;
+  }
+
+  // Album card click → open detail view (maar niet bij play-btn of artist-btn)
   const card = e.target.closest('.albums-album');
-  if (card && !e.target.closest('.albums-play-btn')) {
+  if (card && !e.target.closest('.albums-play-btn') && !e.target.closest('.albums-artist-btn')) {
     const item = {
       ratingKey: card.dataset.ratingKey,
       album: card.dataset.album,
@@ -676,17 +689,13 @@ export async function handleAlbumsClick(e) {
     return true;
   }
 
-  // Artist link in detail view → filter on artist
+  // Artist link in detail view → navigate to artist-detail view
   const artistLink = e.target.closest('.album-detail-artist-link');
   if (artistLink) {
-    albumsSearchTerm = artistLink.dataset.artist;
-    hideAlbumDetail();
-    const searchInput = document.getElementById('albums-search');
-    if (searchInput) {
-      searchInput.value = albumsSearchTerm;
+    const artistName = artistLink.dataset.artist;
+    if (artistName) {
+      switchView('artist-detail', { name: artistName });
     }
-    renderToolbar();
-    rerender();
     return true;
   }
 

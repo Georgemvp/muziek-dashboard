@@ -986,7 +986,7 @@ export async function openSidebarPlaylist(key, title) {
           </div>
           <div class="blib-track-title">
             <div>${esc(t.title || 'Onbekend')}</div>
-            ${t.artist ? `<div class="blib-track-artist">${esc(t.artist)}</div>` : ''}
+            ${t.artist ? `<div class="blib-track-artist" data-artist="${esc(t.artist)}">${esc(t.artist)}</div>` : ''}
           </div>
           <div class="blib-track-duration">${dur ? `${min}:${sec}` : ''}</div>
         </div>`;
@@ -1141,7 +1141,7 @@ function blibRenderTracksList(tracks, container) {
         <button class="blib-track-play-btn" aria-label="Speel ${esc(t.title || '')} af">▶</button>
       </div>
       <div class="blib-track-title">${esc(t.title || 'Onbekend')}</div>
-      <div class="blib-track-artist">${esc(t.artist || '—')}</div>
+      <div class="blib-track-artist"${t.artist ? ` data-artist="${esc(t.artist)}"` : ''}>${esc(t.artist || '—')}</div>
       <div class="blib-track-album">${esc(t.album || '—')}</div>
       <div class="blib-track-duration">${dur ? `${min}:${sec}` : ''}</div>
     </div>`;

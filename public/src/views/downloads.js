@@ -439,7 +439,7 @@ export function renderTidalQueue() {
       return `<div class="q-row">
         <div class="q-info">
           <div class="q-title">${esc(it.title || '(onbekend)')}</div>
-          ${it.artist ? `<div class="q-artist">${esc(it.artist)}</div>` : ''}
+          ${it.artist ? `<div class="q-artist" data-artist="${esc(it.artist)}">${esc(it.artist)}</div>` : ''}
           <span class="q-status ${sc}">${esc(lbl)}</span>
         </div>
         ${progHtml}
@@ -571,7 +571,7 @@ export function renderDashboardQueue(el, items) {
       ? Math.round(i.progress.current / i.progress.total * 100) : null;
     return `<div class="w-q-row"><div class="w-q-info">
       <div class="w-q-title">${esc(i.title || '(onbekend)')}</div>
-      ${i.artist ? `<div class="w-q-artist">${esc(i.artist)}</div>` : ''}
+      ${i.artist ? `<div class="w-q-artist" data-artist="${esc(i.artist)}">${esc(i.artist)}</div>` : ''}
       ${pct !== null
         ? `<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${pct}%"></div></div>
            <div style="font-size:10px;color:var(--muted2);margin-top:2px">${pct}%</div>`
@@ -641,7 +641,7 @@ export function renderQueuePopover() {
       ? `<div class="q-bar" style="margin-top:4px"><div class="q-bar-fill" style="width:${pct}%"></div></div>` : '';
     return `<div class="qpop-row">
       <div class="qpop-title">${esc(it.title || '(onbekend)')}</div>
-      ${it.artist ? `<div class="qpop-artist">${esc(it.artist)}</div>` : ''}
+      ${it.artist ? `<div class="qpop-artist" data-artist="${esc(it.artist)}">${esc(it.artist)}</div>` : ''}
       <span class="q-status ${sc}">${esc(lbl)}</span>
       ${progHtml}
     </div>`;

@@ -345,7 +345,7 @@ function recentCoversHtml(tracks, dateType = 'played') {
         ${imgEl}
         ${dateLabel ? `<div class="home-recent-cover-date">${dateLabel}</div>` : ''}
         <div class="home-recent-cover-title" title="${esc(t.name)}">${esc(t.name)}</div>
-        <div class="home-recent-cover-artist" title="${esc(artistName)}">${esc(artistName)}</div>
+        <div class="home-recent-cover-artist" title="${esc(artistName)}" data-artist="${esc(artistName)}">${esc(artistName)}</div>
       </div>`;
   }).join('');
 }
@@ -446,7 +446,7 @@ function renderListenLater(wishlist) {
         ${imgEl}
         <div class="home-listen-later-info">
           <div class="home-listen-later-name" title="${esc(item.name)}">${esc(item.name)}</div>
-          <div class="home-listen-later-artist" title="${esc(item.artist || '')}">${esc(item.artist || '')}</div>
+          <div class="home-listen-later-artist" title="${esc(item.artist || '')}" data-artist="${esc(item.artist || '')}">${esc(item.artist || '')}</div>
         </div>
         <div class="home-listen-later-type">${esc(item.type || 'album')}</div>
       </div>`;
@@ -612,7 +612,7 @@ async function renderFeaturedArtist(topArtists) {
       <div class="featured-album-card">
         ${imgEl}
         <div class="featured-album-info">
-          <div class="featured-album-artist">${esc(album.artist?.name || album.artist || '')}</div>
+          <div class="featured-album-artist" data-artist="${esc(album.artist?.name || album.artist || '')}">${esc(album.artist?.name || album.artist || '')}</div>
           <div class="featured-album-title">${esc(album.name || '')}</div>
         </div>
       </div>`;
@@ -995,7 +995,7 @@ function buildReleasesHtml(releases, activeTab) {
     <div class="releases-main-card">
       ${mainImgEl}
       <div class="releases-main-info">
-        <div class="releases-main-artist">${esc(main.artist || '—')}</div>
+        <div class="releases-main-artist"${main.artist ? ` data-artist="${esc(main.artist)}"` : ''}>${esc(main.artist || '—')}</div>
         <div class="releases-main-title">${esc(main.title || main.album || '—')}</div>
         <div class="releases-main-date">${esc(main.date || main.releaseDate || '')}</div>
         ${desc ? `<div class="releases-main-desc">${esc(desc)}</div>` : ''}
@@ -1012,7 +1012,7 @@ function buildReleasesHtml(releases, activeTab) {
       <div class="releases-small-card">
         ${imgEl}
         <div class="releases-small-info">
-          <div class="releases-small-artist">${esc(r.artist || '—')}</div>
+          <div class="releases-small-artist"${r.artist ? ` data-artist="${esc(r.artist)}"` : ''}>${esc(r.artist || '—')}</div>
           <div class="releases-small-title">${esc(r.title || r.album || '—')}</div>
           <div class="releases-small-date">${esc(r.date || r.releaseDate || '')}</div>
           <div class="releases-plex-badge" id="plex-badge-${i + 1}" style="display:none" title="Beschikbaar in Plex">Q</div>
