@@ -24,7 +24,7 @@ async function checkService(url, maxMs = 3000) {
 module.exports = function(app, deps) {
   const {
     proxyImage, getDiscover, refreshDiscover, getGaps, refreshGaps, getReleases,
-    refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache,
+    refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache, setCache,
     getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN, TIDARR_URL, ORPHEUS_URL
   } = deps;
 
@@ -113,6 +113,41 @@ module.exports = function(app, deps) {
       // Als sharp faalt (bijv. SVG of corrupt bestand): stuur redirect
       logger.warn({ err, url }, '/api/img proxy mislukt, redirect naar origineel');
       return res.redirect(302, url);
+    }
+  });
+
+  // ── /api/imageproxy/album ─────────────────────────────────────────────────
+  // Zoekt de albumhoes op via Deezer album search en redirect naar de cover URL.
+  // Resultaat wordt 7 dagen gecached in SQLite om Deezer niet te hammeren.
+  app.get('/api/imageproxy/album', async (req, res) => {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.status(400).json({ error: 'q required' });
+
+    const cacheKey = 'imgproxy:album:' + q.toLowerCase();
+    const cached   = getCache(cacheKey, 7 * 86_400_000); // 7 dagen TTL
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=604800, immutable');
+      return res.redirect(302, cached);
+    }
+
+    try {
+      const resp = await fetch(
+        `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const data  = await resp.json();
+      const cover = data?.data?.[0]?.cover_medium || data?.data?.[0]?.cover_big;
+
+      if (cover) {
+        setCache(cacheKey, cover);
+        res.set('Cache-Control', 'public, max-age=604800, immutable');
+        return res.redirect(302, cover);
+      }
+
+      res.status(404).json({ error: 'No cover found' });
+    } catch (e) {
+      logger.warn({ err: e, q }, '/api/imageproxy/album fout');
+      res.status(500).json({ error: e.message });
     }
   });
 

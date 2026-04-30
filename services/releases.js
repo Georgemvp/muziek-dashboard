@@ -76,8 +76,8 @@ async function getRecentReleaseGroups(mbid, cutoffDate) {
       title:       rg.title,
       releaseDate: rg['first-release-date'] || null,
       type:        (rg['primary-type'] || 'album').toLowerCase(),
-      // Cover Art Archive primair; Deezer niet nodig — frontend kan 404 opvangen
-      image: `https://coverartarchive.org/release-group/${rg.id}/front-250`
+      // Frontend haalt cover op via /api/imageproxy/album (Deezer search, gecached)
+      image: null
     }));
   } catch {
     return [];

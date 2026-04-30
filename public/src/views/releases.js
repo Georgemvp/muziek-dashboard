@@ -8,6 +8,19 @@ import { state } from '../state.js';
 
 const SEEN_RELEASES_KEY = 'seenReleaseIds';
 
+// Zorg dat _imgFb beschikbaar is op window (zelfde patroon als home.js)
+if (typeof window !== 'undefined' && !window._imgFb) {
+  window._imgFb = function(el, ph) {
+    if (!el._d) {
+      el._d = 1;
+      var fb = el.getAttribute('data-fb');
+      if (fb) { el.src = fb; return; }
+    }
+    el.style.display = 'none';
+    el.insertAdjacentHTML('afterend', '<div class="releases-cover-ph">' + (ph || '♫') + '</div>');
+  };
+}
+
 // Module state
 let releasesData = null;
 let activeFilter = 'all';  // 'all' | 'album' | 'single' | 'ep'
@@ -59,16 +72,16 @@ function getFilteredAndSorted(releases) {
 // ── Render functions ─────────────────────────────────────────────────────────
 
 /**
- * Image met Cover Art Archive als primaire bron, Deezer artist image als fallback,
- * en ♫ placeholder als beide falen. Gebruikt _imgFb() die al in de app gedefinieerd is.
+ * Haalt albumhoes op via Deezer album search (snel, gecached door backend).
+ * Fallback: artiest-foto via imageproxy, daarna ♫ placeholder.
  */
 function releaseImgEl(r) {
-  const proxyUrl = r.image ? proxyImg(r.image, 250) : null;
-  const deezerFb = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
-  const src = proxyUrl || deezerFb;
-  return `<img src="${esc(src)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
-    data-fb="${esc(deezerFb)}"
-    onerror="_imgFb(this,'♫')"
+  const q = encodeURIComponent(`${r.artist} ${r.album}`);
+  const deezerAlbum = `/api/imageproxy/album?q=${q}`;
+  const deezerArtist = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
+  return `<img src="${esc(deezerAlbum)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
+    data-fb="${esc(deezerArtist)}"
+    onerror="window._imgFb ? window._imgFb(this,'♫') : this.style.display='none'"
     style="opacity:0;transition:opacity 0.35s;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1"
     onload="this.style.opacity='1'">`;
 }
