@@ -1035,7 +1035,7 @@ function renderNewReleases(releases, activeTab = 'albums') {
         <button class="home-tab home-tab--releases ${activeTab === 'albums' ? 'active' : ''}" data-releases-tab="albums">ALBUMS</button>
         <button class="home-tab home-tab--releases ${activeTab === 'singles' ? 'active' : ''}" data-releases-tab="singles">SINGLES</button>
       </div>
-      <button class="home-more-btn" data-switch="ontdek">MORE</button>
+      <button class="home-more-btn" data-switch="releases">MORE</button>
     </div>`;
 
   return `
