@@ -277,6 +277,7 @@ COPY --from=app_builder /app/public/      ./public/
 COPY server.js db.js logger.js ./
 COPY routes/         ./routes/
 COPY services/       ./services/
+COPY middleware/     ./middleware/
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
