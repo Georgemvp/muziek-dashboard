@@ -76,8 +76,12 @@ function getFilteredAndSorted(releases) {
  * Fallback: artiest-foto via imageproxy, daarna ♫ placeholder.
  */
 function releaseImgEl(r) {
-  const q = encodeURIComponent(`${r.artist} ${r.album}`);
-  const deezerAlbum = `/api/imageproxy/album?q=${q}`;
+  const params = new URLSearchParams({
+    q:      `${r.artist} ${r.album}`,
+    artist: r.artist,
+    album:  r.album
+  });
+  const deezerAlbum  = `/api/imageproxy/album?${params.toString()}`;
   const deezerArtist = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
   return `<img src="${esc(deezerAlbum)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
     data-fb="${esc(deezerArtist)}"

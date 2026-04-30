@@ -118,9 +118,13 @@ module.exports = function(app, deps) {
 
   // ── /api/imageproxy/album ─────────────────────────────────────────────────
   // Zoekt de albumhoes op via Deezer album search en redirect naar de cover URL.
-  // Resultaat wordt 7 dagen gecached in SQLite om Deezer niet te hammeren.
+  // Accepteert ?q=... voor de zoekterm én optionele ?artist=...&album=... voor
+  // nauwkeurige matching. Resultaat wordt 7 dagen gecached in SQLite.
   app.get('/api/imageproxy/album', async (req, res) => {
-    const q = (req.query.q || '').trim();
+    const q      = (req.query.q      || '').trim();
+    const artist = (req.query.artist || '').trim().toLowerCase();
+    const album  = (req.query.album  || '').trim().toLowerCase();
+
     if (!q) return res.status(400).json({ error: 'q required' });
 
     const cacheKey = 'imgproxy:album:' + q.toLowerCase();
@@ -132,11 +136,38 @@ module.exports = function(app, deps) {
 
     try {
       const resp = await fetch(
-        `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=1`,
+        `https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=10`,
         { signal: AbortSignal.timeout(5000) }
       );
-      const data  = await resp.json();
-      const cover = data?.data?.[0]?.cover_medium || data?.data?.[0]?.cover_big;
+      const data    = await resp.json();
+      const results = data?.data || [];
+
+      // Kies het best passende resultaat via 3-staps matching
+      let best = null;
+      if (results.length > 0) {
+        if (artist && album) {
+          // Stap 1: exacte match op zowel artiest als albumtitel
+          best = results.find(r =>
+            r.artist?.name?.toLowerCase() === artist &&
+            r.title?.toLowerCase()        === album
+          );
+          // Stap 2: exacte match op alleen artiest
+          if (!best) {
+            best = results.find(r => r.artist?.name?.toLowerCase() === artist);
+          }
+          // Stap 3: fuzzy match op artiest (includes in beide richtingen)
+          if (!best) {
+            best = results.find(r => {
+              const ra = r.artist?.name?.toLowerCase() || '';
+              return ra.includes(artist) || artist.includes(ra);
+            });
+          }
+        }
+        // Stap 4: eerste resultaat als fallback
+        if (!best) best = results[0];
+      }
+
+      const cover = best?.cover_big || best?.cover_medium;
 
       if (cover) {
         setCache(cacheKey, cover);
