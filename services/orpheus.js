@@ -2,8 +2,9 @@
 // Integratie met OrpheusDL WebUI (https://github.com/OrpheusDL/orpheus-webui)
 // voor het zoeken en downloaden van muziek via meerdere platforms:
 // tidal, qobuz, deezer, spotify, soundcloud, applemusic, beatport, beatsource, youtube.
-const fs   = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const logger = require('../logger');
 const { getCache, setCache } = require('../db');
 
 const ORPHEUS_URL         = (process.env.ORPHEUS_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -198,15 +199,30 @@ function parseSearchLog(logLines, searchType = 'album') {
  * @returns {Promise<{ results: Array, jobId: string, status: string }>}
  */
 async function searchOrpheusSingle(q, platform, type) {
-  const { job_id: jobId } = await orpheusFetch('/api/search', {
-    method: 'POST',
-    body:   JSON.stringify({ platform, type, query: q })
-  });
+  const body = { platform, type, query: q };
+  logger.info({ body }, 'OrpheusDL search request');
 
+  const response = await orpheusFetch('/api/search', {
+    method: 'POST',
+    body:   JSON.stringify(body)
+  });
+  logger.info({ response }, 'OrpheusDL search response');
+
+  const { job_id: jobId } = response;
   if (!jobId) throw new Error(`OrpheusDL retourneerde geen job_id voor zoekopdracht (type=${type})`);
 
   const job = await pollJob(jobId, { interval: 800, maxWait: 60_000 });
+  logger.info({
+    jobId,
+    status:      job.status,
+    logLength:   Array.isArray(job.log) ? job.log.length : typeof job.log,
+    logSample:   Array.isArray(job.log) ? job.log.slice(0, 5) : job.log,
+    rawJobKeys:  Object.keys(job || {}),
+  }, 'OrpheusDL search job completed');
+
   const results = parseSearchLog(job.log || [], type);
+  logger.info({ resultCount: results.length, results: results.slice(0, 2) }, 'parseSearchLog output');
+
   return { results, jobId, status: job.status };
 }
 
