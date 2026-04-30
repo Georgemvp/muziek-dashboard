@@ -373,44 +373,19 @@ function limitConcurrency(tasks, limit) {
   });
 }
 
-// ── Import and register route modules ──────────────────────────────────────
-
-// Collect all dependencies for route modules
-const lastfmRouteModule = require('./routes/lastfm');
-const lastfmFuncs = lastfmRouteModule(app, {
-  lfm,
-  getSimilarArtists,
-  getCache,
-  setCache,
-  syncPlexLibrary,
-  artistInPlex,
-  albumInPlex,
-  getAlbumRatingKey,
-  limitConcurrency,
-  getPlexStatus,
-  // MusicBrainz voor genre-tags (vervangt Last.fm artist.gettoptags)
-  getMBZArtist,
-  // Deezer voor zoeken, albums en tracks
-  getDeezerArtist,
-  getDeezerArtistAlbums,
-  getDeezerArtistTopTracks,
-  searchDeezerArtist
-});
-
-// Store lastfm status functions for use in other modules and health endpoint
-const lastFmStatusFuncs = lastfmFuncs;
-
-// Common dependencies shared by all route modules
+// ── Gedeeld deps-object voor alle route-modules ────────────────────────────
+// Elke route-module ontvangt dit object als tweede argument.
+// lastFmDown / lastFmDownSince worden ná de lastfm-registratie toegevoegd.
 const deps = {
-  // Last.fm (alleen persoonlijke scrobble-data)
-  lfm,
-  // Deezer getSimilarArtists vervangt Last.fm artist.getsimilar
-  getSimilarArtists,
+  // ── Cache (SQLite + helpers) ─────────────────────────────────────────────
   getCache,
   setCache,
   getCacheAge,
 
-  // Plex
+  // ── Last.fm ──────────────────────────────────────────────────────────────
+  lfm,
+
+  // ── Plex ─────────────────────────────────────────────────────────────────
   plexGet,
   plexPost,
   plexPut,
@@ -444,17 +419,19 @@ const deps = {
   getPlexArtistsByGenre,
   periodToTimestamp,
 
-  // MusicBrainz
+  // ── MusicBrainz ──────────────────────────────────────────────────────────
   getMBZArtist,
 
-  // Deezer
+  // ── Deezer ───────────────────────────────────────────────────────────────
   getDeezerImage,
   getDeezerArtist,
   getDeezerArtistAlbums,
   getDeezerArtistTopTracks,
   searchDeezerArtist,
+  // getSimilarArtists vervangt Last.fm artist.getsimilar
+  getSimilarArtists,
 
-  // Discovery
+  // ── Discovery & gaps ─────────────────────────────────────────────────────
   getDiscover,
   refreshDiscover,
   getGaps,
@@ -463,7 +440,7 @@ const deps = {
   getReleases,
   refreshReleases,
 
-  // Tidarr
+  // ── Tidarr ───────────────────────────────────────────────────────────────
   searchTidal,
   findBestAlbum,
   findTopAlbums,
@@ -477,7 +454,7 @@ const deps = {
   getDownloadKeys,
   removeDownload,
 
-  // OrpheusDL
+  // ── OrpheusDL ────────────────────────────────────────────────────────────
   searchOrpheus,
   downloadOrpheus,
   downloadFromSearch,
@@ -490,32 +467,36 @@ const deps = {
   ORPHEUS_PLATFORMS,
   ORPHEUS_QUALITY_OPTIONS,
 
-  // Image proxy
+  // ── Image proxy ──────────────────────────────────────────────────────────
   proxyImage,
 
-  // Wishlist
+  // ── Wishlist ─────────────────────────────────────────────────────────────
   getWishlist,
   addToWishlist,
   removeFromWishlist,
 
-  // Spotify
+  // ── Spotify ──────────────────────────────────────────────────────────────
   SPOTIFY_OK,
   MOODS,
   searchArtistId,
   getRecommendations,
 
-  // Wikipedia
+  // ── Wikipedia ────────────────────────────────────────────────────────────
   getWikipediaExtract,
 
-  // Helpers
+  // ── Helpers ──────────────────────────────────────────────────────────────
   limitConcurrency,
-
-  // LastFM status (from lastfm route module)
-  lastFmDown: lastfmFuncs.lastFmDown,
-  lastFmDownSince: lastfmFuncs.lastFmDownSince
 };
 
-// Register all route modules
+// ── Route-modules registreren ──────────────────────────────────────────────
+// Last.fm als eerste: geeft status-functies terug die andere modules nodig hebben.
+const lastfmFuncs = require('./routes/lastfm')(app, deps);
+
+// Voeg Last.fm-statusfuncties toe aan het gedeelde deps-object zodat
+// misc.js (health endpoint) de actuele bereikbaarheidsstatus kan opvragen.
+deps.lastFmDown      = lastfmFuncs.lastFmDown;
+deps.lastFmDownSince = lastfmFuncs.lastFmDownSince;
+
 require('./routes/artist')(app, deps);
 require('./routes/plex')(app, deps);
 require('./routes/tidarr')(app, deps);

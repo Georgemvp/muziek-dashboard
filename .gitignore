@@ -24,3 +24,8 @@ data/
 
 # MediaSage — nested git repo (handmatig gecloned, niet als submodule)
 mediasage/.git/
+
+# Tijdelijke commit-helper scripts en berichten
+*.sh
+.commit-message
+COMMIT_MESSAGE.txt
