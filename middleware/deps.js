@@ -86,7 +86,7 @@ const deps = {
 
   // Discovery & gaps
   getDiscover, refreshDiscover, initDiscover,
-  getGaps, getArtistGaps, refreshGaps,
+  getGaps, getArtistGaps, refreshGaps, initGaps,
   getReleases, refreshReleases, initReleases,
 
   // Tidarr
