@@ -3,7 +3,7 @@
 // Verbeterde caching strategie voor Progressive Web App
 // ============================================================
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_STATIC = `muziek-dashboard-static-${CACHE_VERSION}`;
 const CACHE_API = `muziek-dashboard-api-${CACHE_VERSION}`;
 const CACHE_IMAGES = `muziek-dashboard-images-${CACHE_VERSION}`;

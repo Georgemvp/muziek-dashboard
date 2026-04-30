@@ -550,7 +550,7 @@
 
 /* ── Sidebar settings panel ────────────────────────────────────────── */
 
-.sidebar { position: relative; overflow: hidden; }
+/* position: fixed op .sidebar in layout.css dient als containing block voor .sidebar-settings-panel */
 
 .sidebar-settings-panel {
   position: absolute;

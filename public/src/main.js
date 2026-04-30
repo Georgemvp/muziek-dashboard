@@ -150,15 +150,20 @@ async function _refreshAudioMuseTopbar() {
 
 // ── Bootstrap application ──────────────────────────────────────────────────
 async function start() {
+  try {
   // Initialize state and storage
   initTheme();
   initDownloadQuality();
+  console.log('[boot] theme + quality OK');
 
   // Initialize components
   initSidebar();
+  console.log('[boot] sidebar OK');
   initRouter();
+  console.log('[boot] router OK');
   initZonePicker();
   initPlayer();
+  console.log('[boot] player OK');
 
   // Load initial data non-blocking (cache zorgt voor instant weergave)
   Promise.all([
@@ -217,6 +222,16 @@ async function start() {
       }
     } catch { /* stil falen */ }
   }, 30_000);
+
+  } catch (err) {
+    console.error('[boot] FATAL:', err);
+    const content = document.getElementById('content');
+    if (content) {
+      content.innerHTML = `<div style="padding:40px;color:red;font-family:monospace;">
+        <strong>Boot error:</strong> ${err.message}<br><pre style="white-space:pre-wrap;margin-top:12px">${err.stack}</pre>
+      </div>`;
+    }
+  }
 }
 
 // ── Go ─────────────────────────────────────────────────────────────────────
