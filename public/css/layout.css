@@ -33,7 +33,8 @@
   transform: translateX(-100%);
   transition: transform var(--transition-normal), box-shadow var(--transition-normal);
   box-shadow: none;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .app-shell.sidebar-open .sidebar {
@@ -98,11 +99,7 @@
   flex-direction: column;
   gap: 0;
   padding: 0;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  scrollbar-width: thin;
-  scrollbar-color: #e0e0e0 transparent;
+  flex-shrink: 0;
 }
 
 /* Enkelvoudig nav-item (button) */
@@ -250,6 +247,10 @@
 #sidebar-playlists {
   display: block;
   padding: 0 0 12px;
+  max-height: 40vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #e0e0e0 transparent;
 }
 
 /* Status-rij */
