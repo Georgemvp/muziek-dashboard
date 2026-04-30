@@ -4,34 +4,36 @@
 import { state } from './state.js';
 
 // ── View metadata ──────────────────────────────────────────────────────────
+// renderFn = naam van de export-functie in de view module.
+// Om een nieuwe view toe te voegen: één regel hier + één regel in viewLoaders.
 const viewMeta = {
-  home:        { title: 'Muziek · Home' },
-  ontdek:      { title: 'Muziek · Ontdek' },
-  gaps:        { title: 'Muziek · Gaps' },
-  downloads:   { title: 'Muziek · Downloads' },
-  nu:          { title: 'Muziek · Nu Bezig' },
-  genres:      { title: 'Muziek · Genres' },
-  radio:       { title: 'Muziek · Live Radio' },
-  'listen-later': { title: 'Muziek · Listen Later' },
-  tags:        { title: 'Muziek · Tags' },
-  history:     { title: 'Muziek · History' },
-  albums:      { title: 'Muziek · Albums' },
-  artists:     { title: 'Muziek · Artists' },
-  tracks:      { title: 'Muziek · Tracks' },
-  composers:   { title: 'Muziek · Composers' },
-  folders:     { title: 'Muziek · Folders' },
-  'artist-detail':   { title: 'Muziek · Artiest' },
-  playlists:         { title: 'Muziek · Afspeellijsten' },
-  'playlist-detail': { title: 'Muziek · Afspeellijst' },
-  stats:             { title: 'Muziek · Statistieken' },
-  mediasage:               { title: 'Muziek · MediaSage' },
-  'mediasage-playlist':    { title: 'Muziek · AI Playlist Generator' },
-  'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen' },
-  'mediasage-iframe':      { title: 'Muziek · MediaSage (iframe versie)' },
-  tidarr:             { title: 'Muziek · Tidarr' },
-  audiomuse:                   { title: 'Muziek · AudioMuse' },
-  'audiomuse-smart-playlists': { title: 'Muziek · Smart Playlists' },
-  orpheus:                     { title: 'Muziek · OrpheusDL' },
+  home:        { title: 'Muziek · Home',                       renderFn: 'loadHome' },
+  ontdek:      { title: 'Muziek · Ontdek',                     renderFn: 'loadOntdek' },
+  gaps:        { title: 'Muziek · Gaps',                       renderFn: 'loadGaps' },
+  downloads:   { title: 'Muziek · Downloads',                  renderFn: 'loadDownloads' },
+  nu:          { title: 'Muziek · Nu Bezig',                   renderFn: 'loadNu' },
+  genres:      { title: 'Muziek · Genres',                     renderFn: 'loadGenres' },
+  radio:       { title: 'Muziek · Live Radio',                 renderFn: 'loadRadio' },
+  'listen-later': { title: 'Muziek · Listen Later',            renderFn: 'loadListenLater' },
+  tags:        { title: 'Muziek · Tags',                       renderFn: 'loadTags' },
+  history:     { title: 'Muziek · History',                    renderFn: 'loadHistory' },
+  albums:      { title: 'Muziek · Albums',                     renderFn: 'loadAlbums' },
+  artists:     { title: 'Muziek · Artists',                    renderFn: 'loadArtists' },
+  tracks:      { title: 'Muziek · Tracks',                     renderFn: 'loadTracks' },
+  composers:   { title: 'Muziek · Composers',                  renderFn: 'loadComposers' },
+  folders:     { title: 'Muziek · Folders',                    renderFn: 'loadFolders' },
+  'artist-detail':         { title: 'Muziek · Artiest',        renderFn: 'loadArtistDetail' },
+  playlists:               { title: 'Muziek · Afspeellijsten', renderFn: 'loadPlaylists' },
+  'playlist-detail':       { title: 'Muziek · Afspeellijst',   renderFn: 'loadPlaylistDetail' },
+  stats:                   { title: 'Muziek · Statistieken',   renderFn: 'loadStats' },
+  mediasage:               { title: 'Muziek · MediaSage',              renderFn: 'loadMediaSage' },
+  'mediasage-playlist':    { title: 'Muziek · AI Playlist Generator',  renderFn: 'loadMediaSagePlaylist' },
+  'mediasage-recommend':   { title: 'Muziek · AI Album Aanbevelingen', renderFn: 'loadMediaSageRecommend' },
+  'mediasage-iframe':      { title: 'Muziek · MediaSage (iframe versie)', renderFn: 'loadMediaSageIframe' },
+  tidarr:                        { title: 'Muziek · Tidarr',          renderFn: 'loadDownloads' },
+  audiomuse:                     { title: 'Muziek · AudioMuse',        renderFn: 'loadAudioMuse' },
+  'audiomuse-smart-playlists':   { title: 'Muziek · Smart Playlists',  renderFn: 'loadAudioMuseSmartPlaylists' },
+  orpheus:                       { title: 'Muziek · OrpheusDL',        renderFn: 'loadOrpheus' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -59,14 +61,47 @@ const viewLoaders = {
   'mediasage-playlist':    () => import('./views/mediasage-playlist.js'),
   'mediasage-recommend':   () => import('./views/mediasage-recommend.js'),
   'mediasage-iframe':      () => import('./views/mediasage-iframe.js'),
-  tidarr:               () => import('./views/downloads.js'),
-  audiomuse:            () => import('./views/audiomuse.js'),
-  'audiomuse-smart-playlists': () => import('./views/audiomuse-smart-playlists.js'),
-  orpheus:              () => import('./views/orpheus.js'),
+  tidarr:                        () => import('./views/downloads.js'),
+  audiomuse:                     () => import('./views/audiomuse.js'),
+  'audiomuse-smart-playlists':   () => import('./views/audiomuse-smart-playlists.js'),
+  orpheus:                       () => import('./views/orpheus.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
 const viewCache = {};
+
+// ── Hash routing helpers ───────────────────────────────────────────────────
+// Vlag om te voorkomen dat we ons eigen hashchange event verwerken
+let suppressHashChange = false;
+
+/**
+ * Verwerkt een location.hash naar { view, params }.
+ * Formaten:
+ *   #/home              → { view: 'home', params: null }
+ *   #/artist/Radiohead  → { view: 'artist-detail', params: { name: 'Radiohead' } }
+ */
+function parseHash(hash) {
+  const path = (hash || '').replace(/^#\//, '').split('/');
+  const segment = path[0] || 'home';
+
+  if (segment === 'artist' && path[1]) {
+    return { view: 'artist-detail', params: { name: decodeURIComponent(path[1]) } };
+  }
+
+  // Bekende view of val terug op 'home'
+  const view = viewLoaders[segment] ? segment : 'home';
+  return { view, params: null };
+}
+
+/**
+ * Bouwt een hash string op basis van view en optionele params.
+ */
+function buildHash(viewName, params) {
+  if (viewName === 'artist-detail' && params?.name) {
+    return `#/artist/${encodeURIComponent(params.name)}`;
+  }
+  return `#/${viewName}`;
+}
 
 /**
  * Load een view module (geëffectueerd via lazy import) en cache het resultaat.
@@ -82,6 +117,7 @@ async function loadViewModule(viewName) {
 
 /**
  * Navigeer naar een view. Beheert:
+ * - URL hash (deep links, F5, browser-back)
  * - UI state (nav-item.active, aria-current)
  * - Abort signal voor eerdere requests
  * - View title
@@ -100,6 +136,15 @@ export async function switchView(viewName, params = null) {
   // Store params in state if provided (artist-detail uses this)
   if (params) {
     state.viewParams = params;
+  }
+
+  // ── Update URL hash (zonder een nieuw hashchange event te triggeren) ──────
+  const newHash = buildHash(viewName, params);
+  if (location.hash !== newHash) {
+    suppressHashChange = true;
+    location.hash = newHash;
+    // Reset na de synchrone microtask-ronde zodat toekomstige hashchanges weer werken
+    setTimeout(() => { suppressHashChange = false; }, 0);
   }
 
   // ── Mark nav item as active ────────────────────────────────────────────
@@ -130,66 +175,66 @@ export async function switchView(viewName, params = null) {
   const toolbar = document.getElementById('view-toolbar');
   if (toolbar) toolbar.innerHTML = '';
 
-  // ── Load and render view ──────────────────────────────────────────────
+  // ── Load and render view ───────────────────────────────────────────────
   try {
     const viewModule = await loadViewModule(viewName);
-
-    // Bepaal welke render functie te roepen
-    const renderFn =
-      viewName === 'home'        ? viewModule.loadHome :
-      viewName === 'gaps'        ? viewModule.loadGaps :
-      viewName === 'ontdek'      ? viewModule.loadOntdek :
-      viewName === 'downloads'   ? viewModule.loadDownloads :
-      viewName === 'nu'          ? viewModule.loadNu :
-      viewName === 'genres'      ? viewModule.loadGenres :
-      viewName === 'radio'       ? viewModule.loadRadio :
-      viewName === 'listen-later' ? viewModule.loadListenLater :
-      viewName === 'tags'        ? viewModule.loadTags :
-      viewName === 'history'     ? viewModule.loadHistory :
-      viewName === 'albums'      ? viewModule.loadAlbums :
-      viewName === 'artists'     ? viewModule.loadArtists :
-      viewName === 'tracks'      ? viewModule.loadTracks :
-      viewName === 'composers'   ? viewModule.loadComposers :
-      viewName === 'folders'     ? viewModule.loadFolders :
-      viewName === 'artist-detail'   ? viewModule.loadArtistDetail :
-      viewName === 'playlists'       ? viewModule.loadPlaylists :
-      viewName === 'playlist-detail' ? viewModule.loadPlaylistDetail :
-      viewName === 'stats'           ? viewModule.loadStats :
-      viewName === 'mediasage'             ? viewModule.loadMediaSage :
-      viewName === 'mediasage-playlist'   ? viewModule.loadMediaSagePlaylist :
-      viewName === 'mediasage-recommend'  ? viewModule.loadMediaSageRecommend :
-      viewName === 'mediasage-iframe'     ? viewModule.loadMediaSageIframe :
-      viewName === 'tidarr'                       ? viewModule.loadDownloads :
-      viewName === 'audiomuse'                    ? viewModule.loadAudioMuse :
-      viewName === 'audiomuse-smart-playlists'    ? viewModule.loadAudioMuseSmartPlaylists :
-      viewName === 'orpheus'                      ? viewModule.loadOrpheus :
-      null;
+    const meta = viewMeta[viewName];
+    const renderFn = meta && viewModule[meta.renderFn];
 
     if (renderFn) {
       await renderFn();
-      document.title = viewMeta[viewName]?.title || 'Muziek';
+      document.title = meta.title || 'Muziek';
     }
   } catch (err) {
     if (err.name === 'AbortError') return;
+
+    // Reset abort controller zodat navigatie naar andere views niet geblokkeerd blijft
+    state.tabAbort = new AbortController();
+
     const content = document.getElementById('content');
     if (content) {
-      content.innerHTML = `<div class="error-box">⚠️ Laden mislukt: ${err.message}</div>`;
+      content.innerHTML = `
+        <div class="error-box">
+          ⚠️ Laden mislukt: ${err.message}
+          <button class="error-retry-btn" style="margin-left:12px;padding:4px 10px;cursor:pointer;">
+            Probeer opnieuw
+          </button>
+        </div>`;
+      content.querySelector('.error-retry-btn')?.addEventListener('click', () => {
+        switchView(viewName, params);
+      });
     }
     console.error(`Failed to load view ${viewName}:`, err);
   }
 }
 
 /**
- * Initialiseer router event listeners op nav items.
- * Roep dit eenmaal aan uit main.js
+ * Initialiseer router: nav-item click listeners, hashchange listener en initiële navigatie.
+ * Bepaalt zelf de startview (via hash of 'home'). Roep dit eenmaal aan uit main.js.
  */
 export function initRouter() {
+  // ── Nav-item click listeners ───────────────────────────────────────────
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await switchView(btn.dataset.view);
       // Close sidebar na klik (laat sidebar module dit doen via event)
-      const closeEvent = new CustomEvent('sidebar:close');
-      document.dispatchEvent(closeEvent);
+      document.dispatchEvent(new CustomEvent('sidebar:close'));
     });
   });
+
+  // ── Hashchange listener (browser-back, forward, handmatige URL-wijziging) ─
+  window.addEventListener('hashchange', () => {
+    if (suppressHashChange) return;
+    const { view, params } = parseHash(location.hash);
+    switchView(view, params);
+  });
+
+  // ── Initiële navigatie ────────────────────────────────────────────────
+  const hash = location.hash;
+  if (hash && hash !== '#' && hash !== '#/') {
+    const { view, params } = parseHash(hash);
+    switchView(view, params);
+  } else {
+    switchView('home');
+  }
 }

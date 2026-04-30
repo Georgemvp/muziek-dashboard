@@ -168,8 +168,7 @@ async function start() {
     loadDownloadHistory(),
   ]).catch(() => {});
 
-  // Navigate to first view (niet blokkeren)
-  switchView('home');
+  // Initiële navigatie wordt afgehandeld door initRouter() (hash of 'home')
 
   // Background prefetch (non-blocking)
   prefetchBackgroundData();
