@@ -23,7 +23,14 @@ const rateLimitHandler = (req, res) => {
  */
 function registerSecurity(app) {
   logger.info({ window: '60s', maxRequests: 300 }, 'Global rate limiter configured');
-  app.use(rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler }));
+  app.use(rateLimit({
+    windowMs: 60_000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+    skip: (req) => req.path.startsWith('/api/img'),
+  }));
 
   // Image proxy krijgt een ruimere limiet — het is een interne cache, geen externe API
   logger.info({ window: '60s', maxRequests: 600 }, 'Image proxy rate limiter configured');
