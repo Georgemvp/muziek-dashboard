@@ -53,8 +53,8 @@
 
   /* ── Layout constanten ── */
   --player-height:     76px;
-  --sidebar-width:    220px;
-  --sidebar-collapsed: 64px;
+  --sidebar-width:    280px;
+  --sidebar-collapsed: 0px;
 
   /* ── Grid tokens (groter dan nu) ── */
   --grid-card-min:  200px;

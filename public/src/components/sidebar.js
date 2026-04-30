@@ -31,6 +31,7 @@ const sidebarOverlay = ensureSidebarOverlay();
 
 /**
  * Set sidebar open/closed state en update aria/overlay.
+ * Sidebar start altijd als closed (overlay-drawer model).
  * @param {boolean} open - True = open, false = closed
  */
 export function setSidebarOpen(open) {
@@ -38,8 +39,6 @@ export function setSidebarOpen(open) {
   appShell.classList.toggle('sidebar-open', open);
   sidebarToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
   sidebarOverlay.classList.toggle('visible', open);
-  // Sla op in localStorage
-  localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
 }
 
 /**
@@ -47,12 +46,9 @@ export function setSidebarOpen(open) {
  * Roep dit eenmaal aan uit main.js
  */
 export function initSidebar() {
-  // ── Restore saved state of start (or default to closed) ──────────────
-  const saved = localStorage.getItem(SIDEBAR_KEY);
-  const shouldBeOpen = saved === 'open';
-  if (shouldBeOpen) {
-    setSidebarOpen(true);
-  }
+  // ── Sidebar start altijd als closed (overlay-drawer model) ────────────
+  // Geen localStorage restore — altijd dicht bij opstarten.
+  setSidebarOpen(false);
 
   // ── Toggle button ──────────────────────────────────────────────────────
   sidebarToggle?.addEventListener('click', () => {
@@ -62,6 +58,11 @@ export function initSidebar() {
 
   // ── Overlay click (close) ──────────────────────────────────────────────
   sidebarOverlay.addEventListener('click', () => setSidebarOpen(false));
+
+  // ── Nav-item klik sluit de sidebar automatisch ────────────────────────
+  document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+    item.addEventListener('click', () => setSidebarOpen(false));
+  });
 
   // ── Listen for router close event ──────────────────────────────────────
   document.addEventListener('sidebar:close', () => setSidebarOpen(false));

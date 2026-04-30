@@ -28,11 +28,18 @@
 
     <div class="sidebar-brand" aria-label="Muziek app">
       <span class="brand-name">muziek</span>
-      <button class="sidebar-settings-btn" title="Instellingen" aria-label="Instellingen openen">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24"/><path d="M1 12h6m6 0h6"/><path d="M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
-        </svg>
-      </button>
+      <div class="sidebar-brand-actions">
+        <button class="sidebar-settings-btn" title="Instellingen" aria-label="Instellingen openen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24"/><path d="M1 12h6m6 0h6"/><path d="M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+          </svg>
+        </button>
+        <button class="sidebar-more-btn" title="Meer opties" aria-label="Meer opties">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <nav class="sidebar-nav" aria-label="Navigatieonderdelen">
@@ -248,39 +255,6 @@
       <div id="sidebar-playlists" role="list" aria-label="Plex afspeellijsten"></div>
     </div>
 
-    <div class="sidebar-footer">
-
-      <!-- Zone picker (verplaatst vanuit topbar) -->
-      <div class="zone-picker sidebar-zone-picker" id="plex-zone-wrap" aria-label="Plex afspeelzone kiezer">
-        <button class="zone-btn sidebar-zone-btn" id="plex-zone-btn"
-                title="Selecteer Plex afspeelzone"
-                aria-label="Selecteer Plex afspeelzone"
-                aria-haspopup="listbox"
-                aria-expanded="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-          <span id="plex-zone-name">—</span>
-        </button>
-        <div class="zone-dropdown" id="plex-zone-dropdown"
-             role="listbox"
-             aria-label="Beschikbare afspeelzones"
-             style="display:none"></div>
-      </div>
-
-      <!-- Quality select (verplaatst vanuit topbar) -->
-      <label class="quality-select sidebar-quality-select" title="Download kwaliteit" aria-label="Download kwaliteit kiezen">
-        <select id="download-quality" aria-label="Selecteer download kwaliteit">
-          <option value="max">Hi-Res</option>
-          <option value="high" selected>FLAC</option>
-          <option value="normal">AAC</option>
-          <option value="low">96kbps</option>
-        </select>
-      </label>
-
-      <button class="sidebar-btn" id="theme-toggle" title="Wissel thema" aria-label="Wissel tussen licht en donker thema">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      </button>
-    </div>
-
   </aside>
 
   <!-- ═══════════════════════════════════════════
@@ -316,6 +290,37 @@
                 aria-live="polite">
           <span class="am-status-dot am-dot-grey" id="am-topbar-dot" aria-hidden="true"></span>
           <span class="am-topbar-status-label" id="am-topbar-label">AM</span>
+        </button>
+
+        <!-- Zone picker (verplaatst vanuit sidebar footer) -->
+        <div class="zone-picker topbar-zone-picker" id="plex-zone-wrap" aria-label="Plex afspeelzone kiezer">
+          <button class="zone-btn topbar-zone-btn" id="plex-zone-btn"
+                  title="Selecteer Plex afspeelzone"
+                  aria-label="Selecteer Plex afspeelzone"
+                  aria-haspopup="listbox"
+                  aria-expanded="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            <span id="plex-zone-name">—</span>
+          </button>
+          <div class="zone-dropdown" id="plex-zone-dropdown"
+               role="listbox"
+               aria-label="Beschikbare afspeelzones"
+               style="display:none"></div>
+        </div>
+
+        <!-- Quality select (verplaatst vanuit sidebar footer) -->
+        <label class="quality-select topbar-quality-select" title="Download kwaliteit" aria-label="Download kwaliteit kiezen">
+          <select id="download-quality" aria-label="Selecteer download kwaliteit">
+            <option value="max">Hi-Res</option>
+            <option value="high" selected>FLAC</option>
+            <option value="normal">AAC</option>
+            <option value="low">96kbps</option>
+          </select>
+        </label>
+
+        <!-- Theme toggle (verplaatst vanuit sidebar footer) -->
+        <button class="topbar-icon-btn" id="theme-toggle" title="Wissel thema" aria-label="Wissel tussen licht en donker thema">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         </button>
 
         <button class="topbar-icon-btn" title="Bladwijzers" aria-label="Bladwijzers">
