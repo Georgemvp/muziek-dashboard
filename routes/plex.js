@@ -159,6 +159,8 @@ module.exports = function(app, deps) {
   });
 
   // ── /api/plex/status ──────────────────────────────────────────────────────
+  // TODO: Plex-routes gebruiken { connected: false, reason } i.p.v. { ok: false, error }.
+  //       Migreer naar sendError() zodra de frontend het formaat ondersteunt.
   app.get('/api/plex/status', async (req, res) => {
     if (!PLEX_TOKEN) {
       res.set('Cache-Control', 'private, max-age=300');

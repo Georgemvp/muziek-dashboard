@@ -1,6 +1,7 @@
 // ── Tidarr API Routes ─────────────────────────────────────────────────────────
 
 const logger = require('../logger');
+const { sendError } = require('./helpers');
 
 module.exports = function(app, deps) {
   const {
@@ -100,7 +101,7 @@ module.exports = function(app, deps) {
       // Sla op in de persistente download-geschiedenis
       addDownload({ tidal_id: id || null, artist: artist || '', title: title || '', url, quality: q || process.env.LOCK_QUALITY || 'high' });
       res.json({ ok: true, result });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { sendError(res, 500, e.message); }
   });
 
   // ── /api/tidarr/queue ────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ module.exports = function(app, deps) {
     try {
       const result = await removeFromQueue(req.params.id);
       res.json({ ok: true, result });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { sendError(res, 500, e.message); }
   });
 
   // ── /api/tidarr/history ──────────────────────────────────────────────────

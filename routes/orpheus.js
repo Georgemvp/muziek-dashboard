@@ -4,6 +4,7 @@
 //                         applemusic, beatport, beatsource, youtube.
 
 const logger = require('../logger');
+const { sendError } = require('./helpers');
 
 // Geldige kwaliteitsopties per platform (voor validatie)
 const QUALITY_OPTIONS = {
@@ -244,7 +245,7 @@ module.exports = function(app, deps) {
     const { url, quality, title, artist, platform: bodyPlatform } = req.body || {};
 
     if (!url) {
-      return res.status(400).json({ ok: false, error: 'url is verplicht' });
+      return sendError(res, 400, 'url is verplicht');
     }
 
     // Detecteer platform voor kwaliteitsvalidatie en download-geschiedenis
@@ -282,7 +283,7 @@ module.exports = function(app, deps) {
       res.json({ ok: true, jobId: result.jobId, platform: detectedPlatform, quality: resolvedQuality });
     } catch (e) {
       logger.error({ err: e.message, url }, 'OrpheusDL download mislukt');
-      res.status(500).json({ ok: false, error: e.message });
+      sendError(res, 500, e.message);
     }
   });
 
@@ -292,7 +293,7 @@ module.exports = function(app, deps) {
   app.get('/api/orpheus/job/:id', async (req, res) => {
     const jobId = (req.params.id || '').trim();
     if (!jobId) {
-      return res.status(400).json({ error: 'jobId is verplicht' });
+      return sendError(res, 400, 'jobId is verplicht');
     }
 
     try {
@@ -316,7 +317,7 @@ module.exports = function(app, deps) {
       res.json(result);
     } catch (e) {
       logger.error({ err: e.message, jobId }, 'OrpheusDL job status ophalen mislukt');
-      res.status(500).json({ error: e.message, jobId });
+      sendError(res, 500, e.message);
     }
   });
 
@@ -325,7 +326,7 @@ module.exports = function(app, deps) {
   app.post('/api/orpheus/job/:id/stop', async (req, res) => {
     const jobId = (req.params.id || '').trim();
     if (!jobId) {
-      return res.status(400).json({ ok: false, error: 'jobId is verplicht' });
+      return sendError(res, 400, 'jobId is verplicht');
     }
 
     try {
@@ -334,7 +335,7 @@ module.exports = function(app, deps) {
       res.json({ ok: true, jobId, result });
     } catch (e) {
       logger.error({ err: e.message, jobId }, 'OrpheusDL job stop mislukt');
-      res.status(500).json({ ok: false, error: e.message });
+      sendError(res, 500, e.message);
     }
   });
 
@@ -356,7 +357,7 @@ module.exports = function(app, deps) {
   app.post('/api/orpheus/settings', async (req, res) => {
     const data = req.body;
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      return res.status(400).json({ ok: false, error: 'Body moet een JSON-object zijn' });
+      return sendError(res, 400, 'Body moet een JSON-object zijn');
     }
 
     try {
@@ -365,7 +366,7 @@ module.exports = function(app, deps) {
       res.json({ ok: true, result });
     } catch (e) {
       logger.error({ err: e.message }, 'OrpheusDL settings opslaan mislukt');
-      res.status(500).json({ ok: false, error: e.message });
+      sendError(res, 500, e.message);
     }
   });
 };

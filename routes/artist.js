@@ -1,4 +1,5 @@
 // ── Artist API Routes ─────────────────────────────────────────────────────────
+const logger = require('../logger');
 
 module.exports = function(app, deps) {
   const { getMBZArtist, albumInPlex, artistInPlex, getAlbumRatingKey, getCache, setCache, getSimilarArtists, getPlexArtistsByGenre, getWikipediaExtract, getGaps, getArtistGaps, getDeezerArtist, getDeezerArtistAlbums, getDeezerArtistTopTracks } = deps;
@@ -30,119 +31,67 @@ module.exports = function(app, deps) {
     }
   }
 
-  // ── /api/artist/:name/info ────────────────────────────────────────────────
-  app.get('/api/artist/:name/info', async (req, res) => {
-    const name = decodeURIComponent(req.params.name);
+  // ── Gedeelde data-fetcher voor artist info (gebruikt door /info, / en /full) ──
+  // Retourneert het info-object; gooit een Error bij mislukking.
+  async function fetchArtistInfo(name) {
     const cacheKey = `artist:info:${name.toLowerCase()}`;
 
     // ── Check cache eerst (TTL: 1 uur) ─────────────────────────────────────
     const cached = getCache(cacheKey, 1 * 3_600_000);
-    if (cached) {
-      res.set('Cache-Control', 'private, max-age=3600');
-      return res.json(cached);
-    }
+    if (cached) return cached;
 
-    try {
-      // Haal Deezer artiest op (bevat ID voor verdere calls) en MusicBrainz parallel
-      const [deezerR, mbzR] = await Promise.allSettled([
-        getDeezerArtist(name),
-        getMBZArtist(name)
-      ]);
+    // Haal Deezer artiest op (bevat ID voor verdere calls) en MusicBrainz parallel
+    const [deezerR, mbzR] = await Promise.allSettled([
+      getDeezerArtist(name),
+      getMBZArtist(name)
+    ]);
 
-      let image    = null;
-      let imageXl  = null;
-      let deezerId = null;
+    let image    = null;
+    let imageXl  = null;
+    let deezerId = null;
 
-      if (deezerR.status === 'fulfilled' && deezerR.value) {
-        const d = deezerR.value;
-        if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
-          image   = d.picture_medium;
-          imageXl = d.picture_xl || d.picture_medium;
-        }
-        deezerId = d.id || null;
+    if (deezerR.status === 'fulfilled' && deezerR.value) {
+      const d = deezerR.value;
+      if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
+        image   = d.picture_medium;
+        imageXl = d.picture_xl || d.picture_medium;
       }
-
-      // Haal albums op via Deezer (geen Last.fm meer nodig)
-      const albums = await buildAlbumList(name, deezerId, 50);
-
-      const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
-      const result = {
-        image, imageXl, albums,
-        inPlex:    artistInPlex(name),
-        country:   mbz?.country   || null,
-        startYear: mbz?.startYear || null,
-        tags:      mbz?.tags      || [],
-        mbid:      mbz?.mbid      || null
-      };
-
-      // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
-      setCache(cacheKey, result);
-
-      // ── Voeg browser cache header toe ──────────────────────────────────
-      res.set('Cache-Control', 'private, max-age=3600');
-      res.json(result);
-    } catch (e) {
-      // ── Geen caching bij errors ────────────────────────────────────────
-      res.status(500).json({ error: e.message, image: null, imageXl: null, albums: [], inPlex: false, tags: [] });
+      deezerId = d.id || null;
     }
-  });
 
-  // ── /api/artist/:name (alias to /info) ─────────────────────────────────────
-  app.get('/api/artist/:name', async (req, res) => {
+    // Haal albums op via Deezer (geen Last.fm meer nodig)
+    const albums = await buildAlbumList(name, deezerId, 50);
+
+    const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
+    const result = {
+      image, imageXl, albums,
+      inPlex:    artistInPlex(name),
+      country:   mbz?.country   || null,
+      startYear: mbz?.startYear || null,
+      tags:      mbz?.tags      || [],
+      mbid:      mbz?.mbid      || null
+    };
+
+    // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
+    setCache(cacheKey, result);
+    return result;
+  }
+
+  // ── Gedeelde route-handler voor /api/artist/:name en /api/artist/:name/info ─
+  async function handleArtistInfo(req, res) {
     const name = decodeURIComponent(req.params.name);
-    const cacheKey = `artist:info:${name.toLowerCase()}`;
-
-    // ── Check cache eerst (TTL: 1 uur) ─────────────────────────────────────
-    const cached = getCache(cacheKey, 1 * 3_600_000);
-    if (cached) {
-      res.set('Cache-Control', 'private, max-age=3600');
-      return res.json(cached);
-    }
-
     try {
-      // Haal Deezer artiest op (bevat ID voor verdere calls) en MusicBrainz parallel
-      const [deezerR, mbzR] = await Promise.allSettled([
-        getDeezerArtist(name),
-        getMBZArtist(name)
-      ]);
-
-      let image    = null;
-      let imageXl  = null;
-      let deezerId = null;
-
-      if (deezerR.status === 'fulfilled' && deezerR.value) {
-        const d = deezerR.value;
-        if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
-          image   = d.picture_medium;
-          imageXl = d.picture_xl || d.picture_medium;
-        }
-        deezerId = d.id || null;
-      }
-
-      // Haal albums op via Deezer (geen Last.fm meer nodig)
-      const albums = await buildAlbumList(name, deezerId, 50);
-
-      const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
-      const result = {
-        image, imageXl, albums,
-        inPlex:    artistInPlex(name),
-        country:   mbz?.country   || null,
-        startYear: mbz?.startYear || null,
-        tags:      mbz?.tags      || [],
-        mbid:      mbz?.mbid      || null
-      };
-
-      // ── Cache succesvolle response (1 uur TTL) ────────────────────────────
-      setCache(cacheKey, result);
-
-      // ── Voeg browser cache header toe ──────────────────────────────────
+      const result = await fetchArtistInfo(name);
       res.set('Cache-Control', 'private, max-age=3600');
       res.json(result);
     } catch (e) {
-      // ── Geen caching bij errors ────────────────────────────────────────
       res.status(500).json({ error: e.message, image: null, imageXl: null, albums: [], inPlex: false, tags: [] });
     }
-  });
+  }
+
+  // ── /api/artist/:name en /api/artist/:name/info (gedeelde handler) ─────────
+  app.get('/api/artist/:name',      handleArtistInfo);
+  app.get('/api/artist/:name/info', handleArtistInfo);
 
   // ── /api/artist/:name/similar ──────────────────────────────────────────────
   // Retourneert gelijkaardige artiesten via Deezer related artists.
@@ -168,7 +117,7 @@ module.exports = function(app, deps) {
           }
         } catch (plexErr) {
           // Stille fout voor Plex-fallback
-          console.debug('Plex genre-fallback mislukt voor', name, ':', plexErr.message);
+          logger.debug({ artist: name, err: plexErr.message }, 'Plex genre-fallback mislukt');
         }
       }
 
@@ -180,7 +129,7 @@ module.exports = function(app, deps) {
       });
     } catch (e) {
       // Deezer faalt geheel → retourneer lege lijst + error flag
-      console.warn(`Similar artists (Deezer) faalt voor "${name}":`, e.message);
+      logger.warn({ artist: name, err: e.message }, 'Similar artists (Deezer) faalt');
       res.set('Cache-Control', 'private, max-age=60');
       res.json({
         similar: [],
@@ -246,39 +195,8 @@ module.exports = function(app, deps) {
     try {
       // ── Parallel fetch: artist info, wikipedia, similar artists, gaps, top tracks ──────────
       const [infoR, wikiR, similarR, gapsR, tracksR] = await Promise.allSettled([
-        // Artist info: Deezer image + Deezer albums + MusicBrainz metadata
-        (async () => {
-          const [deezerR, mbzR] = await Promise.allSettled([
-            getDeezerArtist(name),
-            getMBZArtist(name)
-          ]);
-
-          let image    = null;
-          let imageXl  = null;
-          let deezerId = null;
-
-          if (deezerR.status === 'fulfilled' && deezerR.value) {
-            const d = deezerR.value;
-            if (d.picture_medium && !d.picture_medium.includes('/artist//')) {
-              image   = d.picture_medium;
-              imageXl = d.picture_xl || d.picture_medium;
-            }
-            deezerId = d.id || null;
-          }
-
-          // Haal albums op via Deezer
-          const albums = await buildAlbumList(name, deezerId, 50);
-
-          const mbz = mbzR.status === 'fulfilled' ? mbzR.value : null;
-          return {
-            image, imageXl, albums,
-            inPlex:    artistInPlex(name),
-            country:   mbz?.country   || null,
-            startYear: mbz?.startYear || null,
-            tags:      mbz?.tags      || [],
-            mbid:      mbz?.mbid      || null
-          };
-        })(),
+        // Artist info: hergebruik gedeelde fetchArtistInfo (cache + Deezer + MBZ)
+        fetchArtistInfo(name),
 
         // Wikipedia extract
         getWikipediaExtract(name),
@@ -306,7 +224,7 @@ module.exports = function(app, deps) {
                 album:     t.album || null
               }));
           } catch (e) {
-            console.warn(`Deezer top tracks mislukt voor "${name}":`, e.message);
+            logger.warn({ artist: name, err: e.message }, 'Deezer top tracks mislukt (full)');
             return [];
           }
         })()
@@ -419,7 +337,7 @@ module.exports = function(app, deps) {
       res.set('Cache-Control', 'private, max-age=3600');
       res.json(result);
     } catch (e) {
-      console.warn(`Deezer top tracks mislukt voor "${name}":`, e.message);
+      logger.warn({ artist: name, err: e.message }, 'Deezer top tracks mislukt (tracks endpoint)');
       res.set('Cache-Control', 'private, max-age=60');
       res.json([]);
     }
@@ -444,7 +362,7 @@ module.exports = function(app, deps) {
         ...gaps
       });
     } catch (e) {
-      console.error(`Gaps API error for "${artistName}":`, e.message);
+      logger.error({ artist: artistName, err: e.message }, 'Gaps API error');
       res.status(500).json({
         error: e.message,
         artist: artistName,

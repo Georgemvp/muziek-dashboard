@@ -1,6 +1,7 @@
 // ── Last.fm API Routes ────────────────────────────────────────────────────────
 
 const logger = require('../logger');
+const { GENRE_STOPWORDS } = require('../services/constants');
 
 // Last.fm bereikbaarheidsstatus
 let lastFmDown = false;
@@ -96,11 +97,7 @@ module.exports = function(app, deps) {
       );
       markLastFmUp();
 
-      const stopwords = new Set([
-        'seen live', 'listened', 'favourite', 'favorites', 'love', 'loved',
-        'awesome', 'cool', 'good', 'great', 'american', 'british', 'german',
-        'swedish', 'norwegian', 'dutch', 'canadian', 'australian',
-      ]);
+      const stopwords = GENRE_STOPWORDS;
 
       const artists = (artistData.topartists?.artist || []).slice(0, 20);
 
@@ -136,8 +133,8 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError(`api:top:artists:${req.query.period || '7day'}`, e, res, deps); }
   });
 
-  // ── /api/toptracks ────────────────────────────────────────────────────────
-  app.get('/api/toptracks', async (req, res) => {
+  // ── /api/toptracks en /api/top/tracks (gedeelde handler) ─────────────────
+  async function handleTopTracks(req, res) {
     try {
       const period = req.query.period || '7day';
       const cacheKey = `api:toptracks:${period}`;
@@ -150,23 +147,10 @@ module.exports = function(app, deps) {
       res.set('Cache-Control', 'private, max-age=300');
       res.json(data);
     } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
-  });
+  }
 
-  // ── /api/top/tracks (alias) ────────────────────────────────────────────────
-  app.get('/api/top/tracks', async (req, res) => {
-    try {
-      const period = req.query.period || '7day';
-      const cacheKey = `api:toptracks:${period}`;
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.gettoptracks', period, limit: 20 },
-        { cacheKey, cacheTTL: 300_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(data);
-    } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
-  });
+  app.get('/api/toptracks',  handleTopTracks);
+  app.get('/api/top/tracks', handleTopTracks);
 
   // ── /api/top/albums ────────────────────────────────────────────────────────
   app.get('/api/top/albums', async (req, res) => {
@@ -266,7 +250,7 @@ module.exports = function(app, deps) {
 
       // ── Genre tracking voor genre-spreiding ──────────────────────────────
       const genreCount = {};
-      const stopwords = new Set(['seen live', 'listened', 'favourite', 'favorites', 'love', 'loved', 'awesome', 'cool', 'good', 'great']);
+      const stopwords = GENRE_STOPWORDS;
 
       // Helper: haal top-3 tags op via MusicBrainz (vervangt Last.fm artist.gettoptags)
       // MusicBrainz heeft 7-daagse cache in getMBZArtist
@@ -510,7 +494,7 @@ module.exports = function(app, deps) {
         : [];
 
       // Genre-verdeling via MusicBrainz tags (vervangt Last.fm artist.gettoptags)
-      const stopwords = new Set(['seen live','listened','favourite','favorites','love','loved','awesome','cool','good','great']);
+      const stopwords = GENRE_STOPWORDS;
       const tagCounts = {};
       const tagResults = await Promise.allSettled(
         topArtists.slice(0, 8).map(a => getMBZArtist(a.name))
