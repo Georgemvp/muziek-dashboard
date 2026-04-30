@@ -18,16 +18,18 @@ export function clearDashboardPolling() {
 // ── Plex Nu Bezig (globale header, ook buiten dashboard) ──────────────────
 export async function loadPlexNP() {
   const wrap = document.getElementById('plex-np-wrap');
-  if (!wrap) return;
+  let d = null;
   try {
-    const d = await fetch('/api/plex/nowplaying').then(r => r.json());
-    if (!wrap.isConnected) return; // element kan weg zijn na async fetch
-    wrap.innerHTML = d.playing
-      ? `<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
-           <div class="card-info"><div class="card-title">${esc(d.track)}</div>
-           <div class="card-sub">${esc(d.artist)}${d.album ? ' · '+esc(d.album) : ''}</div></div></div>`
-      : '';
-  } catch { if (wrap.isConnected) wrap.innerHTML = ''; }
+    d = await fetch('/api/plex/nowplaying').then(r => r.json());
+    if (wrap?.isConnected) {
+      wrap.innerHTML = d.playing
+        ? `<div class="plex-np"><div class="plex-np-dot"></div><span class="plex-np-label">PLEX NU</span>
+             <div class="card-info"><div class="card-title">${esc(d.track)}</div>
+             <div class="card-sub">${esc(d.artist)}${d.album ? ' · '+esc(d.album) : ''}</div></div></div>`
+        : '';
+    }
+  } catch { if (wrap?.isConnected) wrap.innerHTML = ''; }
+  return d; // geef NP-data terug zodat main.js geen tweede fetch nodig heeft
 }
 
 // ── Widget-label lookup ───────────────────────────────────────────────────

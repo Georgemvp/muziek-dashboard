@@ -100,20 +100,14 @@ async function checkNewReleases() {
   }
 }
 
-// ── Background prefetch voor snellere tab-navigatie ──────────────────────────
+// ── Background prefetch — alleen /api/releases (nodig voor badge) ─────────────
+// Overige endpoints (discover, gaps, recs) worden lazy geladen bij view-activatie.
 function prefetchBackgroundData() {
-  const endpoints = [
-    { url: '/api/discover', key: 'discover', ttl: 5 * 60 * 1000 },
-    { url: '/api/gaps', key: 'gaps', ttl: 5 * 60 * 1000 },
-    { url: '/api/releases', key: 'releases', ttl: 5 * 60 * 1000 },
-    { url: '/api/recs', key: 'recs', ttl: 5 * 60 * 1000 },
-  ];
-  for (const { url, key, ttl } of endpoints) {
-    if (!getCached(key, ttl)) {
-      apiFetch(url)
-        .then(data => { if (data) setCache(key, data); })
-        .catch(() => {}); // stil falen, gebruiker merkt niets
-    }
+  const TTL = 5 * 60 * 1000;
+  if (!getCached('releases', TTL)) {
+    apiFetch('/api/releases')
+      .then(data => { if (data) setCache('releases', data); })
+      .catch(() => {}); // stil falen
   }
 }
 
@@ -203,24 +197,22 @@ async function start() {
     console.error('Failed to load tidarr status:', err);
   }
 
-  // Periodic now playing sync (outside Nu tab)
-  // Bug 4: detecteer track-wissel en dispatch 'plex-np-update' event voor home indicator
+  // Periodic now playing sync — één fetch per tick voor NP-widget én track-wissel detectie
   let _lastNPKey = null;
   setInterval(async () => {
-    if (state.activeView !== 'nu') {
-      await loadPlexNP();
-    }
-    // Check NP voor home indicator (altijd, ook als Nu-tab actief is)
-    try {
-      const np = await fetch('/api/plex/nowplaying').then(r => r.json()).catch(() => null);
-      if (np) {
-        const npKey = np.playing ? `${np.track}||${np.artist}` : null;
-        if (npKey !== _lastNPKey) {
-          _lastNPKey = npKey;
-          window.dispatchEvent(new CustomEvent('plex-np-update', { detail: np }));
-        }
+    // loadPlexNP() doet de fetch, werkt de NP-widget bij (buiten Nu-tab),
+    // en geeft de ruwe data terug — zo vermijden we een tweede fetch.
+    const np = state.activeView !== 'nu'
+      ? await loadPlexNP().catch(() => null)
+      : await fetch('/api/plex/nowplaying').then(r => r.json()).catch(() => null);
+
+    if (np) {
+      const npKey = np.playing ? `${np.track}||${np.artist}` : null;
+      if (npKey !== _lastNPKey) {
+        _lastNPKey = npKey;
+        window.dispatchEvent(new CustomEvent('plex-np-update', { detail: np }));
       }
-    } catch { /* stil falen */ }
+    }
   }, 30_000);
 
   } catch (err) {

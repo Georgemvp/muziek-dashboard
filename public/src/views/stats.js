@@ -5,6 +5,23 @@
 import { apiFetch } from '../api.js';
 import { esc, proxyImg } from '../helpers.js';
 
+// ── Lazy-load Chart.js (alleen bij eerste gebruik van de Stats-view) ──────
+let _chartJsPromise = null;
+
+function loadChartJs() {
+  if (!_chartJsPromise) {
+    _chartJsPromise = new Promise((resolve, reject) => {
+      if (window.Chart) { resolve(window.Chart); return; }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+      script.onload  = () => resolve(window.Chart);
+      script.onerror = () => reject(new Error('Chart.js laden mislukt'));
+      document.head.appendChild(script);
+    });
+  }
+  return _chartJsPromise;
+}
+
 // ── Instantie-cache zodat grafieken bij herlaad worden vernietigd ─────────
 let _lineChart = null;
 let _barChart  = null;
@@ -448,8 +465,14 @@ async function renderStats(period) {
     });
   });
 
-  // Wacht één frame zodat de canvassen in de DOM staan
-  requestAnimationFrame(() => {
+  // Wacht één frame zodat de canvassen in de DOM staan, laad dan Chart.js lazy
+  requestAnimationFrame(async () => {
+    try {
+      await loadChartJs();
+    } catch (e) {
+      console.warn('[stats] Chart.js laden mislukt:', e);
+      return;
+    }
     if (data.dailyPlays?.length) {
       renderLineChart(data.dailyPlays);
     }
