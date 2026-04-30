@@ -313,7 +313,7 @@ function setupOrpheusHandlers(container) {
       btn.textContent = '…';
 
       try {
-        const searchResult = await orpheusSearch(`${artist} ${album}`, 'all', 'album');
+        const searchResult = await orpheusSearch(`${artist} ${album}`, 'all');
         const results = searchResult?.results || [];
         if (!results.length || !results[0]?.url) {
           throw new Error('Geen resultaten gevonden in OrpheusDL');

@@ -124,8 +124,7 @@ export function openArtistPanel(name) {
         btn.textContent = '…';
 
         try {
-          // Zoek het album op alle platforms (type=album)
-          const searchResult = await orpheusSearch(`${artist} ${album}`, 'all', 'album');
+          const searchResult = await orpheusSearch(`${artist} ${album}`, 'all');
           const results = searchResult?.results || [];
           if (!results.length || !results[0]?.url) {
             throw new Error('Geen resultaten gevonden in OrpheusDL');
