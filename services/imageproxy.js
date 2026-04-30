@@ -118,13 +118,20 @@ async function proxyImage(url, width = 120, height = 0, format = 'webp') {
     throw new Error('sharp is niet geïnstalleerd: ' + e.message);
   }
 
+  // Resolve relatieve URLs naar absoluut — Node.js fetch() ondersteunt geen relatieve URLs
+  let fetchUrl = url;
+  if (url.startsWith('/')) {
+    const port = process.env.PORT || 80;
+    fetchUrl = `http://127.0.0.1:${port}${url}`;
+  }
+
   // Haal de afbeelding op
-  const response = await fetch(url, {
+  const response = await fetch(fetchUrl, {
     signal: AbortSignal.timeout(8_000),
     headers: { 'User-Agent': 'lastfm-app/imageproxy' }
   });
   if (!response.ok) {
-    throw new Error(`Upstream ${response.status} voor ${url}`);
+    throw new Error(`Upstream ${response.status} voor ${fetchUrl}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
 
