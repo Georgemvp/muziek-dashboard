@@ -77,9 +77,16 @@ module.exports = function(app, deps) {
     let url = (req.query.url || '').trim();
     if (!url) return res.status(400).json({ error: 'url parameter is verplicht' });
 
-    // Relatieve Plex-paden (bijv. /library/metadata/.../thumb/...)
-    // omzetten naar volledige URL met Plex token
-    if (url.startsWith('/') && !url.startsWith('//') && PLEX_URL && PLEX_TOKEN) {
+    // URLs naar onze eigen /api/plex/thumb proxy: extract het echte Plex-pad
+    if (url.startsWith('/api/plex/thumb')) {
+      const thumbUrl = new URL(url, 'http://localhost');
+      const plexPath = thumbUrl.searchParams.get('path');
+      if (plexPath && PLEX_URL && PLEX_TOKEN) {
+        const sep = plexPath.includes('?') ? '&' : '?';
+        url = `${PLEX_URL}${plexPath}${sep}X-Plex-Token=${PLEX_TOKEN}`;
+      }
+    } else if (url.startsWith('/') && !url.startsWith('//') && PLEX_URL && PLEX_TOKEN) {
+      // Directe Plex-paden (bijv. /library/metadata/.../thumb/...)
       const sep = url.includes('?') ? '&' : '?';
       url = `${PLEX_URL}${url}${sep}X-Plex-Token=${PLEX_TOKEN}`;
     }
