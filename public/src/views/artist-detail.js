@@ -461,12 +461,6 @@ function renderGapCard(artistName, gap) {
   // Tidarr download button (via bestaande helper — werkt op artiesten-/albumnaam)
   const tidarrBtn = downloadBtn(artistName, gap.name, false);
 
-  // OrpheusDL download button (search + download bij klikken)
-  const orpheusBtn = `<button class="panel-orpheus-btn"
-    data-oph-artist="${esc(artistName)}"
-    data-oph-album="${esc(gap.name)}"
-    title="Zoeken en downloaden via OrpheusDL">⬇ Orpheus</button>`;
-
   return `
     <div class="album-card">
       <div class="album-cover">
@@ -477,7 +471,6 @@ function renderGapCard(artistName, gap) {
         <div class="album-meta">${typeLabel} ${yearHtml.trim()}</div>
         <div class="album-dl-actions">
           ${tidarrBtn}
-          ${orpheusBtn}
         </div>
       </div>
     </div>
