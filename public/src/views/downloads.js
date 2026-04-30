@@ -244,10 +244,12 @@ export function startOrpheusJobPoll(jobId, cardEl) {
         }
         // Update activeOrpheusJobs
         state.activeOrpheusJobs = state.activeOrpheusJobs.filter(j => j.jobId !== jobId);
+        window.dispatchEvent(new CustomEvent('orpheus-jobs-update'));
       } else {
         // Update activeOrpheusJobs progress
         const jobEntry = state.activeOrpheusJobs.find(j => j.jobId === jobId);
         if (jobEntry) { jobEntry.progress = pct; jobEntry.status = job.status; }
+        window.dispatchEvent(new CustomEvent('orpheus-jobs-update'));
       }
     } catch {
       clearInterval(intervalId);
@@ -542,6 +544,8 @@ export function startTidarrSSE() {
       const dwEl = document.getElementById('wbody-download-voortgang');
       if (dwEl) renderDashboardQueue(dwEl, active);
     }
+    // Notify global download queue indicator
+    window.dispatchEvent(new CustomEvent('tidarr-queue-update'));
   };
 
   es.onerror = () => {
@@ -811,6 +815,7 @@ export async function triggerOrpheusDownload(artist, album, btn) {
         state.activeOrpheusJobs.push({
           jobId: result.jobId, title: chosen.title, artist: chosen.artist, status: 'pending', progress: 0
         });
+        window.dispatchEvent(new CustomEvent('orpheus-jobs-update'));
         startOrpheusJobPoll(result.jobId, cardEl);
       } else if (btn) {
         btn.textContent = '✓';

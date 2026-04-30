@@ -14,6 +14,7 @@ import { playPreview } from './components/player.js';
 import './components/search.js';  // Standalone event listeners
 import './events.js';  // Global event delegation
 import { loadPlexNP } from './views/nu.js';  // Now playing sync
+import { initDownloadQueue, updateDownloadQueue } from './components/download-queue.js';
 
 import {
   loadPlexStatus,
@@ -158,6 +159,8 @@ async function start() {
   initZonePicker();
   initPlayer();
   console.log('[boot] player OK');
+  initDownloadQueue();
+  console.log('[boot] download-queue OK');
 
   // Load initial data non-blocking (cache zorgt voor instant weergave)
   Promise.all([
@@ -192,6 +195,8 @@ async function start() {
       downloads.loadTidarrStatus(); // No await - runs in background
       downloads.startTidarrSSE?.();
     }
+    // Initieel download-queue badge bijwerken na SSE-start
+    updateDownloadQueue();
   } catch (err) {
     console.error('Failed to load tidarr status:', err);
   }
