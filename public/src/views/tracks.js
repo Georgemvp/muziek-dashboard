@@ -390,7 +390,7 @@ function renderVisibleRowsHTML(filtered, startIdx, endIdx = null) {
         <div class="tracks-col-num">${actualIdx + 1}</div>
         <div class="tracks-col-art">
           ${coverSrc
-            ? `<img src="${esc(coverSrc)}" alt="album art" class="tracks-thumb" style="width: 100%; height: 100%; border-radius: 2px;">`
+            ? `<img src="${esc(coverSrc)}" alt="album art" class="tracks-thumb" loading="lazy" decoding="async" style="width: 100%; height: 100%; border-radius: 2px;">`
             : '<div class="tracks-thumb-placeholder">♪</div>'
           }
         </div>

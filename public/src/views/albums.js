@@ -130,7 +130,7 @@ async function renderDetailView() {
       <div class="album-detail-hero">
         <div class="album-detail-cover-wrapper">
           ${coverSrc
-            ? `<img src="${esc(coverSrc)}" alt="${esc(item.album)}" class="album-detail-cover">`
+            ? `<img src="${esc(coverSrc)}" alt="${esc(item.album)}" class="album-detail-cover" loading="lazy" decoding="async">`
             : `<div class="album-detail-cover-ph" style="background:${gradientFor(item.album)}">${initials(item.album)}</div>`
           }
         </div>

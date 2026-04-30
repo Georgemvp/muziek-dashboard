@@ -703,7 +703,7 @@ function renderStep1() {
 function renderSeedChosen() {
   if (!msSeedTrack) return '';
   const artHtml = msSeedTrack.ratingKey
-    ? `<img src="${getAlbumArt(msSeedTrack.ratingKey)}" class="ms-thumb" alt="" onerror="this.remove()">`
+    ? `<img src="${getAlbumArt(msSeedTrack.ratingKey)}" class="ms-thumb" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
     : `<div class="ms-thumb-ph" style="background:${gradientFor(msSeedTrack.title || '')}">♪</div>`;
   return `
     <div class="ms-seed-chosen">
@@ -1021,7 +1021,7 @@ async function runSeedSearch(query) {
       const artist = t.artist || t.grandparentTitle   || '';
       const album  = t.album  || t.parentTitle        || '';
       const artHtml = t.ratingKey
-        ? `<img src="${getAlbumArt(t.ratingKey)}" class="ms-thumb" alt="" onerror="this.remove()">`
+        ? `<img src="${getAlbumArt(t.ratingKey)}" class="ms-thumb" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
         : `<div class="ms-thumb-ph" style="background:${gradientFor(album || title)}">${initials(title)}</div>`;
       const jsonSafe = JSON.stringify({ ratingKey: t.ratingKey, title, artist, album })
         .replace(/'/g, '&#39;');

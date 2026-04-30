@@ -102,7 +102,7 @@ function renderArtistCard(artist) {
     <div class="gaps-artist-card" data-artist-id="${artist.artistId}">
       <div class="gaps-artist-header">
         <div class="gaps-artist-info">
-          ${artist.thumb ? `<img src="${proxyImg(artist.thumb)}" class="gaps-artist-photo" alt="">` : `<div class="gaps-artist-photo" style="background:${gradientFor(artist.title)}"></div>`}
+          ${artist.thumb ? `<img src="${proxyImg(artist.thumb)}" class="gaps-artist-photo" alt="" loading="lazy" decoding="async">` : `<div class="gaps-artist-photo" style="background:${gradientFor(artist.title)}"></div>`}
           <div class="gaps-artist-meta">
             <h3><a href="#" class="artist-link" data-artist-detail="${esc(artist.title)}">${esc(artist.title)}</a></h3>
             <div class="gaps-artist-tags">${countryFlag(artist.country)} ${tagsHtml(artist.genres?.slice(0, 3) || [])}</div>

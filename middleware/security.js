@@ -25,8 +25,19 @@ function registerSecurity(app) {
   logger.info({ window: '60s', maxRequests: 300 }, 'Global rate limiter configured');
   app.use(rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler }));
 
+  // Image proxy krijgt een ruimere limiet — het is een interne cache, geen externe API
+  logger.info({ window: '60s', maxRequests: 600 }, 'Image proxy rate limiter configured');
+  app.use('/api/img', rateLimit({ windowMs: 60_000, max: 600, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler }));
+
   logger.info({ window: '60s', maxRequests: 120 }, 'API rate limiter configured');
-  app.use('/api', rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false, handler: rateLimitHandler }));
+  app.use('/api', rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+    skip: (req) => req.path.startsWith('/img'),
+  }));
 
   // API-key check: vrije routes zijn /plex/webhook, /plex/thumb en /health
   const API_KEY = process.env.API_KEY || '';

@@ -177,7 +177,7 @@ export async function loadPlaylistDetail() {
       if (pl?.thumb) {
         const artEl = document.getElementById('playlist-detail-art');
         if (artEl) {
-          artEl.innerHTML = `<img src="${esc(proxyImg(pl.thumb, 240))}" alt="${esc(title)}" class="playlist-detail-art-img">`;
+          artEl.innerHTML = `<img src="${esc(proxyImg(pl.thumb, 240))}" alt="${esc(title)}" class="playlist-detail-art-img" loading="lazy" decoding="async">`;
         }
       }
     } catch (_) { /* artwork is optioneel */ }
