@@ -72,17 +72,33 @@ function getFilteredAndSorted(releases) {
 // ── Render functions ─────────────────────────────────────────────────────────
 
 /**
- * Haalt albumhoes op via Deezer album search (snel, gecached door backend).
- * Fallback: artiest-foto via imageproxy, daarna ♫ placeholder.
+ * Geeft een <img>-element terug voor de albumhoes van een release.
+ *
+ * Prioriteit:
+ *   1. r.image (pre-resolved Cover Art Archive URL — exacte MusicBrainz-match)
+ *   2. /api/imageproxy/album (Deezer album search — fuzzy, gecached door backend)
+ *   3. data-fb: artiest-foto via imageproxy
+ *   4. ♫ placeholder
  */
 function releaseImgEl(r) {
+  const deezerArtist = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
+
+  if (r.image) {
+    // Directe CAA-URL — geen extra fetch nodig
+    return `<img src="${esc(r.image)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
+      data-fb="${esc(deezerArtist)}"
+      onerror="window._imgFb ? window._imgFb(this,'♫') : this.style.display='none'"
+      style="opacity:0;transition:opacity 0.35s;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1"
+      onload="this.style.opacity='1'">`;
+  }
+
+  // Fallback: Deezer album search via imageproxy
   const params = new URLSearchParams({
     q:      `${r.artist} ${r.album}`,
     artist: r.artist,
     album:  r.album
   });
-  const deezerAlbum  = `/api/imageproxy/album?${params.toString()}`;
-  const deezerArtist = `/api/imageproxy/artist/${encodeURIComponent(r.artist)}`;
+  const deezerAlbum = `/api/imageproxy/album?${params.toString()}`;
   return `<img src="${esc(deezerAlbum)}" alt="${esc(r.album)}" loading="lazy" decoding="async"
     data-fb="${esc(deezerArtist)}"
     onerror="window._imgFb ? window._imgFb(this,'♫') : this.style.display='none'"

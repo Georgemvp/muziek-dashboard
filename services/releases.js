@@ -10,6 +10,44 @@ const CUTOFF_DAYS  = 30;
 const LOG_INTERVAL = 100;        // log elke N artiesten
 let   buildPromise = null;
 
+// ── Cover Art Archive (CAA) cover resolve ────────────────────────────────
+
+/**
+ * Haalt de albumhoes-URL op via Cover Art Archive voor een release-group ID.
+ * Volgt de redirect (302 → archive.org) en slaat de finale URL op in SQLite.
+ * Geeft null terug als er geen cover beschikbaar is of bij een netwerkfout.
+ *
+ * Cache-key: `caa:cover:{rgid}` — 30 dagen TTL.
+ * Niet-gevonden (404) wordt opgeslagen als `false` om herhaald opzoeken te voorkomen.
+ */
+async function resolveCAAcover(rgid) {
+  if (!rgid) return null;
+
+  const cacheKey = `caa:cover:${rgid}`;
+  const cached   = getCache(cacheKey, 30 * 86_400_000); // 30 dagen
+  if (cached !== null) return cached === false ? null : cached;
+
+  const caaUrl = `https://coverartarchive.org/release-group/${rgid}/front-250`;
+  try {
+    const resp = await fetch(caaUrl, {
+      redirect: 'follow',
+      signal:   AbortSignal.timeout(8000)
+    });
+    if (resp.ok) {
+      const url = resp.url; // finale URL na redirect naar archive.org
+      setCache(cacheKey, url);
+      return url;
+    } else {
+      // 404 = geen cover beschikbaar, sla false op om opnieuw aanroepen te voorkomen
+      setCache(cacheKey, false);
+      return null;
+    }
+  } catch {
+    // Netwerk-/timeout-fout: niet cachen zodat de volgende run het opnieuw probeert
+    return null;
+  }
+}
+
 // ── MBID-lookup (permanent gecached) ──────────────────────────────────────
 
 /**
@@ -171,17 +209,30 @@ async function buildReleasesCache() {
       // 4a. MBID ophalen (gecached na eerste lookup)
       const mbid = await getArtistMBID(name);
 
-      // 4b. Recente release-groups ophalen
+      // 4b. Recente release-groups ophalen + CAA covers resolven
       if (mbid) {
         const newRgs    = await getRecentReleaseGroups(mbid, cutoff);
         const playcount = playcountMap.get(name.toLowerCase()) || 0;
 
         for (const rg of newRgs) {
+          // Controleer of cover al gecached is (geen netwerk-request nodig)
+          const coverCacheKey   = `caa:cover:${rg.rgid}`;
+          const coverCached     = rg.rgid ? getCache(coverCacheKey, 30 * 86_400_000) : null;
+          const alreadyCached   = coverCached !== null;
+
+          // Haal cover op via Cover Art Archive (exacte match via rgid)
+          const coverUrl = await resolveCAAcover(rg.rgid);
+
+          // Alleen vertragen als er daadwerkelijk een netwerk-request gedaan is
+          if (!alreadyCached && rg.rgid) {
+            await new Promise(r => setTimeout(r, 300));
+          }
+
           releases.push({
             album:           rg.title,
             artist:          name,
             releaseDate:     rg.releaseDate,
-            image:           rg.image,
+            image:           coverUrl,   // pre-resolved CAA URL (of null bij geen cover)
             type:            rg.type,
             inPlex:          albumInPlex(name, rg.title),
             artistInPlex:    artistInPlex(name),
