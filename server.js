@@ -12,12 +12,11 @@ if (!process.env.LASTFM_API_KEY || !process.env.LASTFM_USER) {
   process.exit(1);
 }
 
-if (!process.env.API_KEY) {
-  logger.fatal('API_KEY is niet ingesteld. Stel een sterk geheim in via API_KEY in je .env bestand. De server weigert te starten zonder dit.');
-  process.exit(1);
-}
-
 logger.info('Required environment variables validated');
+
+if (!process.env.API_KEY) {
+  logger.warn('API_KEY niet ingesteld — API is onbeveiligd. Stel API_KEY in voor productie.');
+}
 
 // ── HTML escape helper (XSS-bescherming in proxy error handlers) ──────────
 function escapeHtml(str) {
@@ -318,12 +317,21 @@ app.use('/api', rateLimit({
 }));
 
 // ── API-key authenticatie ──────────────────────────────────────────────────
-// Controleert X-API-Key header of ?api_key= query param op alle /api/* routes.
-// Uitzonderingen: /api/plex/webhook (Plex kent de key niet) — beveiligd via secret URL.
-const _API_KEY = process.env.API_KEY;
+// Als API_KEY is ingesteld: vereis X-API-Key header of ?api_key= param op alle
+// /api/* routes. Zo niet: sla de check over (lokale/interne installaties).
+// Uitzonderingen (altijd vrij): /plex/webhook (Plex kent de key niet),
+// /plex/thumb (image proxy nodig voor eigen frontend), /health.
+const _API_KEY = process.env.API_KEY || '';
 app.use('/api', (req, res, next) => {
-  // Sla webhook uit (ook met secret-param in het pad)
-  if (req.path.startsWith('/plex/webhook')) return next();
+  // Altijd doorlaten: webhook, thumbnail-proxy, health
+  if (
+    req.path.startsWith('/plex/webhook') ||
+    req.path.startsWith('/plex/thumb') ||
+    req.path === '/health'
+  ) return next();
+
+  // Als API_KEY niet ingesteld is: geen check
+  if (!_API_KEY) return next();
 
   const provided = req.headers['x-api-key'] || req.query.api_key;
   if (!provided || provided !== _API_KEY) {
