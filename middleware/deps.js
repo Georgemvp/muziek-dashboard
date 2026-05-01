@@ -62,12 +62,14 @@ const { getWikipediaExtract } = require('../services/wikipedia');
 
 // ── Download Orchestrator ─────────────────────────────────────────────────────
 const events = require('../services/events');
-const { DownloadOrchestrator } = require('../services/downloadOrchestrator');
-const { PostProcessor }        = require('../services/postprocess');
+const { DownloadOrchestrator }              = require('../services/downloadOrchestrator');
+const { PostProcessor }                     = require('../services/postprocess');
+const { createAcoustIDService, getAcoustIDService } = require('../services/acoustid');
 const {
   createDownloadJob, getDownloadJob, updateDownloadJob,
   getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
   logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
+  saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
 } = require('../db');
 
 // Maak orchestrator aan met de beschikbare services
@@ -99,6 +101,10 @@ const downloadOrchestrator = new DownloadOrchestrator({
   },
   events,
 });
+
+// ── AcoustID Service ──────────────────────────────────────────────────────────
+// Singleton aanmaken zodat de rate-limiter gedeeld wordt over alle callers.
+const acoustidService = createAcoustIDService({ getSetting });
 
 // ── PostProcessor ─────────────────────────────────────────────────────────────
 // Luistert op download:complete events van de orchestrator en verwerkt bestanden.
@@ -180,14 +186,23 @@ const deps = {
   getPostprocessLogByJob,
   logPostprocessStep,
 
+  // AcoustID
+  acoustidService,
+  getAcoustIDService,
+  saveAcoustidResult,
+  getAcoustidResultByJob,
+  getAcoustidResultByPath,
+  getAcoustidResults,
+
   // Helpers
   limitConcurrency,
 
-  // Expose db-object zodat routes zoals postprocess.js direct DB-functies kunnen aanroepen
+  // Expose db-object zodat routes direct DB-functies kunnen aanroepen
   db: {
     getSetting, setSetting,
     getDownloadJob, updateDownloadJob,
     logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
+    saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
   },
 };
 

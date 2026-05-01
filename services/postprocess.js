@@ -15,7 +15,11 @@ const logger = require('../logger').child({ service: 'postprocess' });
 
 const { mbzGet }                           = require('./musicbrainz');
 const { getDeezerArtist }                  = require('./deezer');
-const { logPostprocessStep, getPostprocessLog, getPostprocessLogByJob } = require('../db');
+const { getAcoustIDService }               = require('./acoustid');
+const {
+  logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
+  saveAcoustidResult,
+} = require('../db');
 
 const execFileAsync = promisify(execFile);
 
@@ -216,6 +220,61 @@ class PostProcessor {
 
     let currentPath = filePath;
     let mbid        = null;
+
+    // ── 0. AcoustID Verificatie (fail-open: blokkeert nooit de pipeline) ──
+    if (this._get('acoustid_verify', false)) {
+      const t0 = Date.now();
+      this._events.emit('postprocess:step', { downloadId, step: 'acoustid', status: 'running' });
+      try {
+        const acoustid = getAcoustIDService();
+        if (!acoustid) throw new Error('AcoustID service niet geïnitialiseerd');
+
+        const result = await acoustid.verify(filePath, {
+          artist, title: track || albumOrTrack, album: albumOrTrack,
+        });
+
+        // Altijd opslaan in DB, ook bij mismatch
+        try {
+          saveAcoustidResult({
+            download_id:     downloadId,
+            file_path:       filePath,
+            fingerprint:     result.fingerprint,
+            acoustid_score:  result.score,
+            expected_artist: artist,
+            expected_title:  track || albumOrTrack,
+            matched_artist:  result.matchedRecording?.artists?.join(', ') || null,
+            matched_title:   result.matchedRecording?.title || null,
+            matched_mbid:    result.matchedRecording?.id   || null,
+            verified:        result.verified ? 1 : 0,
+            mismatch_reason: result.mismatchReason || null,
+          });
+        } catch (dbErr) {
+          logger.warn({ dbErr: dbErr.message }, 'AcoustID resultaat kon niet in DB worden opgeslagen');
+        }
+
+        if (!result.verified && result.mismatchReason) {
+          // Markeer job als needs_review maar ga ALTIJD door
+          try {
+            this._db.updateDownloadJob(downloadId, { status: 'needs_review' });
+          } catch { /* updateDownloadJob ondersteunt needs_review mogelijk niet */ }
+          logger.warn({ downloadId, mismatchReason: result.mismatchReason }, '⚠ AcoustID mismatch — job gemarkeerd als needs_review');
+          this._log(downloadId, 'acoustid', 'mismatch', {
+            confidence: result.confidence, mismatchReason: result.mismatchReason, startedAt: t0,
+          });
+          this._events.emit('postprocess:step', { downloadId, step: 'acoustid', status: 'mismatch', mismatchReason: result.mismatchReason });
+        } else {
+          this._log(downloadId, 'acoustid', result.verified ? 'ok' : 'unverified', {
+            confidence: result.confidence, startedAt: t0,
+          });
+          this._events.emit('postprocess:step', { downloadId, step: 'acoustid', status: result.verified ? 'ok' : 'unverified' });
+        }
+      } catch (err) {
+        // Fail-open: verificatiefouten mogen NOOIT een download blokkeren
+        logger.warn({ err: err.message, downloadId }, 'AcoustID verificatie mislukt → doorgaan (fail-open)');
+        this._log(downloadId, 'acoustid', 'error', { error: err.message, startedAt: t0 });
+        this._events.emit('postprocess:step', { downloadId, step: 'acoustid', status: 'error', error: err.message });
+      }
+    }
 
     // ── 1. MusicBrainz Album Consistency ─────────────────────────────────
     if (steps.includes('consistency')) {

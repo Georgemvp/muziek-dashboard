@@ -208,6 +208,7 @@ ENV SHELL=bash \
 #       su-exec bestaat niet op Debian; gosu is het equivalent.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
         ffmpeg \
+        libchromaprint-tools \
         bash \
         gosu \
         curl \

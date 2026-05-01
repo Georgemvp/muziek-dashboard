@@ -1173,13 +1173,40 @@ export async function renderOrchestratorHistory() {
       return;
     }
 
+    // Laad AcoustID-resultaten in bulk voor voltooide jobs (stille achtergrondaanroep)
+    const completedIds = jobs
+      .filter(j => j.status === 'completed' || j.status === 'needs_review')
+      .map(j => j.id);
+
+    const acoustidMap = {};
+    if (completedIds.length) {
+      try {
+        const ar = await apiFetch('/api/verify/results?limit=200');
+        for (const r of (ar.results || [])) {
+          if (r.download_id) acoustidMap[r.download_id] = r;
+        }
+        // Jobs zonder resultaat krijgen expliciet null (= geladen, maar geen resultaat)
+        for (const id of completedIds) {
+          if (!(id in acoustidMap)) acoustidMap[id] = null;
+        }
+      } catch { /* stil mislukken: verificatie-indicators blijven op "Verifieer" */ }
+    }
+
+    // Verrijk jobs met AcoustID-resultaat
+    const enrichedJobs = jobs.map(j => ({ ...j, _acoustid: acoustidMap[j.id] }));
+
     // Knop om alle gefaalde te herstarten
     const failedCount = jobs.filter(j => j.status === 'failed').length;
+    const completedCount = completedIds.length;
+
     target.innerHTML = `
       <div class="section-title">${jobs.length} downloads
-        ${failedCount > 0 ? `<button class="tool-btn" id="retry-all-btn" style="margin-left:auto;font-size:11px">↺ Herstart ${failedCount} mislukt</button>` : ''}
+        <div style="display:flex;gap:6px;margin-left:auto">
+          ${failedCount > 0 ? `<button class="tool-btn" id="retry-all-btn" style="font-size:11px">↺ Herstart ${failedCount} mislukt</button>` : ''}
+          ${completedCount > 0 ? `<button class="tool-btn" id="verify-all-btn" style="font-size:11px">🔍 Verifieer alles</button>` : ''}
+        </div>
       </div>
-      <div class="q-list">${jobs.map(job => orchestratorJobRow(job, true)).join('')}</div>`;
+      <div class="q-list">${enrichedJobs.map(job => orchestratorJobRow(job, true)).join('')}</div>`;
 
     document.getElementById('retry-all-btn')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
@@ -1189,6 +1216,23 @@ export async function renderOrchestratorHistory() {
         btn.textContent = `↺ ${r.retried} herstart`;
         setTimeout(() => renderOrchestratorHistory(), 2000);
       } catch { btn.disabled = false; btn.textContent = 'Fout'; }
+    });
+
+    // Verifieer Alles bulk-actie
+    document.getElementById('verify-all-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = '🔍 Bezig…';
+      let done = 0;
+      for (const id of completedIds) {
+        try {
+          await fetch(`/api/verify/${id}`, { method: 'POST' });
+          done++;
+          btn.textContent = `🔍 ${done}/${completedIds.length}`;
+        } catch { /* stil verder */ }
+        await new Promise(r => setTimeout(r, 400)); // respecteer rate-limit
+      }
+      btn.textContent = `✓ ${done} geverifieerd`;
+      setTimeout(() => renderOrchestratorHistory(), 3000);
     });
 
     target.querySelectorAll('.unified-retry-btn').forEach(btn => {
@@ -1201,18 +1245,60 @@ export async function renderOrchestratorHistory() {
         } catch { btn.disabled = false; btn.textContent = 'Retry'; }
       });
     });
+
+    // Verifieer per-item knoppen
+    _bindVerifyButtons(target);
   } catch (e) {
     target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
   }
 }
 
+/** Bind klikgedrag voor individuele AcoustID verify-knoppen. */
+function _bindVerifyButtons(container) {
+  container.querySelectorAll('.acoustid-verify-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.jobId;
+      btn.disabled = true;
+      btn.textContent = '🔍 …';
+      try {
+        await fetch(`/api/verify/${id}`, { method: 'POST' });
+        btn.textContent = '🔍 Gestart';
+        // Herladen na 5s zodat het resultaat er is
+        setTimeout(async () => {
+          try {
+            const r = await apiFetch(`/api/verify/results/${id}`);
+            const row = container.querySelector(`.q-row[data-job-id="${id}"]`);
+            if (!row || !r.result) return;
+            // Update enkel de badge inline — geen volledige herrender
+            const verifEl = row.querySelector('.acoustid-verify-btn, .acoustid-badge');
+            if (!verifEl) return;
+            const res = r.result;
+            if (res.verified) {
+              const pct = res.acoustid_score != null ? Math.round(res.acoustid_score * 100) : '?';
+              verifEl.outerHTML = `<span class="acoustid-badge acoustid-ok"
+                title="✓ Geverifieerd (${pct}%&#10;${esc(res.matched_title || '')} – ${esc(res.matched_artist || '')})">✓</span>`;
+            } else {
+              const reason = res.mismatch_reason || 'Mismatch';
+              verifEl.outerHTML = `<span class="acoustid-badge acoustid-warn" title="⚠ ${esc(reason)}">⚠</span>`;
+            }
+          } catch { /* stil */ }
+        }, 5000);
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '🔍 Fout';
+      }
+    });
+  });
+}
+
 // ── Job row helper ────────────────────────────────────────────────────────────
 function orchestratorJobRow(job, isHistory) {
   const statusMap = {
-    pending:   { cls: 'q-pending', lbl: 'In wachtrij' },
-    running:   { cls: 'q-active',  lbl: 'Bezig…' },
-    completed: { cls: 'q-done',    lbl: '✓ Voltooid' },
-    failed:    { cls: 'q-error',   lbl: '✗ Mislukt' },
+    pending:      { cls: 'q-pending', lbl: 'In wachtrij' },
+    running:      { cls: 'q-active',  lbl: 'Bezig…' },
+    completed:    { cls: 'q-done',    lbl: '✓ Voltooid' },
+    failed:       { cls: 'q-error',   lbl: '✗ Mislukt' },
+    needs_review: { cls: 'q-warn',    lbl: '⚠ Controleren' },
   };
   const { cls, lbl } = statusMap[job.status] || { cls: 'q-pending', lbl: job.status };
   const src     = job.source_used || job.source_requested || 'auto';
@@ -1227,8 +1313,32 @@ function orchestratorJobRow(job, isHistory) {
   const errMsg = (job.status === 'failed' && job.error_log)
     ? `<div class="unified-job-err" title="${esc(job.error_log)}">${esc(job.error_log.slice(0, 80))}${job.error_log.length > 80 ? '…' : ''}</div>` : '';
 
+  // ── AcoustID verificatie-indicator ──────────────────────────────────────
+  // job._acoustid wordt geladen door renderOrchestratorHistory via /api/verify/results/:id
+  const verif = job._acoustid;
+  let verifHtml = '';
+  if (job.status === 'completed' || job.status === 'needs_review') {
+    if (verif === undefined) {
+      // Nog niet geladen — toon knop
+      verifHtml = `<button class="tool-btn acoustid-verify-btn" data-job-id="${job.id}"
+        title="Verifieer via AcoustID audio fingerprinting"
+        style="font-size:10px;padding:1px 6px">🔍 Verifieer</button>`;
+    } else if (verif === null) {
+      // Geladen maar geen resultaat
+      verifHtml = `<span class="acoustid-badge acoustid-unknown" title="Nog niet geverifieerd">?</span>`;
+    } else if (verif.verified) {
+      const pct = verif.acoustid_score != null ? Math.round(verif.acoustid_score * 100) : '?';
+      verifHtml = `<span class="acoustid-badge acoustid-ok"
+        title="✓ Geverifieerd (AcoustID score ${pct}%&#10;${esc(verif.matched_title || '')} – ${esc(verif.matched_artist || '')})">✓</span>`;
+    } else {
+      const reason = verif.mismatch_reason || 'Verificatie mislukt';
+      verifHtml = `<span class="acoustid-badge acoustid-warn"
+        title="⚠ ${esc(reason)}">⚠</span>`;
+    }
+  }
+
   return `
-    <div class="q-row">
+    <div class="q-row" data-job-id="${job.id}">
       <div class="q-info" style="flex:1">
         <div class="q-title">${esc(job.album || job.track || '(onbekend)')}</div>
         ${job.artist ? `<div class="q-artist artist-link" data-artist="${esc(job.artist)}">${esc(job.artist)}</div>` : ''}
@@ -1237,6 +1347,7 @@ function orchestratorJobRow(job, isHistory) {
           ${src !== 'auto' && src !== 'none' ? `<span class="orpheus-platform-badge" style="--badge-color:${color};font-size:10px;padding:1px 6px">${esc(srcLbl)}</span>` : ''}
           ${date ? `<span style="font-size:10px;color:var(--muted2)">${esc(date)}</span>` : ''}
           ${job.attempts > 1 ? `<span style="font-size:10px;color:var(--muted2)">${job.attempts}× geprobeerd</span>` : ''}
+          ${verifHtml}
         </div>
         ${errMsg}
       </div>

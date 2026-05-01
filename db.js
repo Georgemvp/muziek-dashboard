@@ -748,6 +748,101 @@ function getPostprocessLogByJob(downloadId) {
   }
 }
 
+// ── acoustid_results tabel ────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS acoustid_results (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      download_id     INTEGER,
+      file_path       TEXT    NOT NULL,
+      fingerprint     TEXT,
+      acoustid_score  REAL,
+      expected_artist TEXT,
+      expected_title  TEXT,
+      matched_artist  TEXT,
+      matched_title   TEXT,
+      matched_mbid    TEXT,
+      verified        INTEGER DEFAULT 0,
+      mismatch_reason TEXT,
+      created_at      INTEGER DEFAULT (strftime('%s','now')),
+      FOREIGN KEY (download_id) REFERENCES download_jobs(id)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_acid_download_id ON acoustid_results(download_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_acid_file_path   ON acoustid_results(file_path)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_acid_created_at  ON acoustid_results(created_at)');
+  logger.debug('acoustid_results table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing acoustid_results table');
+  throw err;
+}
+
+const _stmtInsertAcoustid = db.prepare(`
+  INSERT OR REPLACE INTO acoustid_results
+    (download_id, file_path, fingerprint, acoustid_score,
+     expected_artist, expected_title, matched_artist, matched_title,
+     matched_mbid, verified, mismatch_reason, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+`);
+const _stmtGetAcoustidByJob  = db.prepare('SELECT * FROM acoustid_results WHERE download_id = ? ORDER BY created_at DESC LIMIT 1');
+const _stmtGetAcoustidByPath = db.prepare('SELECT * FROM acoustid_results WHERE file_path = ? ORDER BY created_at DESC LIMIT 1');
+const _stmtGetAcoustidRecent = db.prepare('SELECT * FROM acoustid_results ORDER BY created_at DESC LIMIT ?');
+
+/**
+ * Sla een AcoustID verificatie-resultaat op.
+ * @param {object} r
+ */
+function saveAcoustidResult({
+  download_id = null, file_path, fingerprint = null, acoustid_score = null,
+  expected_artist = null, expected_title = null,
+  matched_artist = null, matched_title = null, matched_mbid = null,
+  verified = 0, mismatch_reason = null
+} = {}) {
+  try {
+    _stmtInsertAcoustid.run(
+      download_id, file_path,
+      fingerprint  ? fingerprint.slice(0, 500) : null, // afkappen: fingerprints zijn lang
+      acoustid_score,
+      expected_artist, expected_title,
+      matched_artist, matched_title, matched_mbid,
+      verified ? 1 : 0, mismatch_reason
+    );
+  } catch (err) {
+    logger.error({ err, file_path }, 'Error saving acoustid result');
+    throw err;
+  }
+}
+
+/** Haal het meest recente AcoustID-resultaat op voor een download-job. */
+function getAcoustidResultByJob(downloadId) {
+  try {
+    return _stmtGetAcoustidByJob.get(downloadId) || null;
+  } catch (err) {
+    logger.error({ err, downloadId }, 'Error getting acoustid result by job');
+    return null;
+  }
+}
+
+/** Haal het meest recente AcoustID-resultaat op voor een bestandspad. */
+function getAcoustidResultByPath(filePath) {
+  try {
+    return _stmtGetAcoustidByPath.get(filePath) || null;
+  } catch (err) {
+    logger.error({ err, filePath }, 'Error getting acoustid result by path');
+    return null;
+  }
+}
+
+/** Haal de laatste N AcoustID-resultaten op. */
+function getAcoustidResults(limit = 50) {
+  try {
+    return _stmtGetAcoustidRecent.all(Math.min(limit, 200));
+  } catch (err) {
+    logger.error({ err }, 'Error getting acoustid results');
+    return [];
+  }
+}
+
 // ── Eenmalige startup-prune
 try {
   const deleted = pruneCache();
@@ -764,4 +859,5 @@ module.exports = {
   createDownloadJob, getDownloadJob, updateDownloadJob,
   getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
   logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
+  saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
 };
