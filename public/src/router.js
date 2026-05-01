@@ -36,6 +36,7 @@ const viewMeta = {
   orpheus:                       { title: 'Muziek · OrpheusDL',        renderFn: 'loadOrpheus' },
   releases:                      { title: 'Muziek · New Releases',      renderFn: 'loadReleases' },
   settings:                      { title: 'Muziek · Instellingen',      renderFn: 'loadSettings' },
+  automations:                   { title: 'Muziek · Automatisering',    renderFn: 'loadAutomations' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -69,6 +70,7 @@ const viewLoaders = {
   orpheus:                       () => import('./views/orpheus.js'),
   releases:                      () => import('./views/releases.js'),
   settings:                      () => import('./views/settings.js'),
+  automations:                   () => import('./views/automations.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────

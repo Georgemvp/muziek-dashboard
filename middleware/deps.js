@@ -60,6 +60,9 @@ const {
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
 const { getWikipediaExtract } = require('../services/wikipedia');
 
+// ── Automation Engine ──────────────────────────────────────────────────────────
+const automationService = require('../services/automation');
+
 // ── Download Orchestrator ─────────────────────────────────────────────────────
 const events = require('../services/events');
 const { DownloadOrchestrator }              = require('../services/downloadOrchestrator');
@@ -193,6 +196,9 @@ const deps = {
   getAcoustidResultByJob,
   getAcoustidResultByPath,
   getAcoustidResults,
+
+  // Automation Engine
+  automationService,
 
   // Helpers
   limitConcurrency,

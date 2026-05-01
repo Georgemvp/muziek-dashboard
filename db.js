@@ -1069,6 +1069,7 @@ function getRecentStatsSnapshots(limit = 30) {
 }
 
 module.exports = {
+  getDb: () => db,
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,

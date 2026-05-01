@@ -20,7 +20,14 @@ const logger = require('../logger');
  * @param {object}                deps     - Gedeeld dependency-object
  */
 function runStartup(server, deps) {
-  const { syncPlexLibrary, initDiscover, initGaps, initReleases } = deps;
+  const { syncPlexLibrary, initDiscover, initGaps, initReleases, automationService } = deps;
+
+  // Automation Engine initialiseren (vóór alles, want het registreert alleen DB + listeners)
+  try {
+    automationService.init(deps);
+  } catch (err) {
+    logger.error({ err: err.message }, '⚠ Automation Engine initialisatie mislukt');
+  }
 
   logger.info('🔄 Initializing Plex library and discovery services in parallel...');
   Promise.allSettled([syncPlexLibrary(true), initDiscover(), initGaps(), initReleases()])
