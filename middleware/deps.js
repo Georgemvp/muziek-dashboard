@@ -38,6 +38,7 @@ const {
 const { getDiscover, refreshDiscover, initDiscover }    = require('../services/discover');
 const { getGaps, refreshGaps, initGaps, getArtistGaps } = require('../services/gaps');
 const { getReleases, refreshReleases, initReleases }    = require('../services/releases');
+const watchlistService                                  = require('../services/watchlist');
 
 const {
   searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory,
@@ -199,6 +200,9 @@ const deps = {
 
   // Automation Engine
   automationService,
+
+  // Watchlist
+  watchlistService,
 
   // Helpers
   limitConcurrency,

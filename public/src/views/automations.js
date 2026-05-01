@@ -20,6 +20,7 @@ const ACTION_TYPES = [
   { value: 'generate_playlist',      label: 'Genereer Playlist' },
   { value: 'process_wishlist',       label: 'Verwerk Wishlist' },
   { value: 'scan_library',           label: 'Plex Library Scan' },
+  { value: 'scan_watchlist',         label: 'Scan Watchlist (nieuwe releases)' },
   { value: 'cache_discovery_rebuild','label': 'Herbouw Cache Discovery' },
   { value: 'maintenance_scan',       label: 'Maintenance Scan' },
   { value: 'custom_endpoint',        label: 'Custom API Endpoint' },
@@ -528,7 +529,7 @@ function _renderTriggerConfig(type, cfg) {
           <input type="text" class="auto-input" id="auto-tc-event"
             placeholder="download:complete of signal:mijn_signaal"
             value="${esc(cfg.event || '')}">
-          <span class="auto-hint">Beschikbare events: <code>download:complete</code>, <code>signal:naam</code></span>
+          <span class="auto-hint">Beschikbare events: <code>download:complete</code>, <code>watchlist:new_release</code>, <code>signal:naam</code></span>
         </div>
       `;
       break;

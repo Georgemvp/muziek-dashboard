@@ -2,7 +2,7 @@
 // Beheert geplande en event-gedreven workflows.
 // Trigger types : schedule | interval | event | daily | weekly
 // Action types  : refresh_discovery | refresh_gaps | refresh_releases |
-//                 generate_playlist | process_wishlist | scan_library |
+//                 scan_watchlist | generate_playlist | process_wishlist | scan_library |
 //                 cache_discovery_rebuild | maintenance_scan | custom_endpoint
 // Then actions  : notify_discord | notify_telegram | notify_pushbullet |
 //                 fire_signal | play_chime
@@ -226,6 +226,7 @@ function describeAction(actionType, config) {
     case 'refresh_discovery':      return 'Refresh Discovery';
     case 'refresh_gaps':           return 'Refresh Gaps';
     case 'refresh_releases':       return 'Refresh Releases';
+    case 'scan_watchlist':         return 'Scan Watchlist';
     case 'generate_playlist':      return `Genereer playlist: ${cfg.type || 'daily_mix'}`;
     case 'process_wishlist':       return 'Verwerk Wishlist';
     case 'scan_library':           return 'Plex Library Scan';
@@ -304,6 +305,13 @@ async function _executeAction(automation) {
       const { refreshGaps }     = require('./gaps');
       await syncPlexLibrary(true);
       await refreshGaps();
+      break;
+    }
+
+    case 'scan_watchlist': {
+      const wl = require('./watchlist');
+      const result = await wl.scanAll();
+      logger.info({ scanned: result.scanned, newReleases: result.newReleases }, 'scan_watchlist voltooid');
       break;
     }
 

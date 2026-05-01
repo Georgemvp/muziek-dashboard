@@ -1354,6 +1354,217 @@ function getRecentStatsSnapshots(limit = 30) {
   }));
 }
 
+// ── Watchlist tabellen ────────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS watchlist (
+      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+      artist_name             TEXT    NOT NULL UNIQUE,
+      mbid                    TEXT,
+      watch_albums            INTEGER DEFAULT 1,
+      watch_eps               INTEGER DEFAULT 1,
+      watch_singles           INTEGER DEFAULT 0,
+      exclude_live            INTEGER DEFAULT 1,
+      exclude_remixes         INTEGER DEFAULT 0,
+      exclude_compilations    INTEGER DEFAULT 1,
+      auto_download           INTEGER DEFAULT 0,
+      download_quality        TEXT    DEFAULT 'flac',
+      scan_interval_hours     INTEGER DEFAULT 24,
+      last_scanned            INTEGER,
+      added_at                INTEGER DEFAULT (strftime('%s','now')),
+      notes                   TEXT
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_watchlist_name ON watchlist(artist_name)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_watchlist_scan ON watchlist(last_scanned)');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS watchlist_releases (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      watchlist_id   INTEGER NOT NULL,
+      release_title  TEXT    NOT NULL,
+      release_type   TEXT,
+      release_date   TEXT,
+      mbid           TEXT,
+      cover_url      TEXT,
+      status         TEXT    DEFAULT 'new',
+      notified       INTEGER DEFAULT 0,
+      created_at     INTEGER DEFAULT (strftime('%s','now')),
+      FOREIGN KEY (watchlist_id) REFERENCES watchlist(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_wl_releases_wid    ON watchlist_releases(watchlist_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_wl_releases_status ON watchlist_releases(status)');
+  logger.debug('Watchlist tables initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing watchlist tables');
+  throw err;
+}
+
+// ── Watchlist prepared statements ─────────────────────────────────────────────
+const _stmtGetAllWatchlist = db.prepare('SELECT * FROM watchlist ORDER BY artist_name ASC');
+const _stmtGetWatchlistById = db.prepare('SELECT * FROM watchlist WHERE id = ?');
+const _stmtGetWatchlistByName = db.prepare('SELECT * FROM watchlist WHERE artist_name = ? COLLATE NOCASE');
+const _stmtInsertWatchlist = db.prepare(`
+  INSERT INTO watchlist (artist_name, mbid, watch_albums, watch_eps, watch_singles,
+    exclude_live, exclude_remixes, exclude_compilations, auto_download, download_quality,
+    scan_interval_hours, notes)
+  VALUES (@artist_name, @mbid, @watch_albums, @watch_eps, @watch_singles,
+    @exclude_live, @exclude_remixes, @exclude_compilations, @auto_download, @download_quality,
+    @scan_interval_hours, @notes)
+`);
+const _stmtUpdateWatchlist = db.prepare(`
+  UPDATE watchlist SET
+    mbid=@mbid, watch_albums=@watch_albums, watch_eps=@watch_eps, watch_singles=@watch_singles,
+    exclude_live=@exclude_live, exclude_remixes=@exclude_remixes,
+    exclude_compilations=@exclude_compilations, auto_download=@auto_download,
+    download_quality=@download_quality, scan_interval_hours=@scan_interval_hours, notes=@notes
+  WHERE id=@id
+`);
+const _stmtUpdateWatchlistScanned = db.prepare('UPDATE watchlist SET last_scanned=?, mbid=COALESCE(?,mbid) WHERE id=?');
+const _stmtDeleteWatchlist = db.prepare('DELETE FROM watchlist WHERE id = ?');
+
+const _stmtGetWatchlistReleases = db.prepare('SELECT * FROM watchlist_releases WHERE watchlist_id = ? ORDER BY release_date DESC, created_at DESC');
+const _stmtGetWatchlistRelease  = db.prepare('SELECT * FROM watchlist_releases WHERE watchlist_id = ? AND release_title = ? COLLATE NOCASE');
+const _stmtInsertWatchlistRelease = db.prepare(`
+  INSERT INTO watchlist_releases (watchlist_id, release_title, release_type, release_date, mbid, cover_url, status)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+const _stmtUpdateWatchlistReleaseStatus = db.prepare('UPDATE watchlist_releases SET status=? WHERE id=?');
+const _stmtMarkReleasesNotified = db.prepare('UPDATE watchlist_releases SET notified=1 WHERE watchlist_id=? AND notified=0');
+const _stmtCountNewReleases     = db.prepare("SELECT COUNT(*) as cnt FROM watchlist_releases WHERE watchlist_id=? AND status='new'");
+const _stmtGetDueWatchlistItems = db.prepare(`
+  SELECT * FROM watchlist
+  WHERE last_scanned IS NULL
+     OR last_scanned < (strftime('%s','now') - scan_interval_hours * 3600)
+  ORDER BY last_scanned ASC
+`);
+
+/** Haal alle watchlist artiesten op. */
+function getAllWatchlist() {
+  try {
+    const items = _stmtGetAllWatchlist.all();
+    return items.map(w => ({
+      ...w,
+      new_release_count: _stmtCountNewReleases.get(w.id)?.cnt ?? 0,
+    }));
+  } catch (err) {
+    logger.error({ err }, 'Error getting watchlist');
+    return [];
+  }
+}
+
+/** Haal één watchlist-entry op op id. */
+function getWatchlistItem(id) {
+  try { return _stmtGetWatchlistById.get(id) || null; }
+  catch (err) { logger.error({ id, err }, 'Error getting watchlist item'); return null; }
+}
+
+/** Haal één watchlist-entry op op artiestnaam. */
+function getWatchlistByName(artistName) {
+  try { return _stmtGetWatchlistByName.get(artistName) || null; }
+  catch (err) { logger.error({ artistName, err }, 'Error getting watchlist by name'); return null; }
+}
+
+/** Voeg een artiest toe aan de watchlist. Gooit als al aanwezig. */
+function addWatchlistItem(fields) {
+  try {
+    const res = _stmtInsertWatchlist.run({
+      artist_name:         fields.artist_name,
+      mbid:                fields.mbid               ?? null,
+      watch_albums:        fields.watch_albums        ?? 1,
+      watch_eps:           fields.watch_eps           ?? 1,
+      watch_singles:       fields.watch_singles       ?? 0,
+      exclude_live:        fields.exclude_live        ?? 1,
+      exclude_remixes:     fields.exclude_remixes     ?? 0,
+      exclude_compilations:fields.exclude_compilations ?? 1,
+      auto_download:       fields.auto_download       ?? 0,
+      download_quality:    fields.download_quality    ?? 'flac',
+      scan_interval_hours: fields.scan_interval_hours ?? 24,
+      notes:               fields.notes               ?? null,
+    });
+    logger.info({ id: res.lastInsertRowid, artist_name: fields.artist_name }, 'Watchlist item added');
+    return res.lastInsertRowid;
+  } catch (err) {
+    logger.error({ fields, err }, 'Error adding watchlist item');
+    throw err;
+  }
+}
+
+/** Update een watchlist-entry. */
+function updateWatchlistItem(id, fields) {
+  try {
+    const current = _stmtGetWatchlistById.get(id);
+    if (!current) throw new Error(`Watchlist item ${id} niet gevonden`);
+    _stmtUpdateWatchlist.run({
+      id,
+      mbid:                fields.mbid               ?? current.mbid,
+      watch_albums:        fields.watch_albums        ?? current.watch_albums,
+      watch_eps:           fields.watch_eps           ?? current.watch_eps,
+      watch_singles:       fields.watch_singles       ?? current.watch_singles,
+      exclude_live:        fields.exclude_live        ?? current.exclude_live,
+      exclude_remixes:     fields.exclude_remixes     ?? current.exclude_remixes,
+      exclude_compilations:fields.exclude_compilations ?? current.exclude_compilations,
+      auto_download:       fields.auto_download       ?? current.auto_download,
+      download_quality:    fields.download_quality    ?? current.download_quality,
+      scan_interval_hours: fields.scan_interval_hours ?? current.scan_interval_hours,
+      notes:               fields.notes               ?? current.notes,
+    });
+    logger.debug({ id }, 'Watchlist item updated');
+  } catch (err) {
+    logger.error({ id, fields, err }, 'Error updating watchlist item');
+    throw err;
+  }
+}
+
+/** Markeer artiest als gescand. */
+function markWatchlistScanned(id, mbid = null) {
+  try { _stmtUpdateWatchlistScanned.run(Math.floor(Date.now() / 1000), mbid, id); }
+  catch (err) { logger.error({ id, err }, 'Error marking watchlist scanned'); }
+}
+
+/** Verwijder watchlist artiest (en zijn releases via CASCADE). */
+function removeWatchlistItem(id) {
+  try {
+    const info = _stmtDeleteWatchlist.run(id);
+    logger.info({ id, deleted: info.changes > 0 }, 'Watchlist item removed');
+  } catch (err) {
+    logger.error({ id, err }, 'Error removing watchlist item');
+    throw err;
+  }
+}
+
+/** Haal alle releases op voor een watchlist entry. */
+function getWatchlistReleases(watchlistId) {
+  try { return _stmtGetWatchlistReleases.all(watchlistId); }
+  catch (err) { logger.error({ watchlistId, err }, 'Error getting watchlist releases'); return []; }
+}
+
+/** Voeg een release toe (of negeer als al aanwezig). Geeft { id, isNew } terug. */
+function addWatchlistRelease(watchlistId, { release_title, release_type, release_date, mbid, cover_url, status = 'new' }) {
+  try {
+    const existing = _stmtGetWatchlistRelease.get(watchlistId, release_title);
+    if (existing) return { id: existing.id, isNew: false };
+    const res = _stmtInsertWatchlistRelease.run(watchlistId, release_title, release_type, release_date, mbid ?? null, cover_url ?? null, status);
+    return { id: res.lastInsertRowid, isNew: true };
+  } catch (err) {
+    logger.error({ watchlistId, release_title, err }, 'Error adding watchlist release');
+    throw err;
+  }
+}
+
+/** Update de status van een release ('new'|'downloaded'|'skipped'|'in_library'). */
+function updateWatchlistReleaseStatus(releaseId, status) {
+  try { _stmtUpdateWatchlistReleaseStatus.run(status, releaseId); }
+  catch (err) { logger.error({ releaseId, status, err }, 'Error updating watchlist release status'); }
+}
+
+/** Haal alle artiesten op waarvan de scan-interval verlopen is. */
+function getDueWatchlistItems() {
+  try { return _stmtGetDueWatchlistItems.all(); }
+  catch (err) { logger.error({ err }, 'Error getting due watchlist items'); return []; }
+}
+
 module.exports = {
   getDb: () => db,
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
@@ -1371,4 +1582,8 @@ module.exports = {
   resetStuckEnrichmentItems, getEnrichmentQueueStats,
   saveEnrichmentData, getEnrichmentData, getEnrichmentDataBySource,
   getGenreWhitelist, setGenreEnabled, setGenreWhitelist, seedGenreWhitelist,
+  // Watchlist
+  getAllWatchlist, getWatchlistItem, getWatchlistByName,
+  addWatchlistItem, updateWatchlistItem, removeWatchlistItem, markWatchlistScanned,
+  getWatchlistReleases, addWatchlistRelease, updateWatchlistReleaseStatus, getDueWatchlistItems,
 };
