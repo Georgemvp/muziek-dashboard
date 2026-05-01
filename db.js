@@ -1018,6 +1018,56 @@ try {
   pruneExpiredPlaylists();
 } catch {}
 
+// ── stats_snapshots tabel ─────────────────────────────────────────────────────
+// Dagelijkse snapshots van luisterstatistieken voor trending-data.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stats_snapshots (
+      date           TEXT    PRIMARY KEY,
+      total_plays    INTEGER,
+      unique_artists INTEGER,
+      unique_tracks  INTEGER,
+      library_size   INTEGER,
+      data_json      TEXT,
+      created_at     INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  logger.debug('stats_snapshots table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing stats_snapshots table');
+}
+
+const _stmtSaveSnapshot  = db.prepare(`
+  INSERT OR REPLACE INTO stats_snapshots (date, total_plays, unique_artists, unique_tracks, library_size, data_json)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const _stmtGetSnapshot   = db.prepare('SELECT * FROM stats_snapshots WHERE date = ?');
+const _stmtGetSnapshots  = db.prepare('SELECT * FROM stats_snapshots ORDER BY date DESC LIMIT ?');
+
+function saveStatsSnapshot({ date, totalPlays, uniqueArtists, uniqueTracks, librarySize, data }) {
+  _stmtSaveSnapshot.run(
+    date,
+    totalPlays || 0,
+    uniqueArtists || 0,
+    uniqueTracks || 0,
+    librarySize || 0,
+    data ? JSON.stringify(data) : null
+  );
+}
+
+function getStatsSnapshot(date) {
+  const row = _stmtGetSnapshot.get(date);
+  if (!row) return null;
+  return { ...row, data: row.data_json ? JSON.parse(row.data_json) : null };
+}
+
+function getRecentStatsSnapshots(limit = 30) {
+  return _stmtGetSnapshots.all(limit).map(row => ({
+    ...row,
+    data: row.data_json ? JSON.parse(row.data_json) : null
+  }));
+}
+
 module.exports = {
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
@@ -1028,4 +1078,5 @@ module.exports = {
   logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
   saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
   savePlaylist, getPlaylist, getAllSavedPlaylists, pruneExpiredPlaylists, PLAYLIST_TTL,
+  saveStatsSnapshot, getStatsSnapshot, getRecentStatsSnapshots,
 };
