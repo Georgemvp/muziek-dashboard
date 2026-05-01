@@ -71,6 +71,18 @@ function runStartup(server, deps) {
       .catch(e => logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed'));
   }, 30 * 60 * 1_000);
 
+  // Achtergrond-sync gespiegelde playlists elk uur
+  const mirroredService = require('../services/mirroredPlaylists');
+  logger.debug('Starting background mirrored playlist sync (every hour)');
+  setInterval(() => {
+    logger.debug('🔄 Running mirrored playlist auto-sync...');
+    mirroredService.syncAll(deps)
+      .then(results => {
+        if (results.length) logger.info({ synced: results.length }, '✓ Mirrored playlist auto-sync done');
+      })
+      .catch(e => logger.warn({ err: e.message }, '⚠ Mirrored playlist auto-sync failed'));
+  }, 60 * 60 * 1_000);
+
   // Graceful shutdown
   const graceful = (sig) => () => {
     logger.warn(`${sig} received - gracefully shutting down`);

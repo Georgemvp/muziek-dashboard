@@ -551,6 +551,263 @@ async function renderDiscovery(data) {
   bindCustomBuilder();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Mirrored Playlists Tab
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PLATFORM_ICONS = {
+  spotify: '🟢',
+  deezer:  '🟠',
+  youtube: '🔴',
+  tidal:   '🔵',
+};
+const PLATFORM_NAMES = {
+  spotify: 'Spotify',
+  deezer:  'Deezer',
+  youtube: 'YouTube',
+  tidal:   'Tidal',
+};
+
+function fmtSyncAge(unixSec) {
+  if (!unixSec) return 'Nooit gesynchroniseerd';
+  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  if (diff < 60)    return 'Zojuist';
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m geleden`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}u geleden`;
+  return `${Math.floor(diff / 86400)}d geleden`;
+}
+
+function matchPercent(pl) {
+  if (!pl.track_count) return 0;
+  return Math.round((pl.matched_count / pl.track_count) * 100);
+}
+
+function mirrorCard(pl) {
+  const icon    = PLATFORM_ICONS[pl.source_platform] || '🎵';
+  const pName   = PLATFORM_NAMES[pl.source_platform] || pl.source_platform;
+  const pct     = matchPercent(pl);
+  const barColor = pct >= 80 ? '#5cb85c' : pct >= 40 ? '#f0ad4e' : '#e05555';
+
+  return `<div class="mir-card" data-id="${pl.id}">
+    <div class="mir-card-hdr">
+      <span class="mir-platform">${icon} ${esc(pName)}</span>
+      ${pl.auto_sync ? '<span class="mir-badge mir-auto">Auto-sync</span>' : ''}
+    </div>
+    <div class="mir-card-name">${esc(pl.name)}</div>
+    <div class="mir-card-stats">
+      <div class="mir-pbar-wrap">
+        <div class="mir-pbar" style="width:${pct}%;background:${barColor}"></div>
+      </div>
+      <div class="mir-stat-row">
+        <span>${pl.matched_count}/${pl.track_count} in Plex</span>
+        <span class="mir-age">${fmtSyncAge(pl.last_synced)}</span>
+      </div>
+    </div>
+    <div class="mir-card-actions">
+      <button class="dpl-btn mir-btn-tracks" data-id="${pl.id}" title="Bekijk tracks">Tracks</button>
+      <button class="dpl-btn mir-btn-sync"   data-id="${pl.id}" title="Nu synchroniseren">↺ Sync</button>
+      <button class="dpl-btn mir-btn-dl"     data-id="${pl.id}" title="Download ontbrekende tracks">⬇ Downloaden</button>
+      <button class="dpl-btn mir-btn-del"    data-id="${pl.id}" title="Verwijder gespiegelde playlist">✕</button>
+    </div>
+  </div>`;
+}
+
+async function renderMirrored(container) {
+  container.innerHTML = `<div class="dpl-loading"><span class="dpl-spin"></span> Laden…</div>`;
+
+  let playlists = [];
+  try {
+    playlists = await apiFetch('/api/mirrored');
+  } catch (err) {
+    container.innerHTML = `<div class="dpl-err">⚠️ Laden mislukt: ${esc(err.message)}</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="mir-toolbar">
+      <input class="dpl-input mir-url-input" id="mir-url-input" type="url"
+        placeholder="Plak een Spotify / Deezer / YouTube / Tidal playlist-URL…">
+      <button class="dpl-btn dpl-primary" id="mir-add-btn">+ Toevoegen</button>
+    </div>
+    <div id="mir-add-msg" class="mir-msg"></div>
+    <div class="mir-grid" id="mir-grid">
+      ${playlists.length
+        ? playlists.map(mirrorCard).join('')
+        : `<div class="dpl-empty">Nog geen gespiegelde playlists. Voeg er een toe hierboven.</div>`}
+    </div>
+    <div id="mir-tracks-panel" class="mir-tracks-panel" style="display:none"></div>`;
+
+  // ── Toevoegen ──────────────────────────────────────────────────────────
+  const urlInput = container.querySelector('#mir-url-input');
+  const addBtn   = container.querySelector('#mir-add-btn');
+  const addMsg   = container.querySelector('#mir-add-msg');
+
+  addBtn.addEventListener('click', async () => {
+    const url = urlInput.value.trim();
+    if (!url) return;
+    addBtn.disabled = true;
+    addBtn.textContent = '⏳ Toevoegen…';
+    addMsg.textContent = '';
+    addMsg.className = 'mir-msg';
+    try {
+      const pl = await apiFetch('/api/mirrored', { method: 'POST', body: JSON.stringify({ url }) });
+      addMsg.textContent = `✓ "${pl.name}" toegevoegd (${pl.track_count} tracks, ${pl.matched_count} in Plex)`;
+      addMsg.className = 'mir-msg mir-ok';
+      urlInput.value = '';
+      await renderMirrored(container);
+    } catch (err) {
+      addMsg.textContent = `⚠️ ${err.message}`;
+      addMsg.className = 'mir-msg mir-err';
+    } finally {
+      addBtn.disabled = false;
+      addBtn.textContent = '+ Toevoegen';
+    }
+  });
+
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+
+  // ── Delegated events op cards ──────────────────────────────────────────
+  const grid = container.querySelector('#mir-grid');
+  const tracksPanel = container.querySelector('#mir-tracks-panel');
+
+  grid.addEventListener('click', async e => {
+    const id = e.target.dataset?.id;
+    if (!id) return;
+
+    // Tracks bekijken
+    if (e.target.classList.contains('mir-btn-tracks')) {
+      await showMirroredTracks(parseInt(id, 10), tracksPanel, grid);
+      return;
+    }
+
+    // Sync
+    if (e.target.classList.contains('mir-btn-sync')) {
+      const btn = e.target;
+      btn.disabled = true;
+      btn.textContent = '⏳';
+      try {
+        const result = await apiFetch(`/api/mirrored/${id}/sync`, { method: 'POST' });
+        btn.textContent = `✓ ${result.matched_count}/${result.track_count}`;
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '↺ Sync';
+          renderMirrored(container);
+        }, 2000);
+      } catch (err) {
+        btn.textContent = '⚠️';
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = '↺ Sync'; }, 2000);
+      }
+      return;
+    }
+
+    // Download ontbrekende
+    if (e.target.classList.contains('mir-btn-dl')) {
+      const btn = e.target;
+      btn.disabled = true;
+      btn.textContent = '⏳ Bezig…';
+      try {
+        const result = await apiFetch(`/api/mirrored/${id}/download-missing`, { method: 'POST' });
+        btn.textContent = `✓ ${result.queued} in wachtrij`;
+        setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ Downloaden'; }, 3000);
+      } catch (err) {
+        btn.textContent = '⚠️ Fout';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ Downloaden'; }, 2500);
+      }
+      return;
+    }
+
+    // Verwijderen
+    if (e.target.classList.contains('mir-btn-del')) {
+      if (!confirm('Gespiegelde playlist verwijderen?')) return;
+      try {
+        await apiFetch(`/api/mirrored/${id}`, { method: 'DELETE' });
+        await renderMirrored(container);
+      } catch {}
+      return;
+    }
+  });
+}
+
+async function showMirroredTracks(playlistId, panel, grid) {
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="dpl-loading"><span class="dpl-spin"></span> Tracks laden…</div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  let data;
+  try {
+    data = await apiFetch(`/api/mirrored/${playlistId}/tracks`);
+  } catch (err) {
+    panel.innerHTML = `<div class="dpl-err">⚠️ ${esc(err.message)}</div>`;
+    return;
+  }
+
+  const { playlist, tracks } = data;
+
+  const statusLabel = {
+    matched:     { label: '✓ In Plex',    cls: 'mir-s-ok' },
+    unmatched:   { label: '✕ Ontbreekt',  cls: 'mir-s-miss' },
+    downloading: { label: '⬇ Bezig',      cls: 'mir-s-dl' },
+    downloaded:  { label: '✓ Gedownload', cls: 'mir-s-dl' },
+    pending:     { label: '⋯ Pending',    cls: 'mir-s-pend' },
+  };
+
+  const rows = tracks.map(t => {
+    const s = statusLabel[t.match_status] || statusLabel.pending;
+    const conf = t.match_confidence ? `${Math.round(t.match_confidence * 100)}%` : '';
+    return `<div class="mir-trow">
+      <span class="mir-tstatus ${s.cls}">${s.label}</span>
+      <div class="mir-tinfo">
+        <div class="mir-ttitle">${esc(t.source_title)}</div>
+        <div class="mir-tsub">${esc(t.source_artist)}${t.source_album ? ` · ${esc(t.source_album)}` : ''}</div>
+      </div>
+      <span class="mir-tconf">${conf}</span>
+      ${t.match_status === 'matched'
+        ? `<button class="dpl-btn mir-unmatch" data-track="${t.id}" data-pl="${playlistId}" title="Ontkoppel van Plex">Unmatch</button>`
+        : (t.unmatched
+          ? `<button class="dpl-btn mir-rematch" data-track="${t.id}" data-pl="${playlistId}" title="Opnieuw matchen">Rematch</button>`
+          : '')}
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div class="mir-tp-hdr">
+      <span class="mir-tp-title">${esc(playlist.name)}</span>
+      <span class="mir-tp-stat">${playlist.matched_count}/${playlist.track_count} in Plex</span>
+      <button class="dpl-btn" id="mir-tp-close">✕ Sluiten</button>
+    </div>
+    <div class="mir-tlist">${rows || '<div class="dpl-empty">Geen tracks gevonden.</div>'}</div>`;
+
+  panel.querySelector('#mir-tp-close')?.addEventListener('click', () => {
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+  });
+
+  // Unmatch / rematch knoppen
+  panel.addEventListener('click', async e => {
+    if (e.target.classList.contains('mir-unmatch')) {
+      const trackId = e.target.dataset.track;
+      const plId    = e.target.dataset.pl;
+      try {
+        await apiFetch(`/api/mirrored/${plId}/tracks/${trackId}/unmatch`, {
+          method: 'POST', body: JSON.stringify({ unmatched: true }),
+        });
+        await showMirroredTracks(parseInt(plId, 10), panel, grid);
+      } catch {}
+    }
+    if (e.target.classList.contains('mir-rematch')) {
+      const trackId = e.target.dataset.track;
+      const plId    = e.target.dataset.pl;
+      try {
+        await apiFetch(`/api/mirrored/${plId}/tracks/${trackId}/unmatch`, {
+          method: 'POST', body: JSON.stringify({ unmatched: false }),
+        });
+        await showMirroredTracks(parseInt(plId, 10), panel, grid);
+      } catch {}
+    }
+  });
+}
+
 function styles() {
   return `<style>
 .dpl-page{padding:1.5rem;max-width:1400px}
@@ -659,6 +916,50 @@ function styles() {
 .dpl-cres{display:flex;align-items:center;gap:.75rem;margin-top:.4rem;font-size:.85rem}
 .dpl-loading,.dpl-empty{padding:.75rem;text-align:center;color:var(--color-secondary);font-size:.85rem;display:flex;gap:.5rem;align-items:center;justify-content:center}
 .dpl-err{color:#e05555;padding:.5rem 0;font-size:.85rem}
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.dpl-tabs{display:flex;gap:0;border-bottom:2px solid var(--color-border,#333);margin-bottom:1.5rem}
+.dpl-tab{padding:.55rem 1.1rem;font-size:.88rem;font-weight:600;border:none;background:none;color:var(--color-secondary);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
+.dpl-tab:hover{color:var(--color-text)}
+.dpl-tab.active{color:var(--color-accent,#6c63ff);border-bottom-color:var(--color-accent,#6c63ff)}
+/* ── Mirrored Playlists ───────────────────────────────────────── */
+.mir-toolbar{display:flex;gap:.55rem;margin-bottom:.75rem}
+.mir-url-input{flex:1}
+.mir-msg{font-size:.82rem;margin-bottom:.6rem;min-height:1.2em}
+.mir-ok{color:#5cb85c}
+.mir-err{color:#e05555}
+.mir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.mir-card{background:var(--color-surface,#1e1e1e);border-radius:12px;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.55rem;border:1px solid var(--color-border,#2a2a2a)}
+.mir-card-hdr{display:flex;align-items:center;gap:.45rem}
+.mir-platform{font-size:.78rem;font-weight:600;color:var(--color-secondary)}
+.mir-badge{font-size:.64rem;padding:.1rem .35rem;border-radius:3px;font-weight:600}
+.mir-auto{background:rgba(108,99,255,.15);color:var(--color-accent,#6c63ff)}
+.mir-card-name{font-size:.92rem;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mir-card-stats{display:flex;flex-direction:column;gap:.25rem}
+.mir-pbar-wrap{height:5px;background:var(--color-border,#333);border-radius:3px;overflow:hidden}
+.mir-pbar{height:100%;border-radius:3px;transition:width .3s}
+.mir-stat-row{display:flex;justify-content:space-between;font-size:.72rem;color:var(--color-secondary)}
+.mir-age{opacity:.75}
+.mir-card-actions{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.1rem}
+.mir-card-actions .dpl-btn{font-size:.73rem;padding:.22rem .55rem}
+.mir-btn-del{color:#e05555}
+.mir-btn-del:hover{background:#e05555;color:#fff}
+/* Mirrored Tracks Panel */
+.mir-tracks-panel{margin-top:1.25rem;background:var(--color-surface,#1e1e1e);border-radius:12px;overflow:hidden;border:1px solid var(--color-border,#2a2a2a)}
+.mir-tp-hdr{display:flex;align-items:center;gap:.65rem;padding:.7rem 1rem;border-bottom:1px solid var(--color-border,#333)}
+.mir-tp-title{font-weight:700;font-size:.9rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mir-tp-stat{font-size:.75rem;color:var(--color-secondary);white-space:nowrap}
+.mir-tlist{max-height:420px;overflow-y:auto;padding:.4rem .6rem}
+.mir-trow{display:grid;grid-template-columns:100px 1fr auto auto;gap:.5rem;align-items:center;padding:.35rem .2rem;border-radius:6px}
+.mir-trow:hover{background:var(--color-bg,#141414)}
+.mir-tstatus{font-size:.68rem;font-weight:600;padding:.1rem .32rem;border-radius:3px;white-space:nowrap;text-align:center}
+.mir-s-ok{background:rgba(92,184,92,.15);color:#5cb85c}
+.mir-s-miss{background:rgba(224,85,85,.12);color:#e05555}
+.mir-s-dl{background:rgba(108,99,255,.15);color:var(--color-accent,#6c63ff)}
+.mir-s-pend{background:rgba(150,150,150,.1);color:var(--color-secondary)}
+.mir-tinfo{min-width:0}
+.mir-ttitle{font-size:.82rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mir-tsub{font-size:.72rem;color:var(--color-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mir-tconf{font-size:.68rem;color:var(--color-secondary);white-space:nowrap}
 </style>`;
 }
 
@@ -667,25 +968,70 @@ function styles() {
 /**
  * Discovery Engine view — gepersonaliseerde playlists.
  */
+let _activePlaylistTab = state.playlistTab || 'discovery';
+
 export async function loadPlaylists() {
   const content = document.getElementById('content');
   if (!content) return;
 
-  content.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--color-secondary)">
-    <span style="display:inline-block;width:20px;height:20px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:dpl-rot .6s linear infinite;vertical-align:middle"></span>
-    <span style="margin-left:.5rem">Playlists laden…</span>
-  </div>
-  <style>@keyframes dpl-rot{to{transform:rotate(360deg)}}</style>`;
+  // Herstel actieve tab uit state (zodat tab behouden blijft bij navigatie)
+  _activePlaylistTab = state.playlistTab || 'discovery';
 
-  try {
-    const data = await apiFetch('/api/playlists', { signal: state.tabAbort?.signal });
-    await renderDiscovery(data);
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    content.innerHTML = `<div style="padding:2rem;text-align:center">
-      <p style="color:#e05">Playlists konden niet worden geladen: ${esc(e.message)}</p>
-      <button onclick="location.reload()" style="margin-top:1rem;padding:.5rem 1rem;cursor:pointer;border-radius:6px;border:none;background:var(--color-border);color:var(--color-text)">Opnieuw laden</button>
+  content.innerHTML = `
+    ${styles()}
+    <div class="dpl-page">
+      <div class="dpl-hdr">
+        <h1 class="dpl-page-title">🎵 Playlists</h1>
+      </div>
+      <div class="dpl-tabs">
+        <button class="dpl-tab${_activePlaylistTab === 'discovery' ? ' active' : ''}" data-tab="discovery">🔭 Discovery Engine</button>
+        <button class="dpl-tab${_activePlaylistTab === 'mirrored'  ? ' active' : ''}" data-tab="mirrored">🔗 Gespiegeld</button>
+      </div>
+      <div id="dpl-tab-content">
+        <div style="padding:2rem;text-align:center;color:var(--color-secondary)">
+          <span class="dpl-spin"></span>
+          <span style="margin-left:.5rem">Laden…</span>
+        </div>
+      </div>
     </div>`;
+
+  // Tab-switching
+  content.querySelectorAll('.dpl-tab').forEach(tab => {
+    tab.addEventListener('click', async () => {
+      content.querySelectorAll('.dpl-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      _activePlaylistTab = tab.dataset.tab;
+      state.playlistTab  = _activePlaylistTab;
+      await loadTabContent(_activePlaylistTab);
+    });
+  });
+
+  await loadTabContent(_activePlaylistTab);
+}
+
+async function loadTabContent(tab) {
+  const tabContent = document.getElementById('dpl-tab-content');
+  if (!tabContent) return;
+
+  if (tab === 'discovery') {
+    tabContent.innerHTML = `<div class="dpl-loading"><span class="dpl-spin"></span> Playlists laden…</div>`;
+    try {
+      const data = await apiFetch('/api/playlists', { signal: state.tabAbort?.signal });
+      await renderDiscovery(data);
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      tabContent.innerHTML = `<div style="padding:2rem;text-align:center">
+        <p style="color:#e05">Playlists konden niet worden geladen: ${esc(e.message)}</p>
+        <button onclick="location.reload()" style="margin-top:1rem;padding:.5rem 1rem;cursor:pointer;border-radius:6px;border:none;background:var(--color-border);color:var(--color-text)">Opnieuw laden</button>
+      </div>`;
+    }
+    return;
+  }
+
+  if (tab === 'mirrored') {
+    tabContent.innerHTML = '';
+    await renderMirrored(tabContent);
+    return;
   }
 }
 

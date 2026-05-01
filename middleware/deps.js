@@ -60,6 +60,7 @@ const {
 
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
 const { getWikipediaExtract } = require('../services/wikipedia');
+const mirroredPlaylistsService = require('../services/mirroredPlaylists');
 
 // ── Automation Engine ──────────────────────────────────────────────────────────
 const automationService = require('../services/automation');
@@ -203,6 +204,9 @@ const deps = {
 
   // Watchlist
   watchlistService,
+
+  // Mirrored Playlists
+  mirroredPlaylistsService,
 
   // Helpers
   limitConcurrency,

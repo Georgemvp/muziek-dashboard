@@ -1401,6 +1401,50 @@ try {
   throw err;
 }
 
+// ── Mirrored Playlists schema ─────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mirrored_playlists (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      name                 TEXT    NOT NULL,
+      source_platform      TEXT    NOT NULL,
+      source_url           TEXT    NOT NULL,
+      source_id            TEXT,
+      auto_sync            INTEGER DEFAULT 1,
+      sync_interval_hours  INTEGER DEFAULT 24,
+      auto_download        INTEGER DEFAULT 0,
+      download_quality     TEXT    DEFAULT 'flac',
+      last_synced          INTEGER,
+      track_count          INTEGER DEFAULT 0,
+      matched_count        INTEGER DEFAULT 0,
+      created_at           INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mirrored_tracks (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      playlist_id      INTEGER NOT NULL,
+      source_title     TEXT    NOT NULL,
+      source_artist    TEXT    NOT NULL,
+      source_album     TEXT,
+      source_id        TEXT,
+      matched_plex_key TEXT,
+      match_status     TEXT    DEFAULT 'pending',
+      match_confidence REAL,
+      unmatched        INTEGER DEFAULT 0,
+      added_at         INTEGER DEFAULT (strftime('%s','now')),
+      FOREIGN KEY (playlist_id) REFERENCES mirrored_playlists(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mt_playlist_id   ON mirrored_tracks(playlist_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mt_match_status  ON mirrored_tracks(match_status)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mp_platform      ON mirrored_playlists(source_platform)');
+  logger.debug('Mirrored playlists tables initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing mirrored playlists tables');
+  throw err;
+}
+
 // ── Watchlist prepared statements ─────────────────────────────────────────────
 const _stmtGetAllWatchlist = db.prepare('SELECT * FROM watchlist ORDER BY artist_name ASC');
 const _stmtGetWatchlistById = db.prepare('SELECT * FROM watchlist WHERE id = ?');
@@ -1565,6 +1609,178 @@ function getDueWatchlistItems() {
   catch (err) { logger.error({ err }, 'Error getting due watchlist items'); return []; }
 }
 
+// ── Mirrored Playlists prepared statements ────────────────────────────────────
+const _stmtGetAllMirroredPlaylists  = db.prepare('SELECT * FROM mirrored_playlists ORDER BY created_at DESC');
+const _stmtGetMirroredPlaylist      = db.prepare('SELECT * FROM mirrored_playlists WHERE id = ?');
+const _stmtGetMirroredPlaylistByUrl = db.prepare('SELECT * FROM mirrored_playlists WHERE source_url = ?');
+const _stmtInsertMirroredPlaylist   = db.prepare(`
+  INSERT INTO mirrored_playlists (name, source_platform, source_url, source_id,
+    auto_sync, sync_interval_hours, auto_download, download_quality)
+  VALUES (@name, @source_platform, @source_url, @source_id,
+    @auto_sync, @sync_interval_hours, @auto_download, @download_quality)
+`);
+const _stmtUpdateMirroredPlaylist = db.prepare(`
+  UPDATE mirrored_playlists SET
+    name=@name, last_synced=@last_synced, track_count=@track_count,
+    matched_count=@matched_count, auto_sync=@auto_sync,
+    sync_interval_hours=@sync_interval_hours, auto_download=@auto_download,
+    download_quality=@download_quality
+  WHERE id=@id
+`);
+const _stmtDeleteMirroredPlaylist   = db.prepare('DELETE FROM mirrored_playlists WHERE id = ?');
+const _stmtGetDueMirroredPlaylists  = db.prepare(`
+  SELECT * FROM mirrored_playlists
+  WHERE auto_sync = 1
+    AND (last_synced IS NULL
+      OR last_synced < strftime('%s','now') - sync_interval_hours * 3600)
+`);
+
+const _stmtGetMirroredTracks        = db.prepare('SELECT * FROM mirrored_tracks WHERE playlist_id = ? ORDER BY id ASC');
+const _stmtGetMirroredTrack         = db.prepare('SELECT * FROM mirrored_tracks WHERE id = ?');
+const _stmtGetPendingMirroredTracks = db.prepare("SELECT * FROM mirrored_tracks WHERE playlist_id = ? AND match_status = 'pending'");
+const _stmtGetUnmatchedMirroredTracks = db.prepare("SELECT * FROM mirrored_tracks WHERE playlist_id = ? AND match_status = 'unmatched' AND unmatched = 0");
+const _stmtInsertMirroredTrack      = db.prepare(`
+  INSERT INTO mirrored_tracks (playlist_id, source_title, source_artist, source_album, source_id)
+  VALUES (@playlist_id, @source_title, @source_artist, @source_album, @source_id)
+`);
+const _stmtInsertOrIgnoreMirroredTrack = db.prepare(`
+  INSERT OR IGNORE INTO mirrored_tracks (playlist_id, source_title, source_artist, source_album, source_id)
+  VALUES (@playlist_id, @source_title, @source_artist, @source_album, @source_id)
+`);
+const _stmtUpdateMirroredTrackMatch = db.prepare(`
+  UPDATE mirrored_tracks SET match_status=@match_status, matched_plex_key=@matched_plex_key,
+    match_confidence=@match_confidence WHERE id=@id
+`);
+const _stmtUpdateMirroredTrackStatus = db.prepare('UPDATE mirrored_tracks SET match_status=? WHERE id=?');
+const _stmtSetMirroredTrackUnmatched = db.prepare('UPDATE mirrored_tracks SET unmatched=?, match_status=? WHERE id=?');
+const _stmtDeleteMirroredTracksByPlaylist = db.prepare('DELETE FROM mirrored_tracks WHERE playlist_id = ?');
+const _stmtCountMirroredTracks      = db.prepare('SELECT COUNT(*) as cnt FROM mirrored_tracks WHERE playlist_id = ?');
+const _stmtCountMatchedTracks       = db.prepare("SELECT COUNT(*) as cnt FROM mirrored_tracks WHERE playlist_id = ? AND match_status = 'matched'");
+
+// ── Mirrored Playlists functions ──────────────────────────────────────────────
+
+function getAllMirroredPlaylists() {
+  try { return _stmtGetAllMirroredPlaylists.all(); }
+  catch (err) { logger.error({ err }, 'Error getting mirrored playlists'); return []; }
+}
+
+function getMirroredPlaylist(id) {
+  try { return _stmtGetMirroredPlaylist.get(id) || null; }
+  catch (err) { logger.error({ id, err }, 'Error getting mirrored playlist'); return null; }
+}
+
+function getMirroredPlaylistByUrl(url) {
+  try { return _stmtGetMirroredPlaylistByUrl.get(url) || null; }
+  catch (err) { logger.error({ url, err }, 'Error getting mirrored playlist by url'); return null; }
+}
+
+function createMirroredPlaylist({ name, source_platform, source_url, source_id = null,
+  auto_sync = 1, sync_interval_hours = 24, auto_download = 0, download_quality = 'flac' }) {
+  try {
+    const result = _stmtInsertMirroredPlaylist.run({
+      name, source_platform, source_url, source_id,
+      auto_sync, sync_interval_hours, auto_download, download_quality
+    });
+    return getMirroredPlaylist(result.lastInsertRowid);
+  } catch (err) {
+    logger.error({ err }, 'Error creating mirrored playlist');
+    throw err;
+  }
+}
+
+function updateMirroredPlaylist(id, fields) {
+  try {
+    const current = getMirroredPlaylist(id);
+    if (!current) return null;
+    _stmtUpdateMirroredPlaylist.run({
+      id,
+      name:                fields.name                ?? current.name,
+      last_synced:         fields.last_synced         ?? current.last_synced,
+      track_count:         fields.track_count         ?? current.track_count,
+      matched_count:       fields.matched_count       ?? current.matched_count,
+      auto_sync:           fields.auto_sync           ?? current.auto_sync,
+      sync_interval_hours: fields.sync_interval_hours ?? current.sync_interval_hours,
+      auto_download:       fields.auto_download       ?? current.auto_download,
+      download_quality:    fields.download_quality    ?? current.download_quality,
+    });
+    return getMirroredPlaylist(id);
+  } catch (err) {
+    logger.error({ id, err }, 'Error updating mirrored playlist');
+    throw err;
+  }
+}
+
+function deleteMirroredPlaylist(id) {
+  try { _stmtDeleteMirroredPlaylist.run(id); }
+  catch (err) { logger.error({ id, err }, 'Error deleting mirrored playlist'); throw err; }
+}
+
+function getDueMirroredPlaylists() {
+  try { return _stmtGetDueMirroredPlaylists.all(); }
+  catch (err) { logger.error({ err }, 'Error getting due mirrored playlists'); return []; }
+}
+
+function getMirroredTracks(playlistId) {
+  try { return _stmtGetMirroredTracks.all(playlistId); }
+  catch (err) { logger.error({ playlistId, err }, 'Error getting mirrored tracks'); return []; }
+}
+
+function getMirroredTrack(id) {
+  try { return _stmtGetMirroredTrack.get(id) || null; }
+  catch (err) { logger.error({ id, err }, 'Error getting mirrored track'); return null; }
+}
+
+function getPendingMirroredTracks(playlistId) {
+  try { return _stmtGetPendingMirroredTracks.all(playlistId); }
+  catch (err) { logger.error({ playlistId, err }, 'Error getting pending mirrored tracks'); return []; }
+}
+
+function getUnmatchedMirroredTracks(playlistId) {
+  try { return _stmtGetUnmatchedMirroredTracks.all(playlistId); }
+  catch (err) { logger.error({ playlistId, err }, 'Error getting unmatched mirrored tracks'); return []; }
+}
+
+function upsertMirroredTrack({ playlist_id, source_title, source_artist, source_album = null, source_id = null }) {
+  try {
+    _stmtInsertOrIgnoreMirroredTrack.run({ playlist_id, source_title, source_artist, source_album, source_id });
+  } catch (err) {
+    logger.error({ err }, 'Error upserting mirrored track');
+    throw err;
+  }
+}
+
+function updateMirroredTrackMatch(id, { match_status, matched_plex_key = null, match_confidence = null }) {
+  try { _stmtUpdateMirroredTrackMatch.run({ id, match_status, matched_plex_key, match_confidence }); }
+  catch (err) { logger.error({ id, err }, 'Error updating mirrored track match'); throw err; }
+}
+
+function updateMirroredTrackStatus(id, status) {
+  try { _stmtUpdateMirroredTrackStatus.run(status, id); }
+  catch (err) { logger.error({ id, status, err }, 'Error updating mirrored track status'); }
+}
+
+function setMirroredTrackUnmatched(id, unmatched) {
+  const status = unmatched ? 'unmatched' : 'pending';
+  try { _stmtSetMirroredTrackUnmatched.run(unmatched ? 1 : 0, status, id); }
+  catch (err) { logger.error({ id, err }, 'Error setting mirrored track unmatched'); throw err; }
+}
+
+function deleteMirroredTracksByPlaylist(playlistId) {
+  try { _stmtDeleteMirroredTracksByPlaylist.run(playlistId); }
+  catch (err) { logger.error({ playlistId, err }, 'Error deleting mirrored tracks'); throw err; }
+}
+
+function getMirroredPlaylistCounts(playlistId) {
+  try {
+    const total   = _stmtCountMirroredTracks.get(playlistId)?.cnt  || 0;
+    const matched = _stmtCountMatchedTracks.get(playlistId)?.cnt   || 0;
+    return { total, matched };
+  } catch (err) {
+    logger.error({ playlistId, err }, 'Error counting mirrored tracks');
+    return { total: 0, matched: 0 };
+  }
+}
+
 module.exports = {
   getDb: () => db,
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
@@ -1586,4 +1802,11 @@ module.exports = {
   getAllWatchlist, getWatchlistItem, getWatchlistByName,
   addWatchlistItem, updateWatchlistItem, removeWatchlistItem, markWatchlistScanned,
   getWatchlistReleases, addWatchlistRelease, updateWatchlistReleaseStatus, getDueWatchlistItems,
+  // Mirrored Playlists
+  getAllMirroredPlaylists, getMirroredPlaylist, getMirroredPlaylistByUrl,
+  createMirroredPlaylist, updateMirroredPlaylist, deleteMirroredPlaylist,
+  getDueMirroredPlaylists,
+  getMirroredTracks, getMirroredTrack, getPendingMirroredTracks, getUnmatchedMirroredTracks,
+  upsertMirroredTrack, updateMirroredTrackMatch, updateMirroredTrackStatus,
+  setMirroredTrackUnmatched, deleteMirroredTracksByPlaylist, getMirroredPlaylistCounts,
 };
