@@ -143,6 +143,28 @@ function setCache(key, data) {
   }
 }
 
+/**
+ * Geeft alle cache-entries terug waarvan de key begint met `prefix`.
+ * Parset de data-kolom als JSON. Entries waarbij JSON parsen mislukt worden overgeslagen.
+ * @param {string} prefix
+ * @returns {Array<{ key: string, data: any, updated_at: number }>}
+ */
+function queryCacheByPrefix(prefix) {
+  try {
+    const rows = _stmtQueryByPrefix.all(`${prefix}%`);
+    const result = [];
+    for (const row of rows) {
+      try {
+        result.push({ key: row.key, data: JSON.parse(row.data), updated_at: row.updated_at });
+      } catch { /* corrupte entry overslaan */ }
+    }
+    return result;
+  } catch (err) {
+    logger.error({ err, prefix }, 'Error querying cache by prefix');
+    return [];
+  }
+}
+
 /** Verwijder een cache-entry. */
 function clearCache(key) {
   try {
@@ -258,6 +280,7 @@ const _stmtGetCache = db.prepare('SELECT data, updated_at FROM cache WHERE key =
 const _stmtSetCache = db.prepare('INSERT OR REPLACE INTO cache (key, data, updated_at) VALUES (?, ?, ?)');
 const _stmtClearCache = db.prepare('DELETE FROM cache WHERE key = ?');
 const _stmtGetCacheAge = db.prepare('SELECT updated_at FROM cache WHERE key = ?');
+const _stmtQueryByPrefix = db.prepare('SELECT key, data, updated_at FROM cache WHERE key LIKE ?');
 const _stmtPruneOldCache = db.prepare('DELETE FROM cache WHERE updated_at < ?');
 const _stmtPruneExcessCache = db.prepare(`
   DELETE FROM cache
@@ -996,7 +1019,7 @@ try {
 } catch {}
 
 module.exports = {
-  getCache, setCache, clearCache, getCacheAge, pruneCache,
+  getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
   getSettings, getSetting, setSetting, setSettings, getAllSettings,

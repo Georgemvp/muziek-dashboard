@@ -15,6 +15,8 @@ import { skeletonGrid } from '../modules/skeleton.js';
 // MODULE STATE
 // ────────────────────────────────────────────────────────────────────────────
 let ontdekCurrentTab = localStorage.getItem('ontdekTab') || 'recs';
+let verkennerData    = {};   // cache per sectie: undiscovered, genres_new, labels, deep_cuts, genre_explorer
+let genreModalOpen   = false;
 let recsData = null;
 let releasesData = null;
 let discoverData = null;
@@ -145,6 +147,8 @@ async function ontdekSwitchTab(tabKey) {
     await renderReleasesTab();
   } else if (tabKey === 'discover') {
     await renderDiscoverTab();
+  } else if (tabKey === 'verkenner') {
+    await renderVerkennerTab();
   }
 }
 
@@ -447,6 +451,348 @@ async function renderDiscoverTab() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// VERKENNER TAB — cache-powered discovery secties
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Kleine album-kaart voor de verkenner-secties */
+function verkennerAlbumCard(album, showArtist = true) {
+  const { artist = '', title = '', year = '', coverUrl = null, genre = null } = album;
+  const bg  = gradientFor(title);
+  const img = coverUrl
+    ? `<img class="vk-cover-img" src="${esc(coverUrl)}" alt="${esc(title)}" loading="lazy" decoding="async"
+         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="vk-cover-ph" style="display:none;background:${bg}">${initials(title)}</div>`
+    : `<div class="vk-cover-ph" style="background:${bg}">${initials(title)}</div>`;
+  const artistHtml = showArtist ? `<div class="vk-card-artist artist-link" data-artist="${esc(artist)}">${esc(artist)}</div>` : '';
+  const genreTag   = genre ? `<span class="vk-genre-tag">${esc(genre)}</span>` : '';
+  return `<div class="vk-album-card">
+    <div class="vk-cover">${img}</div>
+    <div class="vk-card-body">
+      ${genreTag}
+      <div class="vk-card-title" title="${esc(title)}">${esc(title)}</div>
+      ${artistHtml}
+      ${year ? `<div class="vk-card-year">${esc(String(year))}</div>` : ''}
+      ${downloadBtn(artist, title, false)}
+    </div>
+  </div>`;
+}
+
+/** Wachtscherm terwijl discovery data opgebouwd wordt */
+function buildingHtml(sectionTitle) {
+  return `<div class="vk-building">
+    <div class="spinner" style="margin-bottom:12px"></div>
+    <div class="vk-building-title">${esc(sectionTitle)} wordt opgebouwd</div>
+    <div class="vk-building-sub">De eerste keer duurt dit even — data wordt geladen uit de SQLite-cache.<br>
+      Pagina ververst automatisch over 15 seconden.</div>
+  </div>`;
+}
+
+/** Sectie-header met refresh-knop */
+function sectionHeader(title, emoji, type) {
+  return `<div class="vk-section-header">
+    <span class="vk-section-emoji">${emoji}</span>
+    <span class="vk-section-title">${esc(title)}</span>
+    <button class="vk-section-refresh tool-btn" data-vk-refresh="${esc(type)}" title="Sectie vernieuwen">↻</button>
+  </div>`;
+}
+
+// ── Sectie: Undiscovered Albums ─────────────────────────────────────────────
+async function renderUndiscovered(container) {
+  container.innerHTML = buildingHtml('Undiscovered Albums');
+  try {
+    const res = await apiFetch('/api/discover/undiscovered?limit=30');
+    if (res.status === 'building') {
+      setTimeout(() => renderUndiscovered(container), 15000);
+      return;
+    }
+    const items = res.items || [];
+    if (!items.length) {
+      container.innerHTML = `<div class="vk-empty">Geen ontbrekende albums gevonden. Breid je MusicBrainz-cache uit door artiesten op te zoeken.</div>`;
+      return;
+    }
+    let html = `<div class="vk-scroll-row">`;
+    items.forEach(a => { html += verkennerAlbumCard(a, true); });
+    html += `</div>`;
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="vk-empty">Fout bij laden: ${esc(err.message)}</div>`;
+  }
+}
+
+// ── Sectie: New In Your Genres ──────────────────────────────────────────────
+async function renderGenresNew(container) {
+  container.innerHTML = buildingHtml('Nieuw in jouw genres');
+  try {
+    const res = await apiFetch('/api/discover/genres-new?limit=30');
+    if (res.status === 'building') {
+      setTimeout(() => renderGenresNew(container), 15000);
+      return;
+    }
+    const items = res.items || [];
+    if (!items.length) {
+      container.innerHTML = `<div class="vk-empty">Geen resultaten — bezoek meer artiestpagina's om je genre-cache op te bouwen.</div>`;
+      return;
+    }
+    let html = `<div class="vk-grid">`;
+    items.forEach(a => { html += verkennerAlbumCard(a, true); });
+    html += `</div>`;
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="vk-empty">Fout bij laden: ${esc(err.message)}</div>`;
+  }
+}
+
+// ── Sectie: From Your Labels ─────────────────────────────────────────────────
+async function renderLabels(container) {
+  container.innerHTML = buildingHtml('Van jouw labels');
+  try {
+    const res = await apiFetch('/api/discover/labels?limit=20');
+    if (res.status === 'building') {
+      setTimeout(() => renderLabels(container), 15000);
+      return;
+    }
+    const groups = res.items || [];
+    if (!groups.length) {
+      container.innerHTML = `<div class="vk-empty">Geen label-data gevonden. Zorg dat je artiesten MusicBrainz-tags hebben.</div>`;
+      return;
+    }
+    let html = '';
+    groups.forEach(group => {
+      html += `<div class="vk-label-group">
+        <div class="vk-label-name"># ${esc(group.label)}</div>
+        <div class="vk-scroll-row">`;
+      (group.albums || []).forEach(a => { html += verkennerAlbumCard(a, true); });
+      html += `</div></div>`;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="vk-empty">Fout bij laden: ${esc(err.message)}</div>`;
+  }
+}
+
+// ── Sectie: Deep Cuts ───────────────────────────────────────────────────────
+async function renderDeepCuts(container) {
+  container.innerHTML = buildingHtml('Deep Cuts');
+  try {
+    const res = await apiFetch('/api/discover/deep-cuts?limit=30');
+    if (res.status === 'building') {
+      setTimeout(() => renderDeepCuts(container), 15000);
+      return;
+    }
+    const items = res.items || [];
+    if (!items.length) {
+      container.innerHTML = `<div class="vk-empty">Geen deep cuts gevonden. Luister meer muziek zodat je recente-scrobbles-cache wordt gevuld.</div>`;
+      return;
+    }
+    let html = `<div class="vk-track-list">`;
+    items.forEach(({ artist, album, year, coverUrl }) => {
+      const bg  = gradientFor(album);
+      const img = coverUrl
+        ? `<img class="vk-track-img" src="${esc(coverUrl)}" alt="${esc(album)}" loading="lazy" decoding="async"
+             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+           <div class="vk-track-ph" style="display:none;background:${bg}">${initials(album)}</div>`
+        : `<div class="vk-track-ph" style="background:${bg}">${initials(album)}</div>`;
+      html += `<div class="vk-track-row">
+        <div class="vk-track-thumb">${img}</div>
+        <div class="vk-track-info">
+          <div class="vk-track-album">${esc(album)}</div>
+          <div class="vk-track-artist artist-link" data-artist="${esc(artist)}">${esc(artist)}</div>
+          ${year ? `<div class="vk-track-year">${esc(String(year))}</div>` : ''}
+        </div>
+        <div class="vk-track-actions">${downloadBtn(artist, album, true)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="vk-empty">Fout bij laden: ${esc(err.message)}</div>`;
+  }
+}
+
+// ── Sectie: Genre Explorer ──────────────────────────────────────────────────
+async function renderGenreExplorer(container) {
+  container.innerHTML = buildingHtml('Genre Explorer');
+  try {
+    const res = await apiFetch('/api/discover/genre-explorer');
+    if (res.status === 'building') {
+      setTimeout(() => renderGenreExplorer(container), 15000);
+      return;
+    }
+    const genres = res.items || [];
+    if (!genres.length) {
+      container.innerHTML = `<div class="vk-empty">Geen genre-data gevonden. Zorg dat Plex gesynchroniseerd is.</div>`;
+      return;
+    }
+    let html = `<div class="vk-genre-grid">`;
+    genres.forEach(({ genre, artistCount, sampleArtists }) => {
+      const color = gradientFor(genre);
+      html += `<button class="vk-genre-pill" data-genre="${esc(genre)}" style="--pill-color:${color}">
+        <span class="vk-genre-pill-name">${esc(genre)}</span>
+        <span class="vk-genre-pill-count">${artistCount} artiest${artistCount !== 1 ? 'en' : ''}</span>
+        ${sampleArtists?.length
+          ? `<span class="vk-genre-pill-sample">${sampleArtists.map(a => esc(a)).join(', ')}</span>`
+          : ''}
+      </button>`;
+    });
+    html += `</div>`;
+    container.innerHTML = html;
+
+    // Genre pill click → modal met artiesten van dat genre
+    container.addEventListener('click', e => {
+      const pill = e.target.closest('.vk-genre-pill');
+      if (!pill) return;
+      openGenreModal(pill.dataset.genre, genres);
+    });
+  } catch (err) {
+    container.innerHTML = `<div class="vk-empty">Fout bij laden: ${esc(err.message)}</div>`;
+  }
+}
+
+/** Genre-modal: toont alle artiesten die in het genre vallen */
+function openGenreModal(genre, allGenres) {
+  const entry = allGenres.find(g => g.genre === genre);
+  if (!entry) return;
+
+  // Verwijder eventueel bestaande modal
+  document.getElementById('vk-genre-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'vk-genre-modal';
+  modal.className = 'vk-modal-overlay';
+  modal.innerHTML = `
+    <div class="vk-modal">
+      <div class="vk-modal-header">
+        <span class="vk-modal-title"># ${esc(entry.genre)}</span>
+        <span class="vk-modal-count">${entry.artistCount} artiest${entry.artistCount !== 1 ? 'en' : ''}</span>
+        <button class="vk-modal-close" id="vk-modal-close">✕</button>
+      </div>
+      <div class="vk-modal-body">
+        <div class="vk-modal-loading"><div class="spinner"></div></div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // Sluit via ✕ of klik buiten modal
+  document.getElementById('vk-modal-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  // Laad artiesten van dat genre via plex-genre endpoint (al beschikbaar)
+  apiFetch(`/api/plex/genre/${encodeURIComponent(genre)}`)
+    .then(data => {
+      const artists = data.artists || data || [];
+      const body = modal.querySelector('.vk-modal-body');
+      if (!artists.length) {
+        body.innerHTML = `<div class="vk-empty">Geen artiesten voor dit genre.</div>`;
+        return;
+      }
+      let html = `<div class="vk-modal-artist-grid">`;
+      artists.forEach(a => {
+        const name = a.name || a;
+        const bg = gradientFor(name);
+        const img = a.image
+          ? `<img class="vk-modal-artist-img" src="${esc(proxyImg(a.image, 80) || a.image)}" alt="${esc(name)}" loading="lazy"
+               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="vk-modal-artist-ph" style="display:none;background:${bg}">${initials(name)}</div>`
+          : `<div class="vk-modal-artist-ph" style="background:${bg}">${initials(name)}</div>`;
+        html += `<div class="vk-modal-artist-card artist-link" data-artist="${esc(name)}">
+          <div class="vk-modal-artist-thumb">${img}</div>
+          <div class="vk-modal-artist-name">${esc(name)}</div>
+        </div>`;
+      });
+      body.innerHTML = html + `</div>`;
+    })
+    .catch(() => {
+      // Fallback: toon sampleArtists uit onze eigen data
+      const body = modal.querySelector('.vk-modal-body');
+      body.innerHTML = `<div class="vk-modal-artist-grid">${
+        (entry.sampleArtists || []).map(name =>
+          `<div class="vk-modal-artist-card artist-link" data-artist="${esc(name)}">
+            <div class="vk-modal-artist-ph" style="background:${gradientFor(name)}">${initials(name)}</div>
+            <div class="vk-modal-artist-name">${esc(name)}</div>
+          </div>`
+        ).join('')
+      }</div>`;
+    });
+}
+
+// ── Verkenner hoofdrenderer ──────────────────────────────────────────────────
+async function renderVerkennerTab() {
+  // Structuur: 5 collapsible secties
+  let html = `
+  <div class="vk-page">
+
+    <!-- Sectie 1: Undiscovered Albums -->
+    <div class="vk-section" id="vk-undiscovered">
+      ${sectionHeader('Ontbrekende Albums', '📀', 'undiscovered')}
+      <p class="vk-section-desc">Albums van jouw top-artiesten die in MusicBrainz staan maar niet in je Plex-bibliotheek.</p>
+      <div class="vk-section-body" id="vk-body-undiscovered"></div>
+    </div>
+
+    <!-- Sectie 2: New In Your Genres -->
+    <div class="vk-section" id="vk-genres-new">
+      ${sectionHeader('Nieuw in jouw genres', '🎸', 'genres_new')}
+      <p class="vk-section-desc">Albums die passen bij de genres die je al in Plex hebt, maar die je nog mist.</p>
+      <div class="vk-section-body" id="vk-body-genres-new"></div>
+    </div>
+
+    <!-- Sectie 3: From Your Labels -->
+    <div class="vk-section" id="vk-labels">
+      ${sectionHeader('Van jouw labels / tags', '🏷️', 'labels')}
+      <p class="vk-section-desc">Gegroepeerd op muzikale stijl: releases die bij jouw collectie-DNA passen.</p>
+      <div class="vk-section-body" id="vk-body-labels"></div>
+    </div>
+
+    <!-- Sectie 4: Deep Cuts -->
+    <div class="vk-section" id="vk-deep-cuts">
+      ${sectionHeader('Deep Cuts', '🎵', 'deep_cuts')}
+      <p class="vk-section-desc">Albums van artiesten die je luistert, maar die je waarschijnlijk al een tijdje niet gehoord hebt.</p>
+      <div class="vk-section-body" id="vk-body-deep-cuts"></div>
+    </div>
+
+    <!-- Sectie 5: Genre Explorer -->
+    <div class="vk-section vk-section--hero" id="vk-genre-explorer">
+      ${sectionHeader('Genre Explorer', '🗺️', 'genre_explorer')}
+      <p class="vk-section-desc">Alle genres in je bibliotheek. Klik op een genre om de artiesten te bekijken.</p>
+      <div class="vk-section-body" id="vk-body-genre-explorer"></div>
+    </div>
+
+  </div>`;
+
+  setContent(html);
+
+  // Laad alle secties parallel
+  await Promise.allSettled([
+    renderUndiscovered(document.getElementById('vk-body-undiscovered')),
+    renderGenresNew(document.getElementById('vk-body-genres-new')),
+    renderLabels(document.getElementById('vk-body-labels')),
+    renderDeepCuts(document.getElementById('vk-body-deep-cuts')),
+    renderGenreExplorer(document.getElementById('vk-body-genre-explorer')),
+  ]);
+
+  // Refresh-knoppen per sectie
+  contentEl.addEventListener('click', async e => {
+    const btn = e.target.closest('.vk-section-refresh');
+    if (!btn) return;
+    const type = btn.dataset.vkRefresh;
+    // Invalidate via post
+    try { await apiFetch('/api/discover/cache-refresh', { method: 'POST' }); } catch {}
+    // Herlaad alleen de betreffende sectie
+    const bodyMap = {
+      undiscovered: ['vk-body-undiscovered', renderUndiscovered],
+      genres_new:   ['vk-body-genres-new',   renderGenresNew],
+      labels:       ['vk-body-labels',        renderLabels],
+      deep_cuts:    ['vk-body-deep-cuts',     renderDeepCuts],
+      genre_explorer: ['vk-body-genre-explorer', renderGenreExplorer],
+    };
+    if (bodyMap[type]) {
+      const [id, fn] = bodyMap[type];
+      const el = document.getElementById(id);
+      if (el) await fn(el);
+    }
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT: loadOntdek
 // ────────────────────────────────────────────────────────────────────────────
 export async function loadOntdek() {
@@ -460,6 +806,7 @@ export async function loadOntdek() {
       <button class="ontdek-tab-btn active" data-tab="recs" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent">🎯 Aanbevelingen</button>
       <button class="ontdek-tab-btn" data-tab="releases" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent">💿 Releases</button>
       <button class="ontdek-tab-btn" data-tab="discover" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent">🔭 Ontdek</button>
+      <button class="ontdek-tab-btn" data-tab="verkenner" style="padding:8px 16px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent">🔍 Verkenner</button>
     </div>`;
 
   if (state.spotifyEnabled) {
@@ -524,6 +871,7 @@ export async function loadOntdek() {
       if (ontdekCurrentTab === 'recs') { invalidate('recs'); recsData = null; renderRecsTab(); }
       else if (ontdekCurrentTab === 'releases') { invalidate('releases'); releasesData = null; try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) {} renderReleasesTab(); }
       else if (ontdekCurrentTab === 'discover') { invalidate('discover'); discoverData = null; try { await p('/api/discover/refresh', { method: 'POST' }); } catch (e) {} renderDiscoverTab(); }
+      else if (ontdekCurrentTab === 'verkenner') { try { await apiFetch('/api/discover/cache-refresh', { method: 'POST' }); } catch (e) {} renderVerkennerTab(); }
     }
   });
 
