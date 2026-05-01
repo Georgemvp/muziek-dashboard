@@ -38,6 +38,7 @@ const viewMeta = {
   watchlist:                     { title: 'Muziek · Watchlist',          renderFn: 'loadWatchlistView' },
   settings:                      { title: 'Muziek · Instellingen',      renderFn: 'loadSettings' },
   automations:                   { title: 'Muziek · Automatisering',    renderFn: 'loadAutomations' },
+  maintenance:                   { title: 'Muziek · Bibliotheek Onderhoud', renderFn: 'loadMaintenance' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -73,6 +74,7 @@ const viewLoaders = {
   watchlist:                     () => import('./views/watchlist.js'),
   settings:                      () => import('./views/settings.js'),
   automations:                   () => import('./views/automations.js'),
+  maintenance:                   () => import('./views/maintenance.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────

@@ -1046,9 +1046,105 @@ try {
     )
   `);
   logger.debug('Enrichment tables initialized');
+} catch (err) { /* handled below */ void err; }
+
+// ── Maintenance tables ────────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maintenance_findings (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      scan_type     TEXT    NOT NULL,
+      severity      TEXT    DEFAULT 'warning',
+      file_path     TEXT,
+      artist        TEXT,
+      album         TEXT,
+      track         TEXT,
+      issue         TEXT    NOT NULL,
+      suggested_fix TEXT,
+      auto_fixable  INTEGER DEFAULT 0,
+      status        TEXT    DEFAULT 'open',
+      created_at    INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mf_scan_type ON maintenance_findings(scan_type)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mf_status    ON maintenance_findings(status)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mf_severity  ON maintenance_findings(severity)');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maintenance_runs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      scan_type       TEXT,
+      status          TEXT,
+      findings_count  INTEGER,
+      duration_ms     INTEGER,
+      created_at      INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_mr_scan_type ON maintenance_runs(scan_type)');
+  logger.debug('Maintenance tables initialized');
 } catch (err) {
   logger.error({ err }, 'Error initializing enrichment tables');
   throw err;
+}
+
+// ── Maintenance prepared statements & functies ────────────────────────────────
+const _stmtGetMaintenanceFindings = db.prepare(`
+  SELECT * FROM maintenance_findings
+  WHERE (:scan_type IS NULL OR scan_type = :scan_type)
+    AND (:status    IS NULL OR status    = :status)
+  ORDER BY created_at DESC
+`);
+
+const _stmtGetMaintenanceFinding = db.prepare(
+  'SELECT * FROM maintenance_findings WHERE id=?'
+);
+
+const _stmtUpdateFindingStatus = db.prepare(
+  `UPDATE maintenance_findings SET status=? WHERE id=?`
+);
+
+const _stmtGetMaintenanceSummary = db.prepare(`
+  SELECT scan_type, status, severity, COUNT(*) as cnt
+  FROM maintenance_findings
+  GROUP BY scan_type, status, severity
+`);
+
+const _stmtGetMaintenanceRuns = db.prepare(`
+  SELECT * FROM maintenance_runs ORDER BY created_at DESC LIMIT 100
+`);
+
+function getMaintenanceFindings({ scanType = null, status = null } = {}) {
+  return _stmtGetMaintenanceFindings.all({ scan_type: scanType, status });
+}
+
+function getMaintenanceFinding(id) {
+  return _stmtGetMaintenanceFinding.get(id);
+}
+
+function updateMaintenanceFindingStatus(id, status) {
+  return _stmtUpdateFindingStatus.run(status, id);
+}
+
+function getMaintenanceSummary() {
+  const rows = _stmtGetMaintenanceSummary.all();
+  // Pivot naar: { scanType: { open: N, fixed: N, ignored: N, errors: N, warnings: N } }
+  const summary = {};
+  for (const row of rows) {
+    if (!summary[row.scan_type]) {
+      summary[row.scan_type] = { open: 0, fixed: 0, ignored: 0, error: 0, warning: 0, info: 0 };
+    }
+    summary[row.scan_type][row.status]   = (summary[row.scan_type][row.status]   || 0) + row.cnt;
+    summary[row.scan_type][row.severity] = (summary[row.scan_type][row.severity] || 0) + row.cnt;
+  }
+  return summary;
+}
+
+function getMaintenanceRuns() {
+  return _stmtGetMaintenanceRuns.all();
+}
+
+function getDb() {
+  return db;
 }
 
 // ── Enrichment prepared statements ───────────────────────────────────────────
@@ -1782,7 +1878,7 @@ function getMirroredPlaylistCounts(playlistId) {
 }
 
 module.exports = {
-  getDb: () => db,
+  getDb,
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
@@ -1809,4 +1905,7 @@ module.exports = {
   getMirroredTracks, getMirroredTrack, getPendingMirroredTracks, getUnmatchedMirroredTracks,
   upsertMirroredTrack, updateMirroredTrackMatch, updateMirroredTrackStatus,
   setMirroredTrackUnmatched, deleteMirroredTracksByPlaylist, getMirroredPlaylistCounts,
+  // Maintenance
+  getMaintenanceFindings, getMaintenanceFinding, updateMaintenanceFindingStatus,
+  getMaintenanceSummary, getMaintenanceRuns,
 };

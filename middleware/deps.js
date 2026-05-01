@@ -55,7 +55,10 @@ const {
   getCache, setCache, getCacheAge,
   getWishlist, addToWishlist, removeFromWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload,
-  getSettings, getSetting, setSetting, setSettings, getAllSettings
+  getSettings, getSetting, setSetting, setSettings, getAllSettings,
+  getDb,
+  getMaintenanceFindings, getMaintenanceFinding, updateMaintenanceFindingStatus,
+  getMaintenanceSummary, getMaintenanceRuns,
 } = require('../db');
 
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
@@ -210,6 +213,11 @@ const deps = {
 
   // Helpers
   limitConcurrency,
+
+  // Maintenance
+  getDb,
+  getMaintenanceFindings, getMaintenanceFinding, updateMaintenanceFindingStatus,
+  getMaintenanceSummary, getMaintenanceRuns,
 
   // Expose db-object zodat routes direct DB-functies kunnen aanroepen
   db: {
