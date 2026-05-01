@@ -122,6 +122,39 @@ module.exports = function(app, deps) {
   });
 
   /**
+   * GET /api/enrichment/data/:entityType/:entityName/primary
+   * Haal enrichment data op van de geconfigureerde primaire bron.
+   * Als die bron geen data heeft, val terug op de eerste beschikbare bron.
+   */
+  app.get('/api/enrichment/data/:entityType/:entityName/primary', (req, res) => {
+    const { entityType, entityName } = req.params;
+    try {
+      res.set('Cache-Control', 'private, max-age=300');
+      const primarySource = getSetting('enrichment', 'primary_source') || 'spotify';
+      // Probeer primaire bron
+      let data = getEnrichmentDataBySource(entityType, decodeURIComponent(entityName), primarySource);
+      let usedSource = primarySource;
+
+      // Fallback: eerste beschikbare bron
+      if (!data) {
+        const all = getEnrichmentData(entityType, decodeURIComponent(entityName));
+        // getEnrichmentData geeft een { source: data } object terug
+        const sources = Object.keys(all || {});
+        if (sources.length > 0) {
+          usedSource = sources[0];
+          data = all[usedSource];
+        }
+      }
+
+      if (!data) return res.status(404).json({ error: 'Geen enrichment data beschikbaar' });
+      res.json({ entityType, entityName, source: usedSource, primarySource, data });
+    } catch (err) {
+      logger.error({ err: err.message }, 'Error getting primary enrichment data');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
    * GET /api/enrichment/data/:entityType/:entityName/:source
    * Haal enrichment data op van één specifieke bron.
    */
@@ -218,8 +251,13 @@ module.exports = function(app, deps) {
         worker_discogs_enabled: getSetting('enrichment', 'worker_discogs_enabled') !== false,
         worker_audiodb_enabled: getSetting('enrichment', 'worker_audiodb_enabled') !== false,
         worker_genius_enabled:  getSetting('enrichment', 'worker_genius_enabled') !== false,
-        worker_tidal_enabled:   getSetting('enrichment', 'worker_tidal_enabled') !== false,
-        worker_qobuz_enabled:   getSetting('enrichment', 'worker_qobuz_enabled') !== false,
+        worker_tidal_enabled:        getSetting('enrichment', 'worker_tidal_enabled') !== false,
+        worker_qobuz_enabled:        getSetting('enrichment', 'worker_qobuz_enabled') !== false,
+        worker_spotify_enabled:      getSetting('enrichment', 'worker_spotify_enabled') !== false,
+        worker_musicbrainz_enabled:  getSetting('enrichment', 'worker_musicbrainz_enabled') !== false,
+        worker_lastfm_enabled:       getSetting('enrichment', 'worker_lastfm_enabled') !== false,
+        worker_deezer_enabled:       getSetting('enrichment', 'worker_deezer_enabled') !== false,
+        primary_source:              getSetting('enrichment', 'primary_source') || 'spotify',
       };
       res.json(settings);
     } catch (err) {
@@ -240,6 +278,9 @@ module.exports = function(app, deps) {
         'genius_api_key', 'discogs_token', 'discogs_user_agent', 'genre_filter_enabled',
         'worker_itunes_enabled', 'worker_discogs_enabled', 'worker_audiodb_enabled',
         'worker_genius_enabled', 'worker_tidal_enabled', 'worker_qobuz_enabled',
+        'worker_spotify_enabled', 'worker_musicbrainz_enabled',
+        'worker_lastfm_enabled', 'worker_deezer_enabled',
+        'primary_source',
       ];
       const body = req.body || {};
       for (const key of allowed) {

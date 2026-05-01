@@ -4,12 +4,16 @@
 
 const logger = require('../../logger');
 
-const { iTunesWorker }  = require('./workers/itunes');
-const { DiscogsWorker } = require('./workers/discogs');
-const { AudioDBWorker } = require('./workers/audiodb');
-const { GeniusWorker }  = require('./workers/genius');
-const { TidalWorker }   = require('./workers/tidal');
-const { QobuzWorker }   = require('./workers/qobuz');
+const { iTunesWorker }      = require('./workers/itunes');
+const { DiscogsWorker }     = require('./workers/discogs');
+const { AudioDBWorker }     = require('./workers/audiodb');
+const { GeniusWorker }      = require('./workers/genius');
+const { TidalWorker }       = require('./workers/tidal');
+const { QobuzWorker }       = require('./workers/qobuz');
+const { SpotifyWorker }     = require('./workers/spotify');
+const { MusicBrainzWorker } = require('./workers/musicbrainz');
+const { LastfmWorker }      = require('./workers/lastfm');
+const { DeezerWorker }      = require('./workers/deezer');
 
 const {
   enqueueEnrichment,
@@ -97,6 +101,32 @@ class EnrichmentManager {
         label:   'Qobuz (via OrpheusDL)',
         worker:  new QobuzWorker(dbRef, logRef, { orpheusUrl }),
         enabled: !!orpheusUrl,
+      },
+      {
+        source:  'spotify',
+        label:   'Spotify',
+        worker:  new SpotifyWorker(dbRef, logRef),
+        // Alleen inschakelen als beide Spotify-credentials aanwezig zijn
+        enabled: !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET),
+      },
+      {
+        source:  'musicbrainz',
+        label:   'MusicBrainz',
+        worker:  new MusicBrainzWorker(dbRef, logRef),
+        enabled: true,
+      },
+      {
+        source:  'lastfm',
+        label:   'Last.fm',
+        worker:  new LastfmWorker(dbRef, logRef),
+        // Alleen inschakelen als API-key aanwezig is
+        enabled: !!process.env.LASTFM_API_KEY,
+      },
+      {
+        source:  'deezer',
+        label:   'Deezer',
+        worker:  new DeezerWorker(dbRef, logRef),
+        enabled: true,
       },
     ];
 

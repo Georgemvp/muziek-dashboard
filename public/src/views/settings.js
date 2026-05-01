@@ -257,18 +257,43 @@ function renderVerbindingen() {
         </div>
       </div>
 
+
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <strong>Primaire metadata-bron</strong>
+            <span>Deze bron heeft voorrang op de artiest-detail pagina en de home-weergave</span>
+          </div>
+          <div class="settings-row-control">
+            <select class="settings-input settings-input-sm" id="enr-primary-source">
+              <option value="spotify">Spotify</option>
+              <option value="itunes">iTunes / Apple Music</option>
+              <option value="deezer">Deezer</option>
+              <option value="discogs">Discogs</option>
+              <option value="audiodb">TheAudioDB</option>
+              <option value="musicbrainz">MusicBrainz</option>
+              <option value="lastfm">Last.fm</option>
+            </select>
+          </div>
+        </div>
+
       <h4 style="font-size:var(--text-sm);font-weight:600;color:var(--text-secondary);margin:var(--space-4) 0 var(--space-3);">Workers in-/uitschakelen</h4>
       <div class="settings-group">
-        ${['itunes', 'discogs', 'audiodb', 'genius', 'tidal', 'qobuz'].map(src => `
+        ${['itunes', 'discogs', 'audiodb', 'genius', 'tidal', 'qobuz', 'spotify', 'musicbrainz', 'lastfm', 'deezer'].map(src => {
+          const labels = {
+            itunes: 'iTunes / Apple Music', discogs: 'Discogs', audiodb: 'TheAudioDB',
+            genius: 'Genius', tidal: 'Tidal', qobuz: 'Qobuz',
+            spotify: 'Spotify', musicbrainz: 'MusicBrainz', lastfm: 'Last.fm', deezer: 'Deezer',
+          };
+          return `
         <div class="settings-row">
-          <div class="settings-row-label"><strong>${esc(src.charAt(0).toUpperCase() + src.slice(1))}</strong></div>
+          <div class="settings-row-label"><strong>${esc(labels[src] || src)}</strong></div>
           <div class="settings-row-control">
             <label class="settings-toggle">
               <input type="checkbox" class="enr-worker-toggle" data-source="${esc(src)}" checked>
               <span class="settings-toggle-slider"></span>
             </label>
           </div>
-        </div>`).join('')}
+        </div>`;}).join('')}
       </div>
 
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -1569,6 +1594,10 @@ async function _initEnrichmentSettings() {
     const genreFilterEl = document.getElementById('enr-genre-filter');
     if (genreFilterEl) genreFilterEl.checked = !!cfg.genre_filter_enabled;
 
+    // Primaire bron dropdown
+    const primaryEl = document.getElementById('enr-primary-source');
+    if (primaryEl && cfg.primary_source) primaryEl.value = cfg.primary_source;
+
     // Worker toggles
     document.querySelectorAll('.enr-worker-toggle').forEach(toggle => {
       const src   = toggle.dataset.source;
@@ -1595,6 +1624,9 @@ async function _initEnrichmentSettings() {
     if (discogsEl?.value.trim())   body.discogs_token    = discogsEl.value.trim();
     if (discogsUaEl?.value.trim()) body.discogs_user_agent = discogsUaEl.value.trim();
     if (genreFilterEl)             body.genre_filter_enabled = genreFilterEl.checked;
+
+    const primaryEl = document.getElementById('enr-primary-source');
+    if (primaryEl?.value) body.primary_source = primaryEl.value;
 
     document.querySelectorAll('.enr-worker-toggle').forEach(toggle => {
       body[`worker_${toggle.dataset.source}_enabled`] = toggle.checked;
