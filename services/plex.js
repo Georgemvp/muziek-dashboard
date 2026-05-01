@@ -1,6 +1,7 @@
 // ── Plex service ─────────────────────────────────────────────────────────────
 const { getCache, setCache } = require('../db');
 const logger = require('../logger');
+const { normalize: matchNormalize, normalizeAlbum, levenshtein } = require('../utils/matching');
 
 const PLEX_URL   = (process.env.PLEX_URL || 'http://localhost:32400').replace(/\/$/, '');
 const PLEX_TOKEN = process.env.PLEX_TOKEN || '';
@@ -36,76 +37,35 @@ if (cached) {
   logger.info({ artists: plexArtists.size, albums: plexLibrary.length, tracks: plexTrackCount }, 'Plex: geladen uit SQLite-cache');
 }
 
-/** Normaliseer albumtitels voor fuzzy matching (Plex vs MusicBrainz). */
-function normStr(s) {
-  return (s || '').toLowerCase()
-    .replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '')
-    .replace(/\b(deluxe|edition|remastered|expanded|anniversary|bonus|special|version|disc|disk|vol|volume)\b/g, '')
-    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-}
+// ── Normalisatie helpers (delegeren naar matching engine) ─────────────────────
 
 /**
- * Eenvoudige fuzzy score functie.
- * Berekent een match-score tussen query en target (0-1).
- * Exact match = 1.0, substring match = 0.9, woord-prefix match = 0.8, etc.
+ * Normaliseer albumtitels voor fuzzy matching (Plex vs MusicBrainz).
+ * Delegeert naar normalizeAlbum uit de matching engine.
+ */
+const normStr = normalizeAlbum;
+
+/**
+ * Normaliseer artist/track-naam. Delegeert naar normalize uit de matching engine.
+ */
+const normalizeTitle = matchNormalize;
+
+/**
+ * Fuzzy score (0–1) tussen query en target.
+ * Gebruikt levenshtein + substring als snelle proxy.
+ * Voor volledige matching: gebruik matchTrack/matchAlbum.
  */
 function fuzzyScore(query, target) {
-  const q = (query || '').toLowerCase().trim();
-  const t = (target || '').toLowerCase().trim();
-
+  const q = matchNormalize(query);
+  const t = matchNormalize(target);
   if (!q || !t) return 0;
   if (q === t) return 1.0;
-  if (t.includes(q)) return 0.95; // substring match
-
-  // Woord-prefix matching (bijv. "dark side" → "dark side of the moon")
-  const qWords = q.split(/\s+/);
-  const tWords = t.split(/\s+/);
-
-  let matchedWords = 0;
-  for (const qWord of qWords) {
-    if (tWords.some(tWord => tWord.startsWith(qWord))) {
-      matchedWords++;
-    }
-  }
-
-  if (matchedWords === qWords.length) {
-    return 0.85; // alle woorden matchen als prefix
-  }
-
-  // Levenshtein-achtige afstand (eenvoudig)
-  if (matchedWords > 0) {
-    return 0.5 + (matchedWords / qWords.length) * 0.3;
-  }
-
-  // Character overlap
-  const qChars = new Set(q.replace(/\s+/g, ''));
-  const tChars = new Set(t.replace(/\s+/g, ''));
-  const overlap = [...qChars].filter(c => tChars.has(c)).length;
-
-  if (overlap > 0) {
-    return (overlap / Math.max(qChars.size, tChars.size)) * 0.4;
-  }
-
-  return 0;
-}
-
-/** Normaliseer albumnamen voor fuzzy title matching.
- *  - Lowercase
- *  - Verwijder tekst tussen haakjes/brackets: (Deluxe Edition), [Bonus Tracks]
- *  - Verwijder leading "the "
- *  - Verwijder alle niet-alfanumerieke tekens (behalve spaties)
- *  - Collapse meervoudige spaties naar 1 spatie
- *  - Trim
- */
-function normalizeTitle(title) {
-  return (title || '')
-    .toLowerCase()
-    .replace(/\(.*?\)/g, '')     // Verwijder (...)
-    .replace(/\[.*?\]/g, '')     // Verwijder [...]
-    .replace(/^\s*the\s+/, '')   // Verwijder leading "the "
-    .replace(/[^a-z0-9 ]/g, '')  // Verwijder niet-alfanumerieke (behalve spaties)
-    .replace(/\s+/g, ' ')        // Collapse meervoudige spaties
-    .trim();
+  if (t.includes(q) || q.includes(t)) return 0.9;
+  const dist = levenshtein(q, t);
+  const maxLen = Math.max(q.length, t.length);
+  if (maxLen === 0) return 1;
+  const ratio = 1 - dist / maxLen;
+  return Math.max(0, ratio * 0.85); // schaal naar max 0.85 bij gedeeltelijke match
 }
 
 /** Doe een Plex-API-aanroep (GET) met timeout. */

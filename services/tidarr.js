@@ -2,6 +2,7 @@
 // Integratie met Tidarr (https://github.com/cstaelen/tidarr) voor het zoeken
 // en downloaden van muziek via Tidal.
 const { getCache, setCache } = require('../db');
+const { normalize: matchNormalize, normalizeAlbum, levenshtein } = require('../utils/matching');
 
 const TIDARR_URL     = (process.env.TIDARR_URL || 'http://tidarr:8484').replace(/\/$/, '');
 const TIDARR_API_KEY = process.env.TIDARR_API_KEY || '';
@@ -42,26 +43,18 @@ async function getTidalCountryCode() {
 }
 
 // ── String-normalisatie voor fuzzy matching ────────────────────────────────
+// Delegeert naar de centrale matching engine.
 
-/** Strip accenten, leestekens en edition-achtervoegsels voor vergelijking. */
-function normalizeStr(s) {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // accenten weg
-    .replace(/[''`]/g, '')                               // aanhalingstekens
-    .replace(/[^a-z0-9\s]/g, ' ')                        // leestekens → spatie
-    .replace(/\b(deluxe|edition|remastered|remaster|live|bonus|expanded|anniversary|version|special|limited|ep)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+/** Normaliseer voor album-vergelijking (strip editions). */
+const normalizeStr = normalizeAlbum;
 
 /**
  * Score hoeveel woorden van `target` voorkomen in `candidate` (0–1).
- * Korte woorden (<= 2 tekens) tellen niet mee om ruis te vermijden.
+ * Gebruikt de matching engine normalize voor consistente normalisatie.
  */
 function titleScore(candidate, target) {
-  const cWords = new Set(normalizeStr(candidate).split(' ').filter(w => w.length > 2));
-  const tWords =           normalizeStr(target).split(' ').filter(w => w.length > 2);
+  const cWords = new Set(matchNormalize(candidate).split(' ').filter(w => w.length > 2));
+  const tWords =           matchNormalize(target).split(' ').filter(w => w.length > 2);
   if (tWords.length === 0) return 0;
   const hits = tWords.filter(w => cWords.has(w)).length;
   return hits / tWords.length;
@@ -69,11 +62,14 @@ function titleScore(candidate, target) {
 
 /** Artiest-score: kijk of kandidaat-artiest overeenkomt met gezochte artiest. */
 function artistScore(candidate, target) {
-  const c = normalizeStr(candidate);
-  const t = normalizeStr(target);
+  const c = matchNormalize(candidate);
+  const t = matchNormalize(target);
   if (!c || !t) return 0.5; // onbekend → neutraal
   if (c === t) return 1;
   if (c.includes(t) || t.includes(c)) return 0.8;
+  // Levenshtein-gebaseerde fallback
+  const dist = levenshtein(c, t);
+  if (dist <= 2) return 0.75;
   return titleScore(c, t);
 }
 

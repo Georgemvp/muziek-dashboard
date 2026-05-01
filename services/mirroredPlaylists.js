@@ -5,6 +5,7 @@
 'use strict';
 
 const logger = require('../logger');
+const { normalize, matchTrack } = require('../utils/matching');
 
 const {
   getAllMirroredPlaylists, getMirroredPlaylist, getMirroredPlaylistByUrl,
@@ -16,47 +17,8 @@ const {
 } = require('../db');
 
 // ── Tekst-normalisatie helpers ────────────────────────────────────────────────
-
-/** Verwijder diakritische tekens en normaliseer de string voor vergelijking. */
-function stripDiacritics(str) {
-  return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
-/**
- * Normaliseer een track/artiest-naam voor fuzzy matching.
- * - Lowercase + diacritics verwijderen
- * - Verwijder tekst tussen haakjes (Remastered, Deluxe…)
- * - Verwijder leestekens, collapse spaties
- */
-function normText(s) {
-  return stripDiacritics(s || '')
-    .toLowerCase()
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\b(feat|ft|featuring|vs|and|&)\b\.?/g, '')
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Eenvoudige fuzzy match score (0–1) tussen twee genormaliseerde strings.
- */
-function fuzzyScore(a, b) {
-  if (!a || !b) return 0;
-  if (a === b)        return 1.0;
-  if (b.includes(a) || a.includes(b)) return 0.9;
-
-  const aWords = a.split(' ');
-  const bWords = b.split(' ');
-  let matched = 0;
-  for (const w of aWords) {
-    if (w.length > 1 && bWords.some(bw => bw.startsWith(w) || w.startsWith(bw))) matched++;
-  }
-  if (matched === aWords.length) return 0.8;
-  if (matched > 0) return 0.5 + (matched / aWords.length) * 0.2;
-  return 0;
-}
+// Lokale alias voor backwards-compat (intern gebruik)
+const normText = normalize;
 
 // ── Platform-detector ─────────────────────────────────────────────────────────
 
@@ -348,103 +310,95 @@ async function fetchTidalPlaylist(playlistId, deps = {}) {
 
 /**
  * Match een track-lijst met de Plex-bibliotheek.
- * Gebruikt de in-memory plexArtistMap en plexLibrary voor snelle lookups,
- * met een fallback naar de Plex search API voor hoge-confidence matches.
+ * Gebruikt de matching engine voor consistente fuzzy matching.
+ * Stap 1: artiest-herkenning via in-memory Plex-artistmap.
+ * Stap 2: track-zoeken via Plex search API + matchTrack-scoring.
  *
  * @param {Array<{id, source_title, source_artist}>} tracks
- * @param {object} deps - { getPlexArtistNames, getPlexLibrary, plexGet, PLEX_URL, PLEX_TOKEN }
- * @returns {Array<{id, match_status, matched_plex_key, match_confidence}>}
+ * @param {object} deps - { getPlexArtistNames, getPlexLibrary, plexGet }
+ * @returns {Promise<Array<{id, match_status, matched_plex_key, match_confidence}>>}
  */
 async function matchTracksWithPlex(tracks, deps) {
-  const { getPlexArtistNames, getPlexLibrary, PLEX_URL, PLEX_TOKEN } = deps;
+  const { getPlexArtistNames, getPlexLibrary } = deps;
 
-  // Laad gecachte Plex data
   const artistMap = getPlexArtistNames ? getPlexArtistNames() : new Map();
-  const library   = getPlexLibrary    ? getPlexLibrary()    : [];
+  const results   = [];
 
-  // Bouw snelle lookup-set van genormaliseerde artiest+album combinaties
-  const libSet = new Set();
-  for (const entry of library) {
-    libSet.add(`${normText(entry.artist)}||${normText(entry.album)}`);
+  // Cache de muziek-sectie eenmalig
+  let musicSectionKey = null;
+  try {
+    const sections = deps.plexGet ? await deps.plexGet('/library/sections') : null;
+    const music    = sections?.MediaContainer?.Directory?.find(s => s.type === 'artist');
+    musicSectionKey = music?.key ?? null;
+  } catch {
+    // Plex niet bereikbaar – valt terug op artiest-only score
   }
 
-  const results = [];
-
   for (const track of tracks) {
-    const normTitle  = normText(track.source_title);
-    const normArtist = normText(track.source_artist);
+    const query = {
+      artist: track.source_artist || '',
+      title:  track.source_title  || '',
+    };
 
-    let bestScore  = 0;
-    let bestArtist = null;
-
-    // Stap 1: Zoek artiest in Plex-artiest map (fuzzy)
-    for (const [lowerName] of artistMap) {
-      const normPlex = normText(lowerName);
-      const score    = fuzzyScore(normArtist, normPlex);
-      if (score > bestScore) {
-        bestScore  = score;
-        bestArtist = lowerName;
+    // ── Stap 1: Artiest-matching tegen Plex-artiestenlijst ─────────────────
+    let bestArtistScore = 0;
+    for (const [plexName] of artistMap) {
+      const result = matchTrack(
+        { artist: query.artist, title: query.title },
+        { artist: plexName,     title: query.title }, // titel gelijk houden → isoleert artiest-score
+      );
+      // Haal de artiest-deelScore uit de confidence (artiest telt 35%)
+      // Eenvoudiger: match alleen op artiest door een perfecte titelmatch in te voeren
+      if (result.confidence > bestArtistScore) {
+        bestArtistScore = result.confidence;
       }
     }
 
-    if (bestScore >= 0.7) {
-      // Artiest gevonden in Plex – zoek nu via Plex API naar de track
+    if (bestArtistScore >= 0.65 && musicSectionKey && deps.plexGet) {
+      // ── Stap 2: Zoek track via Plex search API ────────────────────────────
       try {
-        const sections = deps.plexGet ? await deps.plexGet('/library/sections') : null;
-        const music    = sections?.MediaContainer?.Directory?.find(s => s.type === 'artist');
+        const searchRes = await deps.plexGet(
+          `/library/sections/${musicSectionKey}/search?type=10&query=${encodeURIComponent(track.source_title)}&limit=8`
+        );
+        const candidates = (searchRes?.MediaContainer?.Metadata || []).map(c => ({
+          _plexKey: c.ratingKey,
+          artist:   c.grandparentTitle || c.originalTitle || '',
+          title:    c.title || '',
+          duration: c.duration ? Math.round(c.duration / 1000) : undefined,
+        }));
 
-        if (music) {
-          const searchRes = await deps.plexGet(
-            `/library/sections/${music.key}/search?type=10&query=${encodeURIComponent(track.source_title)}&limit=5`
-          );
-          const candidates = searchRes?.MediaContainer?.Metadata || [];
+        let bestCandidate  = null;
+        let bestConfidence = 0;
 
-          let bestTrack  = null;
-          let bestTScore = 0;
-
-          for (const c of candidates) {
-            const cArtist = normText(c.grandparentTitle || c.originalTitle || '');
-            const cTitle  = normText(c.title || '');
-            const aScore  = fuzzyScore(normArtist, cArtist);
-            const tScore  = fuzzyScore(normTitle, cTitle);
-            const combined = aScore * 0.4 + tScore * 0.6;
-
-            if (combined > bestTScore) {
-              bestTScore = combined;
-              bestTrack  = c;
-            }
+        for (const c of candidates) {
+          const { confidence } = matchTrack(query, c);
+          if (confidence > bestConfidence) {
+            bestConfidence = confidence;
+            bestCandidate  = c;
           }
+        }
 
-          if (bestTrack && bestTScore >= 0.65) {
-            results.push({
-              id:              track.id,
-              match_status:    'matched',
-              matched_plex_key: bestTrack.ratingKey,
-              match_confidence: Math.round(bestTScore * 100) / 100,
-            });
-            continue;
-          }
+        if (bestCandidate && bestConfidence >= 0.65) {
+          results.push({
+            id:               track.id,
+            match_status:     'matched',
+            matched_plex_key: bestCandidate._plexKey,
+            match_confidence: Math.round(bestConfidence * 100) / 100,
+          });
+          continue;
         }
       } catch (err) {
         logger.debug({ err, track: track.source_title }, 'Plex track search fout, gebruik artiest-score');
       }
-
-      // Artiest in Plex maar track niet gevonden via API → gedeeltelijke match
-      results.push({
-        id:              track.id,
-        match_status:    'unmatched',
-        matched_plex_key: null,
-        match_confidence: Math.round(bestScore * 0.5 * 100) / 100,
-      });
-    } else {
-      // Artiest totaal niet gevonden
-      results.push({
-        id:              track.id,
-        match_status:    'unmatched',
-        matched_plex_key: null,
-        match_confidence: 0,
-      });
     }
+
+    // Artiest herkend maar track niet gevonden, of artiest onbekend
+    results.push({
+      id:               track.id,
+      match_status:     'unmatched',
+      matched_plex_key: null,
+      match_confidence: Math.round(bestArtistScore * 0.5 * 100) / 100,
+    });
   }
 
   return results;

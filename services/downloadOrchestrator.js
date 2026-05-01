@@ -4,6 +4,7 @@
 'use strict';
 
 const logger = require('../logger').child({ service: 'downloadOrchestrator' });
+const { bestMatch } = require('../utils/matching');
 
 // ── Quality mapping ───────────────────────────────────────────────────────────
 // Map generieke quality (flac / mp3_320 / mp3_128) naar platform-specifieke waarden.
@@ -172,25 +173,15 @@ class DownloadOrchestrator {
       throw new Error(`OrpheusDL (${platform}): geen resultaten voor "${searchQuery}"`);
     }
 
-    // Score resultaten op artiest+titel match
-    const scored = results.map(r => {
-      const rArtist = (r.artist || '').toLowerCase();
-      const rTitle  = (r.title  || '').toLowerCase();
-      const wArtist = (artist   || '').toLowerCase();
-      const wTitle  = (album || track || '').toLowerCase();
-      let score = 0;
-      if (rArtist && wArtist) {
-        if (rArtist === wArtist) score += 100;
-        else if (rArtist.includes(wArtist) || wArtist.includes(rArtist)) score += 60;
-      }
-      if (rTitle && wTitle) {
-        if (rTitle === wTitle) score += 80;
-        else if (rTitle.includes(wTitle) || wTitle.includes(rTitle)) score += 40;
-      }
-      return { ...r, _score: score };
-    }).sort((a, b) => b._score - a._score);
-
-    const best = scored[0];
+    // Score resultaten op artiest+titel match via de matching engine
+    const query = {
+      artist: artist || '',
+      title:  album || track || '',
+      album:  album || undefined,
+    };
+    const mode = (type === 'track') ? 'track' : 'album';
+    const matchResult = bestMatch(query, results, 0, mode); // threshold 0 = altijd een winner
+    const best = matchResult || results[0];
 
     // Download via URL of search-index
     let dlJobId;
