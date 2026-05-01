@@ -365,6 +365,157 @@ function normalizeKey(artist, title) {
   return `${n(artist)}|${n(title)}`;
 }
 
+// ── Settings (persistente gebruikersinstellingen) ──────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      category   TEXT NOT NULL,
+      key        TEXT NOT NULL,
+      value      TEXT,
+      type       TEXT DEFAULT 'string',
+      updated_at INTEGER DEFAULT (strftime('%s','now')),
+      PRIMARY KEY (category, key)
+    )
+  `);
+  logger.debug('Settings table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing settings table');
+  throw err;
+}
+
+// Settings prepared statements
+const _stmtGetSettings    = db.prepare('SELECT key, value, type FROM settings WHERE category = ?');
+const _stmtGetSetting     = db.prepare('SELECT value, type FROM settings WHERE category = ? AND key = ?');
+const _stmtSetSetting     = db.prepare(
+  'INSERT OR REPLACE INTO settings (category, key, value, type, updated_at) VALUES (?, ?, ?, ?, strftime(\'%s\',\'now\'))'
+);
+const _stmtGetAllSettings = db.prepare('SELECT category, key, value, type FROM settings ORDER BY category, key');
+
+/**
+ * Haal alle settings op voor een categorie als { key: value } object.
+ * @param {string} category
+ * @returns {object}
+ */
+function getSettings(category) {
+  try {
+    const rows = _stmtGetSettings.all(category);
+    const result = {};
+    for (const row of rows) {
+      result[row.key] = deserializeSettingValue(row.value, row.type);
+    }
+    logger.trace({ category, count: rows.length }, 'Settings retrieved');
+    return result;
+  } catch (err) {
+    logger.error({ category, err }, 'Error retrieving settings');
+    return {};
+  }
+}
+
+/**
+ * Haal één setting op. Geeft null terug als niet gevonden.
+ * @param {string} category
+ * @param {string} key
+ * @returns {*}
+ */
+function getSetting(category, key) {
+  try {
+    const row = _stmtGetSetting.get(category, key);
+    if (!row) return null;
+    return deserializeSettingValue(row.value, row.type);
+  } catch (err) {
+    logger.error({ category, key, err }, 'Error retrieving setting');
+    return null;
+  }
+}
+
+/**
+ * Sla één setting op.
+ * @param {string} category
+ * @param {string} key
+ * @param {*} value
+ * @param {string} [type] - 'string'|'number'|'boolean'|'json'
+ */
+function setSetting(category, key, value, type) {
+  try {
+    const { serialized, detectedType } = serializeSettingValue(value, type);
+    _stmtSetSetting.run(category, key, serialized, detectedType);
+    logger.trace({ category, key, type: detectedType }, 'Setting saved');
+  } catch (err) {
+    logger.error({ category, key, err }, 'Error saving setting');
+    throw err;
+  }
+}
+
+/**
+ * Bulk-update settings voor een categorie.
+ * @param {string} category
+ * @param {object} settingsObj - { key: value, ... }
+ */
+function setSettings(category, settingsObj) {
+  try {
+    const bulkInsert = db.transaction((cat, obj) => {
+      for (const [key, value] of Object.entries(obj)) {
+        const { serialized, detectedType } = serializeSettingValue(value);
+        _stmtSetSetting.run(cat, key, serialized, detectedType);
+      }
+    });
+    bulkInsert(category, settingsObj);
+    logger.debug({ category, keys: Object.keys(settingsObj) }, 'Settings bulk-saved');
+  } catch (err) {
+    logger.error({ category, err }, 'Error bulk-saving settings');
+    throw err;
+  }
+}
+
+/**
+ * Haal ALLE settings op als genest object { category: { key: value } }.
+ * @returns {object}
+ */
+function getAllSettings() {
+  try {
+    const rows = _stmtGetAllSettings.all();
+    const result = {};
+    for (const row of rows) {
+      if (!result[row.category]) result[row.category] = {};
+      result[row.category][row.key] = deserializeSettingValue(row.value, row.type);
+    }
+    return result;
+  } catch (err) {
+    logger.error({ err }, 'Error retrieving all settings');
+    return {};
+  }
+}
+
+/** Serialiseer een JS-waarde naar een string voor SQLite opslag. */
+function serializeSettingValue(value, explicitType) {
+  let detectedType = explicitType;
+  let serialized;
+
+  if (!detectedType) {
+    if (typeof value === 'boolean') detectedType = 'boolean';
+    else if (typeof value === 'number') detectedType = 'number';
+    else if (typeof value === 'object' && value !== null) detectedType = 'json';
+    else detectedType = 'string';
+  }
+
+  if (detectedType === 'json') serialized = JSON.stringify(value);
+  else if (value === null || value === undefined) serialized = null;
+  else serialized = String(value);
+
+  return { serialized, detectedType };
+}
+
+/** Deserialiseer een SQLite string terug naar een JS-waarde. */
+function deserializeSettingValue(value, type) {
+  if (value === null || value === undefined) return null;
+  if (type === 'boolean') return value === 'true' || value === '1';
+  if (type === 'number') return Number(value);
+  if (type === 'json') {
+    try { return JSON.parse(value); } catch { return value; }
+  }
+  return value;
+}
+
 // Eenmalige startup-prune
 try {
   const deleted = pruneCache();
@@ -376,5 +527,6 @@ try {
 module.exports = {
   getCache, setCache, clearCache, getCacheAge, pruneCache,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
-  addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey
+  addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
+  getSettings, getSetting, setSetting, setSettings, getAllSettings
 };

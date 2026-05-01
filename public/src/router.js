@@ -35,6 +35,7 @@ const viewMeta = {
   'audiomuse-smart-playlists':   { title: 'Muziek · Smart Playlists',  renderFn: 'loadAudioMuseSmartPlaylists' },
   orpheus:                       { title: 'Muziek · OrpheusDL',        renderFn: 'loadOrpheus' },
   releases:                      { title: 'Muziek · New Releases',      renderFn: 'loadReleases' },
+  settings:                      { title: 'Muziek · Instellingen',      renderFn: 'loadSettings' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -67,6 +68,7 @@ const viewLoaders = {
   'audiomuse-smart-playlists':   () => import('./views/audiomuse-smart-playlists.js'),
   orpheus:                       () => import('./views/orpheus.js'),
   releases:                      () => import('./views/releases.js'),
+  settings:                      () => import('./views/settings.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
