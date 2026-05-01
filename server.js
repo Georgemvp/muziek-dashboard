@@ -70,6 +70,10 @@ if (require.main === module) {
   const server = app.listen(PORT, () => {
     logger.info({ port: PORT, address: server.address() }, '✓ Express server listening');
   });
+
+  // Koppel WebSocket server voor live log viewer op ws://<host>/logs
+  require('./routes/logs').attachWebSocket(server);
+
   runStartup(server, deps);
 }
 

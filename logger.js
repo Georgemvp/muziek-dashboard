@@ -14,37 +14,66 @@ const { v4: uuidv4 } = require('crypto').randomUUID ?
  * - Pino-pretty in development (gekleurd, leesbaar)
  * - JSON logs in production (log-aggregatie ready)
  * - Log level configureerbaar via LOG_LEVEL env var
+ * - Live log streaming via WebSocket (logStream ring buffer)
  *
  * Ontwikkeling  (NODE_ENV ≠ 'production'):
- *   Gebruikt pino-pretty met kleuren en leesbare timestamps (HH:MM:ss.mmm).
+ *   Gebruikt pino-pretty als stream (niet als worker transport),
+ *   gecombineerd met de logStream ring buffer via pino.multistream.
  *
  * Productie (NODE_ENV = 'production'):
  *   Logt JSON-regels naar stdout — geschikt voor log-aggregatie
- *   (Docker log drivers, Loki, Splunk, e.d.).
+ *   (Docker log drivers, Loki, Splunk, e.d.) én naar logStream ring buffer.
  */
+
+// ── logStream ring buffer destination ──────────────────────────────────────
+const logStreamService = require('./services/logStream');
+const ringBufferStream = logStreamService.createPinoStream();
+
+// ── Bouw de multistream destination ───────────────────────────────────────
+let destination;
+
+if (process.env.NODE_ENV !== 'production') {
+  // Dev: pino-pretty voor leesbare console output + ring buffer
+  let prettyStream;
+  try {
+    const pinoPretty = require('pino-pretty');
+    prettyStream = pinoPretty({
+      colorize:      true,
+      translateTime: 'HH:MM:ss.mmm',
+      ignore:        'pid,hostname',
+      singleLine:    false,
+      messageFormat: '[{levelLabel}] {msg}',
+      hideObject:    false,
+    });
+  } catch {
+    // pino-pretty niet beschikbaar — val terug op stdout
+    prettyStream = process.stdout;
+  }
+
+  destination = pino.multistream([
+    { stream: prettyStream,     level: process.env.LOG_LEVEL || 'info' },
+    { stream: ringBufferStream, level: 'trace' },
+  ]);
+} else {
+  // Prod: JSON naar stdout + ring buffer
+  destination = pino.multistream([
+    { stream: process.stdout,   level: process.env.LOG_LEVEL || 'info' },
+    { stream: ringBufferStream, level: 'trace' },
+  ]);
+}
+
+// ── Logger instantie ───────────────────────────────────────────────────────
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   base: {
     service: 'lastfm-app',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
   },
   timestamp: process.env.NODE_ENV !== 'production'
     ? pino.stdTimeFunctions.isoTime
     : pino.stdTimeFunctions.unixTime,
-  transport: process.env.NODE_ENV !== 'production'
-    ? {
-        target: 'pino-pretty',
-        options: {
-          colorize:      true,
-          translateTime: 'HH:MM:ss.mmm',
-          ignore:        'pid,hostname',
-          singleLine:    false,
-          messageFormat: '[{levelLabel}] {msg}',
-          hideObject:    false
-        }
-      }
-    : undefined
-});
+  // Geen transport: multistream destination regelt de output
+}, destination);
 
 /**
  * Child logger factory voor request-tracking.
@@ -56,7 +85,7 @@ function getRequestLogger(req) {
     requestId,
     method: req.method,
     path: req.path,
-    userAgent: req.get('user-agent')
+    userAgent: req.get('user-agent'),
   });
 }
 
@@ -73,7 +102,7 @@ function generateRequestId() {
 function getServiceLogger(serviceName, context = {}) {
   return logger.child({
     service: serviceName,
-    ...context
+    ...context,
   });
 }
 
@@ -95,7 +124,7 @@ function requestLoggingMiddleware(req, res, next) {
     requestId,
     method: req.method,
     path: req.path,
-    query: Object.keys(req.query).length > 0 ? req.query : undefined
+    query: Object.keys(req.query).length > 0 ? req.query : undefined,
   });
 
   const t0 = Date.now();
@@ -109,7 +138,7 @@ function requestLoggingMiddleware(req, res, next) {
     req.logger[logLevel]({
       statusCode: res.statusCode,
       contentLength: res.get('content-length'),
-      durationMs: ms
+      durationMs: ms,
     }, `${req.method} ${req.path}`);
   });
 

@@ -937,6 +937,42 @@ function renderOnderhoud() {
   </div>`;
 }
 
+// ── Tab: Logs ──────────────────────────────────────────────────────────────
+function renderLogs() {
+  return `
+  <div class="settings-panel" id="tab-logs">
+    <div class="log-viewer">
+      <div class="log-toolbar">
+        <select class="log-level-select" id="log-level-filter" aria-label="Log niveau filter">
+          <option value="all">Alle niveaus</option>
+          <option value="debug">DEBUG+</option>
+          <option value="info" selected>INFO+</option>
+          <option value="warn">WARN+</option>
+          <option value="error">ERROR+</option>
+        </select>
+        <input type="search" class="log-search-input" id="log-search" placeholder="Zoek in logs…" aria-label="Zoek in logs">
+        <div class="log-toolbar-right">
+          <label class="log-autoscroll-label">
+            <input type="checkbox" id="log-autoscroll" checked aria-label="Auto-scroll">
+            Auto-scroll
+          </label>
+          <button class="log-toolbar-btn" id="log-clear-btn" title="Wis alle logs">Wis</button>
+          <button class="log-toolbar-btn" id="log-copy-btn" title="Kopieer alle logs als JSON">Kopieer</button>
+          <span class="log-ws-status" id="log-ws-status" title="WebSocket status">⏳</span>
+        </div>
+      </div>
+      <div class="log-terminal" id="log-terminal" role="log" aria-live="polite" aria-label="Server logs">
+        <div class="log-entries" id="log-entries">
+          <div class="log-empty">
+            <div class="log-empty-icon">📋</div>
+            <span>Logs laden…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Tab definitie ──────────────────────────────────────────────────────────
 const TABS = [
   { id: 'algemeen',      label: 'Algemeen',       render: renderAlgemeen },
@@ -947,6 +983,7 @@ const TABS = [
   { id: 'automatisering',label: 'Automatisering', render: renderAutomatisering },
   { id: 'notificaties',  label: 'Notificaties',   render: renderNotificaties },
   { id: 'onderhoud',     label: 'Onderhoud',      render: renderOnderhoud },
+  { id: 'logs',          label: '📋 Logs',         render: renderLogs },
 ];
 
 // ── Collecteer waarden uit het formulier ────────────────────────────────────
@@ -1079,6 +1116,282 @@ function initDecadeGrid() {
   });
 }
 
+// ── Log Viewer ──────────────────────────────────────────────────────────────
+
+const _LOG_LEVEL_NUMS  = { all: 0, trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60 };
+const _LOG_LEVEL_NAMES = { 10: 'TRACE', 20: 'DEBUG', 30: 'INFO', 40: 'WARN', 50: 'ERROR', 60: 'FATAL' };
+const _LOG_COLORS      = { 10: '#6c7086', 20: '#6c7086', 30: '#89b4fa', 40: '#f9e2af', 50: '#f38ba8', 60: '#f38ba8' };
+
+let _logEntries        = [];   // alle in-memory entries (max 1000)
+let _logWs             = null;
+let _logReconnectTimer = null;
+let _logReconnectDelay = 1000;
+let _logFilter         = { level: 'info', search: '' };
+let _logAutoScroll     = true;
+let _logRafPending     = false;
+
+/**
+ * Bouw HTML voor één log entry.
+ */
+function _logEntryHtml(entry) {
+  const levelNum  = entry.level || 30;
+  const levelName = _LOG_LEVEL_NAMES[levelNum] || String(levelNum);
+  const color     = _LOG_COLORS[levelNum] || '#a6adc8';
+  const isFatal   = levelNum >= 60;
+
+  // Timestamp — Pino gebruikt unix (ms of s) of ISO string
+  let ts = '';
+  if (entry.time) {
+    const d = new Date(typeof entry.time === 'number' && entry.time < 1e12 ? entry.time * 1000 : entry.time);
+    if (!isNaN(d)) {
+      ts = d.toLocaleTimeString('nl-NL', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ms = String(d.getMilliseconds()).padStart(3, '0');
+      ts += `.${ms}`;
+    }
+  }
+
+  const msg     = esc(entry.msg || '');
+  const service = entry.service ? esc(entry.service) : '';
+
+  // Extra velden om te tonen bij uitklappen
+  // eslint-disable-next-line no-unused-vars
+  const { time, level, msg: _m, service: _s, pid, hostname, environment, ...extra } = entry;
+  const hasExtra  = Object.keys(extra).length > 0;
+  const extraJson = hasExtra ? esc(JSON.stringify(extra, null, 2)) : '';
+
+  return `<div class="log-entry log-entry--${levelName.toLowerCase()}${isFatal ? ' log-entry--fatal' : ''}" data-level="${levelNum}">` +
+    `<span class="log-ts">${ts}</span>` +
+    `<span class="log-level" style="color:${color}">${levelName}</span>` +
+    (service ? `<span class="log-service">${service}</span>` : '') +
+    `<span class="log-msg">${msg}</span>` +
+    (hasExtra
+      ? `<button class="log-expand-btn" aria-label="Details tonen">›</button>` +
+        `<pre class="log-extra" style="display:none">${extraJson}</pre>`
+      : '') +
+    `</div>`;
+}
+
+/**
+ * Check of een entry door het huidige filter komt.
+ */
+function _logPassesFilter(entry) {
+  const minLevel = _LOG_LEVEL_NUMS[_logFilter.level] || 0;
+  if (minLevel > 0 && (entry.level || 30) < minLevel) return false;
+  if (_logFilter.search) {
+    const haystack = (entry.msg || '') + JSON.stringify(entry);
+    if (!haystack.toLowerCase().includes(_logFilter.search)) return false;
+  }
+  return true;
+}
+
+/**
+ * Herbouw de volledige log-entries container (bij filter wijziging).
+ */
+function _logRenderAll() {
+  const container = document.getElementById('log-entries');
+  if (!container) return;
+
+  const visible = _logEntries.filter(_logPassesFilter).slice(-500);
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="log-empty"><div class="log-empty-icon">🔍</div><span>Geen logs gevonden</span></div>`;
+    return;
+  }
+
+  container.innerHTML = visible.map(_logEntryHtml).join('');
+  _logAttachExpandHandlers(container);
+
+  if (_logAutoScroll) {
+    const terminal = document.getElementById('log-terminal');
+    if (terminal) terminal.scrollTop = terminal.scrollHeight;
+  }
+}
+
+/**
+ * Voeg click-handler toe aan alle expand-knoppen in container.
+ */
+function _logAttachExpandHandlers(container) {
+  container.querySelectorAll('.log-expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pre = btn.nextElementSibling;
+      if (!pre) return;
+      const open = pre.style.display !== 'none';
+      pre.style.display = open ? 'none' : 'block';
+      btn.textContent   = open ? '›' : '⌄';
+    });
+  });
+}
+
+/**
+ * Voeg één entry toe aan het DOM — efficiënter dan volledige herbouw.
+ */
+function _logAppendEntry(entry) {
+  // Buffer
+  _logEntries.push(entry);
+  if (_logEntries.length > 1000) _logEntries.shift();
+
+  if (!_logPassesFilter(entry)) return;
+
+  const container = document.getElementById('log-entries');
+  if (!container) return;
+
+  // Verwijder lege-state placeholder
+  const emptyEl = container.querySelector('.log-empty');
+  if (emptyEl) emptyEl.remove();
+
+  // Virtualiseer: houd max 500 entries in DOM
+  while (container.children.length >= 500) {
+    container.removeChild(container.firstChild);
+  }
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _logEntryHtml(entry);
+  const entryEl = tmp.firstElementChild;
+  if (!entryEl) return;
+
+  // Expand handler
+  entryEl.querySelector('.log-expand-btn')?.addEventListener('click', () => {
+    const pre  = entryEl.querySelector('.log-extra');
+    const btn  = entryEl.querySelector('.log-expand-btn');
+    if (!pre || !btn) return;
+    const open = pre.style.display !== 'none';
+    pre.style.display = open ? 'none' : 'block';
+    btn.textContent   = open ? '›' : '⌄';
+  });
+
+  container.appendChild(entryEl);
+
+  if (_logAutoScroll && !_logRafPending) {
+    _logRafPending = true;
+    requestAnimationFrame(() => {
+      _logRafPending = false;
+      const terminal = document.getElementById('log-terminal');
+      if (terminal) terminal.scrollTop = terminal.scrollHeight;
+    });
+  }
+}
+
+/**
+ * Stel WebSocket-status indicator in.
+ */
+function _logSetStatus(icon, title) {
+  const el = document.getElementById('log-ws-status');
+  if (el) { el.textContent = icon; el.title = title; }
+}
+
+/**
+ * Open WebSocket verbinding naar /logs — met exponential backoff reconnect.
+ */
+function _logConnect() {
+  if (_logWs && (_logWs.readyState === WebSocket.OPEN || _logWs.readyState === WebSocket.CONNECTING)) return;
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${location.host}/logs`;
+
+  _logSetStatus('🔄', 'Verbinding maken…');
+
+  try {
+    _logWs = new WebSocket(url);
+  } catch (err) {
+    _logSetStatus('🔴', `Kon niet verbinden: ${err.message}`);
+    return;
+  }
+
+  _logWs.addEventListener('open', () => {
+    _logReconnectDelay = 1000;
+    _logSetStatus('🟢', 'Live verbonden');
+  });
+
+  _logWs.addEventListener('message', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data._bulk) {
+        // Bulk-bericht bij verbinden: laad buffer entries
+        for (const entry of (data.entries || [])) {
+          _logEntries.push(entry);
+          if (_logEntries.length > 1000) _logEntries.shift();
+        }
+        _logRenderAll();
+      } else if (data.type !== 'pong') {
+        _logAppendEntry(data);
+      }
+    } catch { /* negeer ongeldige berichten */ }
+  });
+
+  _logWs.addEventListener('close', () => {
+    _logSetStatus('🔴', `Verbroken – herverbinden in ${Math.round(_logReconnectDelay / 1000)}s`);
+    clearTimeout(_logReconnectTimer);
+    _logReconnectTimer = setTimeout(() => {
+      _logReconnectDelay = Math.min(_logReconnectDelay * 2, 30_000);
+      _logConnect();
+    }, _logReconnectDelay);
+  });
+
+  _logWs.addEventListener('error', () => {
+    _logSetStatus('⚠️', 'Verbindingsfout');
+  });
+}
+
+/**
+ * Sluit WebSocket verbinding (voorkomt reconnect).
+ */
+function _logDisconnect() {
+  clearTimeout(_logReconnectTimer);
+  if (_logWs) {
+    _logWs.onclose = null; // prevent reconnect loop
+    _logWs.close();
+    _logWs = null;
+  }
+}
+
+/**
+ * Initialiseer de log viewer toolbar en WebSocket client.
+ * Aanroepen vanuit attachListeners() nadat de DOM klaar is.
+ */
+function initLogViewer() {
+  // Niveau filter
+  document.getElementById('log-level-filter')?.addEventListener('change', (e) => {
+    _logFilter.level = e.target.value;
+    _logRenderAll();
+  });
+
+  // Zoek filter (debounced)
+  let _searchTimer = null;
+  document.getElementById('log-search')?.addEventListener('input', (e) => {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => {
+      _logFilter.search = e.target.value.toLowerCase();
+      _logRenderAll();
+    }, 200);
+  });
+
+  // Auto-scroll toggle
+  document.getElementById('log-autoscroll')?.addEventListener('change', (e) => {
+    _logAutoScroll = e.target.checked;
+  });
+
+  // Wis logs
+  document.getElementById('log-clear-btn')?.addEventListener('click', () => {
+    _logEntries = [];
+    const container = document.getElementById('log-entries');
+    if (container) {
+      container.innerHTML = `<div class="log-empty"><div class="log-empty-icon">🗑️</div><span>Logs gewist</span></div>`;
+    }
+  });
+
+  // Kopieer alle logs
+  document.getElementById('log-copy-btn')?.addEventListener('click', () => {
+    const text = _logEntries.map(e => JSON.stringify(e)).join('\n');
+    navigator.clipboard?.writeText(text)
+      .then(() => showSettingsToast('✓ Logs gekopieerd'))
+      .catch(() => showSettingsToast('Kopiëren mislukt', 'error'));
+  });
+
+  // Verbind als logs-tab actief is of bij klik op logs-tab
+  if (_activeTab === 'logs') {
+    _logConnect();
+  }
+}
+
 // ── Event listeners ─────────────────────────────────────────────────────────
 function attachListeners() {
   const page = document.getElementById('settings-page');
@@ -1092,6 +1405,9 @@ function attachListeners() {
       page.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
       const target = document.getElementById(`tab-${_activeTab}`);
       if (target) target.classList.add('active');
+
+      // Verbind/herverbind WS bij activeren logs-tab
+      if (_activeTab === 'logs') _logConnect();
     });
   });
 
@@ -1225,6 +1541,9 @@ function attachListeners() {
   // ── Drag list init ─────────────────────────────────────────────────────
   initDragList();
   initDecadeGrid();
+
+  // ── Log viewer ─────────────────────────────────────────────────────────
+  initLogViewer();
 }
 
 /** Laad en initialiseer de enrichment settings UI. */
@@ -1408,6 +1727,9 @@ async function _openGenreWhitelist() {
 export async function loadSettings() {
   const content = document.getElementById('content');
   if (!content) return;
+
+  // Sluit eventuele bestaande log-viewer WebSocket om reconnect-loops te voorkomen
+  _logDisconnect();
 
   // Laad-toestand
   content.innerHTML = `<div style="padding:48px;text-align:center;color:var(--text-muted)">Instellingen laden…</div>`;
