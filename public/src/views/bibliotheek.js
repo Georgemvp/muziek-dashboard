@@ -480,6 +480,10 @@ function blibRenderToolbar() {
                   title="Lijst weergave" aria-pressed="${blibViewMode === 'list'}">☰</button>
         </div>
 
+        <a class="blib-pill" href="#library-enhanced"
+           title="Uitgebreide Library Manager met enrichment coverage en tag-schrijven"
+           style="text-decoration:none;font-size:12px;padding:4px 10px;">📚 Uitgebreid</a>
+
         <select class="blib-sort-select" id="blib-sort-select" aria-label="Sortering">
           <option value="artist"${blibSort === 'artist' ? ' selected' : ''}>Artiest A–Z</option>
           <option value="artist-za"${blibSort === 'artist-za' ? ' selected' : ''}>Artiest Z–A</option>

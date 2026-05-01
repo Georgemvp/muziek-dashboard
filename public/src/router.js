@@ -39,6 +39,7 @@ const viewMeta = {
   settings:                      { title: 'Muziek · Instellingen',      renderFn: 'loadSettings' },
   automations:                   { title: 'Muziek · Automatisering',    renderFn: 'loadAutomations' },
   maintenance:                   { title: 'Muziek · Bibliotheek Onderhoud', renderFn: 'loadMaintenance' },
+  'library-enhanced':            { title: 'Muziek · Library Manager',       renderFn: 'loadLibraryEnhanced' },
 };
 
 // ── Lazy loaders voor view modules ─────────────────────────────────────────
@@ -75,6 +76,7 @@ const viewLoaders = {
   settings:                      () => import('./views/settings.js'),
   automations:                   () => import('./views/automations.js'),
   maintenance:                   () => import('./views/maintenance.js'),
+  'library-enhanced':            () => import('./views/library-enhanced.js'),
 };
 
 // ── Module cache ───────────────────────────────────────────────────────────
