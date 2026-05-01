@@ -184,11 +184,57 @@ function initSettingsPanel() {
         <span class="dl-settings-saved" id="dl-priority-saved">✓ Opgeslagen</span>
       </div>
     </div>
+
+    <div class="ssp-group" id="ssp-scrobbling-group">
+      <div class="ssp-group-label">Scrobbling</div>
+
+      <div class="ssp-scrobble-section">
+        <div class="ssp-scrobble-header">
+          <span class="ssp-scrobble-service-label">
+            <span class="ssp-status-dot" id="dot-lastfm"></span>Last.fm
+          </span>
+          <label class="ssp-toggle-label">
+            <input type="checkbox" id="ssp-lastfm-enabled" class="ssp-toggle-cb">
+            <span class="ssp-toggle-track"></span>
+          </label>
+        </div>
+        <div class="ssp-scrobble-body" id="ssp-lastfm-body">
+          <div class="ssp-scrobble-status" id="ssp-lastfm-status">Laden…</div>
+          <div class="ssp-scrobble-actions">
+            <button class="tool-btn tool-btn--sm" id="ssp-lastfm-auth-btn" type="button">Autoriseer via Last.fm</button>
+            <button class="tool-btn tool-btn--sm tool-btn--danger" id="ssp-lastfm-disconnect-btn" type="button" style="display:none">Ontkoppelen</button>
+          </div>
+          <div class="ssp-hint">Vereist LASTFM_API_SECRET in .env</div>
+        </div>
+      </div>
+
+      <div class="ssp-scrobble-section">
+        <div class="ssp-scrobble-header">
+          <span class="ssp-scrobble-service-label">
+            <span class="ssp-status-dot" id="dot-listenbrainz"></span>ListenBrainz
+          </span>
+          <label class="ssp-toggle-label">
+            <input type="checkbox" id="ssp-lb-enabled" class="ssp-toggle-cb">
+            <span class="ssp-toggle-track"></span>
+          </label>
+        </div>
+        <div class="ssp-scrobble-body" id="ssp-lb-body">
+          <input type="text" class="ssp-text-input" id="ssp-lb-username" placeholder="ListenBrainz gebruikersnaam">
+          <input type="password" class="ssp-text-input" id="ssp-lb-token" placeholder="User Token (van listenbrainz.org)">
+          <button class="tool-btn tool-btn--sm" id="ssp-lb-save-btn" type="button">Opslaan</button>
+          <span class="dl-settings-saved" id="ssp-lb-saved">✓ Opgeslagen</span>
+        </div>
+      </div>
+    </div>
   `;
   sidebarEl.appendChild(panel);
 
   // ── Sluiten via close-knop ────────────────────────────────────────────
   panel.querySelector('.ssp-close-btn').addEventListener('click', closeSettingsPanel);
+
+  // ── Scrobbling ────────────────────────────────────────────────────────
+  initScrobblingHandlers(panel);
+  loadScrobblerSettings();
 
   // ── Settings-knop opent panel ─────────────────────────────────────────
   document.querySelector('.sidebar-settings-btn')?.addEventListener('click', toggleSettingsPanel);
@@ -389,12 +435,100 @@ async function loadDownloadPriority(panel) {
   });
 }
 
+// ── Scrobbling settings ────────────────────────────────────────────────────────
+
+async function loadScrobblerSettings() {
+  try {
+    const s = await apiFetch('/api/scrobbler/settings');
+
+    // Last.fm
+    const lfmToggle     = document.getElementById('ssp-lastfm-enabled');
+    const lfmStatus     = document.getElementById('ssp-lastfm-status');
+    const lfmAuthBtn    = document.getElementById('ssp-lastfm-auth-btn');
+    const lfmDisconnect = document.getElementById('ssp-lastfm-disconnect-btn');
+    const dotLfm        = document.getElementById('dot-lastfm');
+
+    if (lfmToggle)     lfmToggle.checked = !!s.lastfm_enabled;
+    if (dotLfm)        dotLfm.classList.toggle('connected', !!s.lastfm_connected);
+    if (lfmStatus) {
+      lfmStatus.textContent = s.lastfm_connected
+        ? `Verbonden als ${s.lastfm_username || '—'}`
+        : 'Niet verbonden';
+    }
+    if (lfmAuthBtn)    lfmAuthBtn.style.display    = s.lastfm_connected ? 'none' : '';
+    if (lfmDisconnect) lfmDisconnect.style.display = s.lastfm_connected ? '' : 'none';
+
+    // ListenBrainz
+    const lbToggle    = document.getElementById('ssp-lb-enabled');
+    const lbUsername  = document.getElementById('ssp-lb-username');
+    const dotLb       = document.getElementById('dot-listenbrainz');
+
+    if (lbToggle)   lbToggle.checked   = !!s.lb_enabled;
+    if (lbUsername) lbUsername.value   = s.lb_username || '';
+    if (dotLb)      dotLb.classList.toggle('connected', !!s.lb_token_set && !!s.lb_enabled);
+  } catch { /* stille fout */ }
+}
+
+function initScrobblingHandlers(panel) {
+  // Last.fm aan/uit toggle
+  panel.querySelector('#ssp-lastfm-enabled')?.addEventListener('change', async (e) => {
+    await apiFetch('/api/scrobbler/settings', { method: 'POST', body: JSON.stringify({ lastfm_enabled: e.target.checked }) });
+    loadScrobblerSettings();
+  });
+
+  // Last.fm autoriseer-knop: open OAuth popup
+  panel.querySelector('#ssp-lastfm-auth-btn')?.addEventListener('click', () => {
+    const popup = window.open('/api/lastfm/auth', 'lastfm_auth', 'width=600,height=500,resizable=yes');
+    const handler = (ev) => {
+      if (ev.data === 'lastfm_auth_ok') {
+        window.removeEventListener('message', handler);
+        popup?.close();
+        loadScrobblerSettings();
+      }
+    };
+    window.addEventListener('message', handler);
+  });
+
+  // Last.fm ontkoppelen
+  panel.querySelector('#ssp-lastfm-disconnect-btn')?.addEventListener('click', async () => {
+    if (!confirm('Last.fm ontkoppelen?')) return;
+    await apiFetch('/api/lastfm/auth', { method: 'DELETE' });
+    loadScrobblerSettings();
+  });
+
+  // ListenBrainz aan/uit toggle
+  panel.querySelector('#ssp-lb-enabled')?.addEventListener('change', async (e) => {
+    await apiFetch('/api/scrobbler/settings', { method: 'POST', body: JSON.stringify({ lb_enabled: e.target.checked }) });
+    loadScrobblerSettings();
+  });
+
+  // ListenBrainz opslaan
+  panel.querySelector('#ssp-lb-save-btn')?.addEventListener('click', async () => {
+    const token    = panel.querySelector('#ssp-lb-token')?.value.trim();
+    const username = panel.querySelector('#ssp-lb-username')?.value.trim();
+    const payload  = {};
+    if (username) payload.lb_username = username;
+    if (token)    payload.lb_token    = token;
+    try {
+      await apiFetch('/api/scrobbler/settings', { method: 'POST', body: JSON.stringify(payload) });
+      const saved = document.getElementById('ssp-lb-saved');
+      if (saved) { saved.classList.add('visible'); setTimeout(() => saved.classList.remove('visible'), 2500); }
+      loadScrobblerSettings();
+    } catch (e) {
+      alert('Opslaan mislukt: ' + e.message);
+    }
+  });
+}
+
 function toggleSettingsPanel() {
   const panel = document.getElementById('sidebar-settings-panel');
   if (!panel) return;
   const isOpen = panel.classList.toggle('open');
   panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-  if (isOpen) updateEngineStatus();
+  if (isOpen) {
+    updateEngineStatus();
+    loadScrobblerSettings();
+  }
 }
 
 function closeSettingsPanel() {

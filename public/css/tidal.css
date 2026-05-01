@@ -728,3 +728,138 @@
   color: var(--text-muted);
 }
 .ssp-loading-text { font-size: var(--text-xs); color: var(--text-muted); }
+
+/* ── Scrobbling instellingen ──────────────────────────────────────────────── */
+.ssp-scrobble-section {
+  background: var(--surface2, var(--bg-secondary));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ssp-scrobble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-2);
+}
+
+.ssp-scrobble-service-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ssp-scrobble-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.ssp-scrobble-status {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.ssp-scrobble-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Toggle switch binnen ssp-panel */
+.ssp-toggle-label {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ssp-toggle-cb {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.ssp-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border-hover, #d0d0d0);
+  border-radius: 10px;
+  transition: background var(--transition-fast);
+}
+
+.ssp-toggle-cb:checked + .ssp-toggle-track {
+  background: var(--accent, #e8572a);
+}
+
+.ssp-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform var(--transition-fast);
+}
+
+.ssp-toggle-cb:checked + .ssp-toggle-track::after {
+  transform: translateX(16px);
+}
+
+/* Tekst invoerveld voor tokens/gebruikersnamen */
+.ssp-text-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  padding: 5px 8px;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.ssp-text-input:focus {
+  outline: none;
+  border-color: var(--accent, #e8572a);
+}
+
+.ssp-text-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Small tool-btn variant */
+.tool-btn--sm {
+  font-size: var(--text-xs);
+  padding: 4px 10px;
+}
+
+.tool-btn--danger {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.tool-btn--danger:hover {
+  opacity: 0.85;
+}
+
+/* Hint tekst */
+.ssp-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}

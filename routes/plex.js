@@ -9,7 +9,8 @@ module.exports = function(app, deps) {
     getPlexStatus, getPlexLibrary, getAlbumRatingKey, getPlexClients, playOnClient,
     pauseClient, stopClient, skipNext, skipPrev, getPlexPlaylists, getPlaylistTracks,
     getAlbumTracks, triggerPlexScan, rateItem, searchPlexLibrary, PLEX_TOKEN, PLEX_URL, getCache, setCache,
-    getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex
+    getPlayHistory, aggregateTopArtists, aggregateTopTracks, aggregateDailyPlays, enrichArtistsWithThumbs, getGenresFromPlex,
+    scrobbler,
   } = deps;
 
   // ── Plex Webhook state + SSE ──────────────────────────────────────────────
@@ -126,6 +127,35 @@ module.exports = function(app, deps) {
         _webhookTime = Date.now();
         logger.info({ event, track: meta.title, artist: meta.grandparentTitle }, 'Plex webhook ontvangen');
         _sseEmit('plex', _webhookState);
+
+        // ── Scrobbling ────────────────────────────────────────────────────
+        if (scrobbler) {
+          const trackArtist = meta.grandparentTitle || meta.originalTitle || '';
+          const trackName   = meta.title || '';
+          const trackAlbum  = meta.parentTitle || null;
+          const duration_ms = meta.duration   || null;
+          const viewOffset  = meta.viewOffset || null;
+
+          if (event === 'media.scrobble') {
+            // Plex stuurt media.scrobble als de track de 50%-drempel passeert
+            scrobbler.scrobble({
+              artist:    trackArtist,
+              track:     trackName,
+              album:     trackAlbum,
+              timestamp: Math.floor(Date.now() / 1000),
+              duration_ms,
+              source:    'plex',
+            }).catch(err => logger.error({ err }, 'Scrobble fout na media.scrobble'));
+          } else if (event === 'media.play' || event === 'media.resume') {
+            // Bijwerken van "Now Playing" op Last.fm
+            scrobbler.updateNowPlaying({
+              artist:     trackArtist,
+              track:      trackName,
+              album:      trackAlbum,
+              duration_ms,
+            }).catch(() => {}); // niet-kritiek
+          }
+        }
       }
 
       res.sendStatus(200);

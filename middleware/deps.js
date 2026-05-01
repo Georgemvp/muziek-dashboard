@@ -59,11 +59,21 @@ const {
   getDb,
   getMaintenanceFindings, getMaintenanceFinding, updateMaintenanceFindingStatus,
   getMaintenanceSummary, getMaintenanceRuns,
+  insertScrobble, getRecentScrobbles, getScrobble,
+  updateScrobbleLastfm, updateScrobbleLB, getPendingScrobbles,
 } = require('../db');
 
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
+const { Scrobbler } = require('../services/scrobbler');
 const { getWikipediaExtract } = require('../services/wikipedia');
 const mirroredPlaylistsService = require('../services/mirroredPlaylists');
+
+// ── Scrobbler ─────────────────────────────────────────────────────────────────
+const scrobbler = new Scrobbler({
+  db: { insertScrobble, getRecentScrobbles, getScrobble, updateScrobbleLastfm, updateScrobbleLB, getPendingScrobbles },
+  getSetting,
+  setSetting,
+});
 
 // ── Automation Engine ──────────────────────────────────────────────────────────
 const automationService = require('../services/automation');
@@ -201,6 +211,9 @@ const deps = {
   getAcoustidResultByJob,
   getAcoustidResultByPath,
   getAcoustidResults,
+
+  // Scrobbler
+  scrobbler,
 
   // Automation Engine
   automationService,

@@ -1400,6 +1400,138 @@ try {
   pruneExpiredPlaylists();
 } catch {}
 
+// ── scrobble_log tabel ───────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scrobble_log (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      artist               TEXT    NOT NULL,
+      track                TEXT    NOT NULL,
+      album                TEXT,
+      timestamp            INTEGER NOT NULL,
+      duration_ms          INTEGER,
+      source               TEXT    DEFAULT 'plex',
+      lastfm_status        TEXT    DEFAULT 'pending',
+      listenbrainz_status  TEXT    DEFAULT 'pending',
+      lastfm_error         TEXT,
+      listenbrainz_error   TEXT,
+      created_at           INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_scrobble_timestamp  ON scrobble_log(timestamp)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_scrobble_lfm_status ON scrobble_log(lastfm_status)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_scrobble_lb_status  ON scrobble_log(listenbrainz_status)');
+  logger.debug('scrobble_log table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing scrobble_log table');
+  throw err;
+}
+
+// scrobble_log prepared statements
+const _stmtInsertScrobble = db.prepare(`
+  INSERT INTO scrobble_log
+    (artist, track, album, timestamp, duration_ms, source, lastfm_status, listenbrainz_status)
+  VALUES (?, ?, ?, ?, ?, ?, 'pending', 'pending')
+`);
+const _stmtGetRecentScrobbles = db.prepare(`
+  SELECT * FROM scrobble_log ORDER BY timestamp DESC LIMIT ?
+`);
+const _stmtGetScrobble = db.prepare('SELECT * FROM scrobble_log WHERE id = ?');
+const _stmtUpdateScrobbleLastfm = db.prepare(`
+  UPDATE scrobble_log SET lastfm_status=?, lastfm_error=? WHERE id=?
+`);
+const _stmtUpdateScrobbleLB = db.prepare(`
+  UPDATE scrobble_log SET listenbrainz_status=?, listenbrainz_error=? WHERE id=?
+`);
+// Deduplicate: zoek scrobble binnen ±30s voor dezelfde artiest+track
+const _stmtFindDuplicateScrobble = db.prepare(`
+  SELECT id FROM scrobble_log
+  WHERE artist = ? AND track = ?
+    AND timestamp BETWEEN ? AND ?
+  LIMIT 1
+`);
+const _stmtGetPendingScrobbles = db.prepare(`
+  SELECT * FROM scrobble_log
+  WHERE lastfm_status IN ('pending','error') OR listenbrainz_status IN ('pending','error')
+  ORDER BY timestamp ASC
+  LIMIT 50
+`);
+
+/**
+ * Sla een scrobble op in de log. Retourneert null als het een duplicaat is.
+ * @param {object} opts
+ * @param {string} opts.artist
+ * @param {string} opts.track
+ * @param {string} [opts.album]
+ * @param {number} opts.timestamp   - Unix epoch in seconds
+ * @param {number} [opts.duration_ms]
+ * @param {string} [opts.source]    - Default 'plex'
+ * @returns {number|null} id of inserted row, or null for duplicate
+ */
+function insertScrobble({ artist, track, album = null, timestamp, duration_ms = null, source = 'plex' }) {
+  try {
+    const dup = _stmtFindDuplicateScrobble.get(artist, track, timestamp - 30, timestamp + 30);
+    if (dup) {
+      logger.debug({ artist, track, timestamp }, 'Scrobble deduplicated, skipping');
+      return null;
+    }
+    const res = _stmtInsertScrobble.run(artist, track, album, timestamp, duration_ms, source);
+    logger.debug({ id: res.lastInsertRowid, artist, track }, 'Scrobble logged');
+    return res.lastInsertRowid;
+  } catch (err) {
+    logger.error({ artist, track, err }, 'Error inserting scrobble');
+    throw err;
+  }
+}
+
+/** Haal de laatste N scrobbles op (nieuwste eerst). */
+function getRecentScrobbles(limit = 50) {
+  try {
+    return _stmtGetRecentScrobbles.all(Math.min(limit, 500));
+  } catch (err) {
+    logger.error({ err }, 'Error getting recent scrobbles');
+    return [];
+  }
+}
+
+/** Haal één scrobble op op id. */
+function getScrobble(id) {
+  try {
+    return _stmtGetScrobble.get(id) || null;
+  } catch (err) {
+    logger.error({ id, err }, 'Error getting scrobble');
+    return null;
+  }
+}
+
+/** Update Last.fm status van een scrobble. */
+function updateScrobbleLastfm(id, status, error = null) {
+  try {
+    _stmtUpdateScrobbleLastfm.run(status, error, id);
+  } catch (err) {
+    logger.error({ id, status, err }, 'Error updating scrobble lastfm status');
+  }
+}
+
+/** Update ListenBrainz status van een scrobble. */
+function updateScrobbleLB(id, status, error = null) {
+  try {
+    _stmtUpdateScrobbleLB.run(status, error, id);
+  } catch (err) {
+    logger.error({ id, status, err }, 'Error updating scrobble listenbrainz status');
+  }
+}
+
+/** Haal scrobbles op die nog (opnieuw) verstuurd moeten worden. */
+function getPendingScrobbles() {
+  try {
+    return _stmtGetPendingScrobbles.all();
+  } catch (err) {
+    logger.error({ err }, 'Error getting pending scrobbles');
+    return [];
+  }
+}
+
 // ── stats_snapshots tabel ─────────────────────────────────────────────────────
 // Dagelijkse snapshots van luisterstatistieken voor trending-data.
 try {
@@ -1908,4 +2040,7 @@ module.exports = {
   // Maintenance
   getMaintenanceFindings, getMaintenanceFinding, updateMaintenanceFindingStatus,
   getMaintenanceSummary, getMaintenanceRuns,
+  // Scrobbling
+  insertScrobble, getRecentScrobbles, getScrobble,
+  updateScrobbleLastfm, updateScrobbleLB, getPendingScrobbles,
 };
