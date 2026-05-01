@@ -157,6 +157,16 @@ export async function switchView(viewName, params = null) {
     else el.removeAttribute('aria-current');
   });
 
+  // ── Auto-expand parent collapsible group als subview actief is ─────────
+  const activeSubItem = document.querySelector(`.nav-subitem[data-view="${viewName}"]`);
+  if (activeSubItem) {
+    const parentGroup = activeSubItem.closest('.sidebar-collapsible');
+    const toggle = parentGroup?.querySelector('.sidebar-collapse-toggle');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  }
+
   // ── Cancel any in-flight requests for previous view ────────────────────
   if (state.tabAbort) state.tabAbort.abort();
   state.tabAbort = new AbortController();

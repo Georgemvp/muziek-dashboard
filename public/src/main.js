@@ -85,6 +85,7 @@ async function checkNewReleases() {
 
     if (newIds.length > 0) {
       updateNavBadge('ontdek', newIds.length);
+      updateNavBadge('releases', newIds.length);
 
       // Browser-notificatie (alleen als toestemming al gegeven is)
       if (Notification.permission === 'granted') {

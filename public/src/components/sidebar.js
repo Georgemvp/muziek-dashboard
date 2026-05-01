@@ -67,6 +67,23 @@ export function initSidebar() {
   // ── Listen for router close event ──────────────────────────────────────
   document.addEventListener('sidebar:close', () => setSidebarOpen(false));
 
+  // ── Collapsible sidebar groups ──────────────────────────────────────────
+  document.querySelectorAll('.sidebar-collapse-toggle').forEach(toggle => {
+    // Herstel staat uit localStorage
+    const groupId = toggle.getAttribute('aria-controls');
+    const savedState = localStorage.getItem(`sidebar-group-${groupId}`);
+    if (savedState === 'open') {
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+      localStorage.setItem(`sidebar-group-${groupId}`, isExpanded ? 'closed' : 'open');
+    });
+  });
+
   // ── Settings panel ────────────────────────────────────────────────────
   initSettingsPanel();
 
