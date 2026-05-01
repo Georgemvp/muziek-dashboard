@@ -843,6 +843,145 @@ function getAcoustidResults(limit = 50) {
   }
 }
 
+// ── Playlists tabel ──────────────────────────────────────────────────────────
+// Persistente opslag van gegenereerde playlists met TTL per type.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS playlists (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      type         TEXT    NOT NULL,
+      name         TEXT    NOT NULL,
+      params       TEXT,
+      tracks       TEXT    NOT NULL,
+      track_count  INTEGER DEFAULT 0,
+      generated_at INTEGER DEFAULT (strftime('%s','now')),
+      expires_at   INTEGER
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_playlists_type ON playlists(type)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_playlists_expires ON playlists(expires_at)');
+  logger.debug('Playlists table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing playlists table');
+  throw err;
+}
+
+// Playlist TTLs per type (in seconden)
+const PLAYLIST_TTL = {
+  discovery_weekly:   7 * 24 * 3600,   // 7 dagen
+  release_radar:      24 * 3600,        // 24 uur
+  daily_mix:          24 * 3600,        // 24 uur
+  seasonal:           30 * 24 * 3600,   // 30 dagen
+  decade:             14 * 24 * 3600,   // 14 dagen
+  genre:              14 * 24 * 3600,   // 14 dagen
+  forgotten_favorites:24 * 3600,        // 24 uur
+  hidden_gems:        7 * 24 * 3600,    // 7 dagen
+  custom:             24 * 3600,        // 24 uur
+};
+
+const _stmtSavePlaylist = db.prepare(`
+  INSERT OR REPLACE INTO playlists (type, name, params, tracks, track_count, generated_at, expires_at)
+  VALUES (?, ?, ?, ?, ?, strftime('%s','now'), ?)
+`);
+const _stmtGetPlaylist       = db.prepare('SELECT * FROM playlists WHERE type = ? AND (params = ? OR (params IS NULL AND ? IS NULL)) ORDER BY generated_at DESC LIMIT 1');
+const _stmtGetAllPlaylists   = db.prepare('SELECT id, type, name, params, track_count, generated_at, expires_at FROM playlists ORDER BY generated_at DESC');
+const _stmtDeletePlaylist    = db.prepare('DELETE FROM playlists WHERE type = ? AND (params = ? OR (params IS NULL AND ? IS NULL))');
+const _stmtDeleteExpired     = db.prepare('DELETE FROM playlists WHERE expires_at IS NOT NULL AND expires_at < ?');
+
+/**
+ * Sla een gegenereerde playlist op in de database.
+ * @param {string} type      - Playlist type (bijv. 'daily_mix')
+ * @param {string} name      - Weergavenaam
+ * @param {Array}  tracks    - Array van track-objecten
+ * @param {object} [params]  - Extra parameters (bijv. { genre: 'rock' })
+ */
+function savePlaylist(type, name, tracks, params = null) {
+  try {
+    const ttl     = PLAYLIST_TTL[type] || 24 * 3600;
+    const now     = Math.floor(Date.now() / 1000);
+    const expires = now + ttl;
+    const paramsStr = params ? JSON.stringify(params) : null;
+
+    // Verwijder de vorige versie van deze playlist+params
+    _stmtDeletePlaylist.run(type, paramsStr, paramsStr);
+
+    _stmtSavePlaylist.run(
+      type,
+      name,
+      paramsStr,
+      JSON.stringify(tracks),
+      tracks.length,
+      expires
+    );
+    logger.debug({ type, name, tracks: tracks.length }, 'Playlist opgeslagen');
+  } catch (err) {
+    logger.error({ type, name, err }, 'Error saving playlist');
+    throw err;
+  }
+}
+
+/**
+ * Haal een gecachede playlist op. Geeft null terug als verlopen of niet gevonden.
+ * @param {string} type
+ * @param {object} [params]
+ * @returns {{ id, type, name, tracks, generated_at, expires_at } | null}
+ */
+function getPlaylist(type, params = null) {
+  try {
+    const paramsStr = params ? JSON.stringify(params) : null;
+    const row = _stmtGetPlaylist.get(type, paramsStr, paramsStr);
+    if (!row) return null;
+
+    const now = Math.floor(Date.now() / 1000);
+    if (row.expires_at && row.expires_at < now) {
+      logger.debug({ type }, 'Playlist verlopen');
+      return null;
+    }
+
+    return {
+      ...row,
+      tracks: JSON.parse(row.tracks),
+      params: row.params ? JSON.parse(row.params) : null,
+    };
+  } catch (err) {
+    logger.error({ type, err }, 'Error getting playlist');
+    return null;
+  }
+}
+
+/**
+ * Haal metadata van alle opgeslagen playlists op (zonder tracks).
+ * @returns {Array}
+ */
+function getAllSavedPlaylists() {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    return _stmtGetAllPlaylists.all()
+      .filter(r => !r.expires_at || r.expires_at > now)
+      .map(r => ({
+        ...r,
+        params: r.params ? JSON.parse(r.params) : null,
+        is_expired: r.expires_at ? r.expires_at < now : false,
+      }));
+  } catch (err) {
+    logger.error({ err }, 'Error getting all playlists');
+    return [];
+  }
+}
+
+/** Verwijder verlopen playlists. */
+function pruneExpiredPlaylists() {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const info = _stmtDeleteExpired.run(now);
+    if (info.changes > 0) logger.debug({ deleted: info.changes }, 'Verlopen playlists verwijderd');
+    return info.changes;
+  } catch (err) {
+    logger.error({ err }, 'Error pruning expired playlists');
+    return 0;
+  }
+}
+
 // ── Eenmalige startup-prune
 try {
   const deleted = pruneCache();
@@ -850,6 +989,11 @@ try {
 } catch (err) {
   logger.warn({ err }, 'Initial cache pruning failed, continuing anyway');
 }
+
+// Verwijder ook verlopen playlists bij opstarten
+try {
+  pruneExpiredPlaylists();
+} catch {}
 
 module.exports = {
   getCache, setCache, clearCache, getCacheAge, pruneCache,
@@ -860,4 +1004,5 @@ module.exports = {
   getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
   logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
   saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
+  savePlaylist, getPlaylist, getAllSavedPlaylists, pruneExpiredPlaylists, PLAYLIST_TTL,
 };
