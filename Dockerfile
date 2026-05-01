@@ -302,6 +302,7 @@ COPY server.js db.js logger.js ./
 COPY routes/         ./routes/
 COPY services/       ./services/
 COPY middleware/     ./middleware/
+COPY utils/          ./utils/
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
