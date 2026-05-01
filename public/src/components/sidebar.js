@@ -166,6 +166,24 @@ function initSettingsPanel() {
         <div class="ssp-loading-text">Platforms laden…</div>
       </div>
     </div>
+
+    <div class="ssp-group" id="ssp-dl-priority-group">
+      <div class="ssp-group-label">Download-bron prioriteit</div>
+      <div class="dl-hybrid-row">
+        <div>
+          <div>Fallback modus</div>
+          <div class="dl-hybrid-desc">Probeer volgende bron bij falen</div>
+        </div>
+        <input type="checkbox" class="dl-priority-toggle" id="dl-hybrid-toggle" checked>
+      </div>
+      <div class="dl-priority-list" id="dl-priority-list">
+        <div class="ssp-loading-text">Prioriteiten laden…</div>
+      </div>
+      <div class="dl-settings-save-bar">
+        <button class="tool-btn" id="dl-priority-save-btn" type="button">Opslaan</button>
+        <span class="dl-settings-saved" id="dl-priority-saved">✓ Opgeslagen</span>
+      </div>
+    </div>
   `;
   sidebarEl.appendChild(panel);
 
@@ -212,6 +230,163 @@ function initSettingsPanel() {
 
   // ── Laad verbindingsstatus ────────────────────────────────────────────
   updateEngineStatus();
+
+  // ── Download-bron prioriteit ──────────────────────────────────────────
+  loadDownloadPriority(panel);
+}
+
+// ── Download-bron prioriteit drag-and-drop ─────────────────────────────────
+
+const SOURCE_LABELS = {
+  tidarr:             { label: 'Tidal (Tidarr)',  color: '#33ffe7' },
+  orpheus_tidal:      { label: 'Tidal (Orpheus)', color: '#33ffe7' },
+  orpheus_qobuz:      { label: 'Qobuz',           color: '#0070ef' },
+  orpheus_deezer:     { label: 'Deezer',          color: '#a238ff' },
+  orpheus_spotify:    { label: 'Spotify',         color: '#1cc659' },
+  orpheus_soundcloud: { label: 'SoundCloud',      color: '#ff5502' },
+  orpheus_applemusic: { label: 'Apple Music',     color: '#FA586A' },
+  orpheus_beatport:   { label: 'Beatport',        color: '#00ff89' },
+  orpheus_beatsource: { label: 'Beatsource',      color: '#16a8f4' },
+  orpheus_youtube:    { label: 'YouTube',         color: '#FF0000' },
+};
+
+async function loadDownloadPriority(panel) {
+  const listEl   = panel.querySelector('#dl-priority-list');
+  const saveBtn  = panel.querySelector('#dl-priority-save-btn');
+  const savedEl  = panel.querySelector('#dl-priority-saved');
+  const hybridEl = panel.querySelector('#dl-hybrid-toggle');
+  if (!listEl) return;
+
+  // Haal settings op van de server
+  let settings;
+  try {
+    const r = await fetch('/api/download/settings');
+    settings = await r.json();
+  } catch {
+    listEl.innerHTML = '<div class="ssp-loading-text">Instellingen niet beschikbaar</div>';
+    return;
+  }
+
+  const priority = settings.source_priority || Object.keys(SOURCE_LABELS);
+  const enabled  = settings.source_enabled  || {};
+  const hybrid   = settings.hybrid_mode !== false;
+
+  if (hybridEl) hybridEl.checked = hybrid;
+
+  // Render de draggable lijst
+  function renderPriorityList(order) {
+    listEl.innerHTML = order.map((src, idx) => {
+      const cfg     = SOURCE_LABELS[src] || { label: src, color: '#888' };
+      const isOn    = enabled[src] !== false;
+      return `
+        <div class="dl-priority-item" draggable="true" data-source="${esc(src)}" data-enabled="${isOn}">
+          <span class="dl-priority-handle" aria-hidden="true">⠿</span>
+          <span class="dl-priority-dot" style="background:${cfg.color}"></span>
+          <span class="dl-priority-name">${esc(cfg.label)}</span>
+          <span class="dl-priority-status">#${idx + 1}</span>
+          <input type="checkbox" class="dl-priority-toggle" data-src="${esc(src)}"
+                 ${isOn ? 'checked' : ''} title="Bron in-/uitschakelen"
+                 aria-label="${esc(cfg.label)} in-/uitschakelen">
+        </div>`;
+    }).join('');
+
+    // ── Toggle handlers ──────────────────────────────────────────────���───
+    listEl.querySelectorAll('.dl-priority-toggle').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const src = cb.dataset.src;
+        enabled[src] = cb.checked;
+        const item = cb.closest('.dl-priority-item');
+        if (item) item.dataset.enabled = String(cb.checked);
+      });
+    });
+
+    // ── Drag-and-drop handlers ───────────────────────────────────────────
+    let dragSrc = null;
+
+    listEl.querySelectorAll('.dl-priority-item').forEach(item => {
+      item.addEventListener('dragstart', e => {
+        dragSrc = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.source);
+      });
+
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        listEl.querySelectorAll('.dl-priority-item').forEach(i => i.classList.remove('drag-over'));
+        dragSrc = null;
+        // Update nummers
+        listEl.querySelectorAll('.dl-priority-item').forEach((i, idx) => {
+          const statusEl = i.querySelector('.dl-priority-status');
+          if (statusEl) statusEl.textContent = `#${idx + 1}`;
+        });
+      });
+
+      item.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragSrc && dragSrc !== item) {
+          listEl.querySelectorAll('.dl-priority-item').forEach(i => i.classList.remove('drag-over'));
+          item.classList.add('drag-over');
+        }
+      });
+
+      item.addEventListener('dragleave', () => {
+        item.classList.remove('drag-over');
+      });
+
+      item.addEventListener('drop', e => {
+        e.preventDefault();
+        item.classList.remove('drag-over');
+        if (!dragSrc || dragSrc === item) return;
+
+        // Bepaal positie en herorden
+        const items = [...listEl.querySelectorAll('.dl-priority-item')];
+        const fromIdx = items.indexOf(dragSrc);
+        const toIdx   = items.indexOf(item);
+
+        if (fromIdx < toIdx) {
+          item.after(dragSrc);
+        } else {
+          item.before(dragSrc);
+        }
+      });
+    });
+  }
+
+  renderPriorityList(priority);
+
+  // ── Opslaan ─────────────────────────────��────────────────────────────────
+  saveBtn?.addEventListener('click', async () => {
+    const newOrder = [...listEl.querySelectorAll('.dl-priority-item')]
+      .map(i => i.dataset.source);
+
+    const newEnabled = {};
+    listEl.querySelectorAll('.dl-priority-toggle[data-src]').forEach(cb => {
+      newEnabled[cb.dataset.src] = cb.checked;
+    });
+
+    saveBtn.disabled = true;
+    try {
+      await fetch('/api/download/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_priority: newOrder,
+          hybrid_mode:     hybridEl?.checked ?? true,
+          source_enabled:  newEnabled,
+        }),
+      });
+      if (savedEl) {
+        savedEl.classList.add('visible');
+        setTimeout(() => savedEl.classList.remove('visible'), 2500);
+      }
+    } catch (e) {
+      alert('Opslaan mislukt: ' + e.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 function toggleSettingsPanel() {

@@ -60,6 +60,44 @@ const {
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
 const { getWikipediaExtract } = require('../services/wikipedia');
 
+// ── Download Orchestrator ─────────────────────────────────────────────────────
+const events = require('../services/events');
+const { DownloadOrchestrator } = require('../services/downloadOrchestrator');
+const {
+  createDownloadJob, getDownloadJob, updateDownloadJob,
+  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus
+} = require('../db');
+
+// Maak orchestrator aan met de beschikbare services
+const downloadOrchestrator = new DownloadOrchestrator({
+  tidarrService: {
+    searchTidal,
+    findBestAlbum,
+    findTopAlbums,
+    addToQueue,
+    getTidarrStatus,
+  },
+  orpheusService: {
+    searchOrpheus,
+    downloadOrpheus,
+    downloadFromSearch,
+    getOrpheusStatus,
+    pollJob: require('../services/orpheus').pollJob,
+  },
+  db: {
+    getSetting, setSetting,
+    addToWishlist,
+    addDownload,
+    createDownloadJob,
+    getDownloadJob,
+    updateDownloadJob,
+    getPendingDownloadJobs,
+    getRecentDownloadJobs,
+    getActiveDownloadJobs,
+  },
+  events,
+});
+
 // ── Deps-object ───────────────────────────────────────────────────────────────
 // lastFmDown / lastFmDownSince worden door server.js toegevoegd ná de lastfm-routeregistratie.
 const deps = {
@@ -114,6 +152,14 @@ const deps = {
 
   // Settings (SQLite)
   getSettings, getSetting, setSetting, setSettings, getAllSettings,
+
+  // Download Orchestrator
+  downloadOrchestrator,
+  events,
+
+  // Download Jobs (voor routes/download.js)
+  createDownloadJob, getDownloadJob, updateDownloadJob,
+  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
 
   // Helpers
   limitConcurrency,

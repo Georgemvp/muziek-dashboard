@@ -365,6 +365,34 @@ function normalizeKey(artist, title) {
   return `${n(artist)}|${n(title)}`;
 }
 
+// ── Download Jobs (orchestrator tracking) ──────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS download_jobs (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      artist           TEXT NOT NULL,
+      album            TEXT,
+      track            TEXT,
+      type             TEXT NOT NULL,
+      quality          TEXT DEFAULT 'flac',
+      source_requested TEXT DEFAULT 'auto',
+      source_used      TEXT,
+      status           TEXT DEFAULT 'pending',
+      attempts         INTEGER DEFAULT 0,
+      error_log        TEXT,
+      created_at       INTEGER DEFAULT (strftime('%s','now')),
+      completed_at     INTEGER,
+      file_path        TEXT
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_djobs_status ON download_jobs(status)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_djobs_created ON download_jobs(created_at)');
+  logger.debug('Download jobs table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing download_jobs table');
+  throw err;
+}
+
 // ── Settings (persistente gebruikersinstellingen) ──────────────────────────
 try {
   db.exec(`
@@ -516,7 +544,121 @@ function deserializeSettingValue(value, type) {
   return value;
 }
 
-// Eenmalige startup-prune
+// ── Download Jobs prepared statements ─────────────────────────────────────
+const _stmtCreateJob     = db.prepare(`
+  INSERT INTO download_jobs (artist, album, track, type, quality, source_requested, status)
+  VALUES (?, ?, ?, ?, ?, ?, 'pending')
+`);
+const _stmtGetJob        = db.prepare('SELECT * FROM download_jobs WHERE id = ?');
+const _stmtUpdateJob     = db.prepare(`
+  UPDATE download_jobs SET status=?, source_used=?, attempts=?, error_log=?, completed_at=?, file_path=?
+  WHERE id=?
+`);
+const _stmtGetPendingJobs   = db.prepare("SELECT * FROM download_jobs WHERE status IN ('pending','failed') ORDER BY created_at ASC");
+const _stmtGetJobsByStatus  = db.prepare('SELECT * FROM download_jobs WHERE status = ? ORDER BY created_at DESC');
+const _stmtGetRecentJobs    = db.prepare('SELECT * FROM download_jobs ORDER BY created_at DESC LIMIT ?');
+const _stmtGetActiveJobs    = db.prepare("SELECT * FROM download_jobs WHERE status IN ('pending','running') ORDER BY created_at ASC");
+
+/** Maak een nieuw download-job record aan. Geeft de id terug. */
+function createDownloadJob({ artist, album, track, type, quality, source_requested }) {
+  try {
+    const res = _stmtCreateJob.run(
+      artist            || '',
+      album             || null,
+      track             || null,
+      type              || 'album',
+      quality           || 'flac',
+      source_requested  || 'auto'
+    );
+    logger.debug({ id: res.lastInsertRowid, artist, album }, 'Download job created');
+    return res.lastInsertRowid;
+  } catch (err) {
+    logger.error({ err, artist, album }, 'Error creating download job');
+    throw err;
+  }
+}
+
+/** Haal een job op op id. */
+function getDownloadJob(id) {
+  try {
+    return _stmtGetJob.get(id) || null;
+  } catch (err) {
+    logger.error({ err, id }, 'Error getting download job');
+    return null;
+  }
+}
+
+/**
+ * Update de status en resultaat van een job.
+ * @param {number} id
+ * @param {object} opts
+ * @param {string} opts.status          - 'pending'|'running'|'completed'|'failed'
+ * @param {string} [opts.source_used]
+ * @param {number} [opts.attempts]
+ * @param {string} [opts.error_log]
+ * @param {string} [opts.file_path]
+ */
+function updateDownloadJob(id, { status, source_used, attempts, error_log, file_path } = {}) {
+  try {
+    const current = _stmtGetJob.get(id);
+    const completed_at = (status === 'completed' || status === 'failed') ? Math.floor(Date.now() / 1000) : (current?.completed_at || null);
+    _stmtUpdateJob.run(
+      status       || current?.status       || 'pending',
+      source_used  !== undefined ? source_used  : (current?.source_used  || null),
+      attempts     !== undefined ? attempts     : (current?.attempts     || 0),
+      error_log    !== undefined ? error_log    : (current?.error_log    || null),
+      completed_at,
+      file_path    !== undefined ? file_path    : (current?.file_path    || null),
+      id
+    );
+    logger.debug({ id, status }, 'Download job updated');
+  } catch (err) {
+    logger.error({ err, id }, 'Error updating download job');
+    throw err;
+  }
+}
+
+/** Haal alle pending/failed jobs op (voor retry). */
+function getPendingDownloadJobs() {
+  try {
+    return _stmtGetPendingJobs.all();
+  } catch (err) {
+    logger.error({ err }, 'Error getting pending download jobs');
+    return [];
+  }
+}
+
+/** Haal recente jobs op (voor queue/history weergave). */
+function getRecentDownloadJobs(limit = 50) {
+  try {
+    return _stmtGetRecentJobs.all(limit);
+  } catch (err) {
+    logger.error({ err }, 'Error getting recent download jobs');
+    return [];
+  }
+}
+
+/** Haal actieve (pending + running) jobs op. */
+function getActiveDownloadJobs() {
+  try {
+    return _stmtGetActiveJobs.all();
+  } catch (err) {
+    logger.error({ err }, 'Error getting active download jobs');
+    return [];
+  }
+}
+
+/** Haal jobs op gefilterd op status. */
+function getDownloadJobsByStatus(status) {
+  try {
+    return _stmtGetJobsByStatus.all(status);
+  } catch (err) {
+    logger.error({ err, status }, 'Error getting download jobs by status');
+    return [];
+  }
+}
+
+// ── Eenmalige startup-prune
 try {
   const deleted = pruneCache();
   logger.info({ deletedTotal: deleted }, 'Initial cache pruning completed');
@@ -528,5 +670,7 @@ module.exports = {
   getCache, setCache, clearCache, getCacheAge, pruneCache,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
-  getSettings, getSetting, setSetting, setSettings, getAllSettings
+  getSettings, getSetting, setSetting, setSettings, getAllSettings,
+  createDownloadJob, getDownloadJob, updateDownloadJob,
+  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus
 };

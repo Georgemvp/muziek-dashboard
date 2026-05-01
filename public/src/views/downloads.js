@@ -964,6 +964,390 @@ export function loadDownloads() {
   loadTidal();
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// UNIFIED DOWNLOAD ORCHESTRATOR UI
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Bron-labels en kleuren ────────────────────────────────────────────────────
+const SOURCE_CONFIG = {
+  tidarr:             { label: 'Tidal (Tidarr)', color: '#33ffe7', short: 'TIDAL' },
+  orpheus_tidal:      { label: 'Tidal',          color: '#33ffe7', short: 'TIDAL' },
+  orpheus_qobuz:      { label: 'Qobuz',          color: '#0070ef', short: 'QOBUZ' },
+  orpheus_deezer:     { label: 'Deezer',         color: '#a238ff', short: 'DEEZER' },
+  orpheus_spotify:    { label: 'Spotify',        color: '#1cc659', short: 'SPOTIFY' },
+  orpheus_soundcloud: { label: 'SoundCloud',     color: '#ff5502', short: 'SC' },
+  orpheus_applemusic: { label: 'Apple Music',    color: '#FA586A', short: 'APPLE' },
+  orpheus_beatport:   { label: 'Beatport',       color: '#00ff89', short: 'BEAT' },
+  orpheus_beatsource: { label: 'Beatsource',     color: '#16a8f4', short: 'BSRC' },
+  orpheus_youtube:    { label: 'YouTube',        color: '#FF0000', short: 'YT' },
+};
+
+function sourceLabel(src) { return SOURCE_CONFIG[src]?.label || src; }
+function sourceColor(src) { return SOURCE_CONFIG[src]?.color || '#888'; }
+function sourceShort(src) { return SOURCE_CONFIG[src]?.short || src.toUpperCase(); }
+
+// ── Bron-status balk ──────────────────────────────────────────────────────────
+export async function renderSourceStatusBar(container) {
+  if (!container) return;
+  container.innerHTML = `<div class="src-loading">Status laden…</div>`;
+  try {
+    const d = await apiFetch('/api/download/status');
+    const sources = d.sources || [];
+    if (!sources.length) { container.innerHTML = ''; return; }
+
+    const enabled = sources.filter(s => s.enabled !== false);
+    container.innerHTML = `
+      <div class="src-status-bar">
+        ${enabled.map(s => {
+          const dotCls = s.available === true ? 'src-dot-ok' : s.available === false ? 'src-dot-err' : 'src-dot-unk';
+          const color  = sourceColor(s.name);
+          return `<span class="src-pill" title="${esc(s.label || s.name)}${s.errorCount > 0 ? ' · ' + s.errorCount + ' fouten' : ''}">
+            <span class="src-dot ${dotCls}" style="--src-color:${color}"></span>
+            <span class="src-pill-label">${esc(sourceShort(s.name))}</span>
+          </span>`;
+        }).join('')}
+        <button class="src-refresh-btn tool-btn" type="button" title="Herlaad status" aria-label="Herlaad bron-status">↺</button>
+      </div>`;
+
+    container.querySelector('.src-refresh-btn')?.addEventListener('click', () => renderSourceStatusBar(container));
+  } catch {
+    container.innerHTML = `<span class="src-pill"><span class="src-dot src-dot-err"></span> Status onbekend</span>`;
+  }
+}
+
+// ── Unified zoekresultaat card ────────────────────────────────────────────────
+export function unifiedResultCard(item) {
+  const src    = item.source || 'unknown';
+  const color  = sourceColor(src);
+  const lbl    = sourceLabel(src);
+  const imgEl  = item.image
+    ? `<img class="tidal-img" src="${esc(item.image)}" alt="${esc(item.title)}" loading="lazy" decoding="async"
+         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="tidal-ph" style="display:none;background:${gradientFor(item.title)}">${initials(item.title)}</div>`
+    : `<div class="tidal-ph" style="background:${gradientFor(item.title)}">${initials(item.title)}</div>`;
+  const meta = [
+    item.type === 'album' ? 'Album' : 'Nummer',
+    item.year,
+    item.album && item.type === 'track' ? item.album : null,
+  ].filter(Boolean).join(' · ');
+
+  return `
+    <div class="tidal-card unified-card"
+         data-unified-source="${esc(src)}"
+         data-unified-url="${esc(item.url || '')}"
+         data-unified-title="${esc(item.title)}"
+         data-unified-artist="${esc(item.artist || '')}"
+         data-unified-type="${esc(item.type || 'album')}"
+         data-unified-id="${esc(String(item.id || ''))}"
+         data-unified-platform="${esc(item.platform || '')}">
+      <div class="tidal-cover">${imgEl}</div>
+      <div class="tidal-info">
+        <div class="tidal-title">${esc(item.title)}</div>
+        <div class="tidal-artist artist-link" data-artist="${esc(item.artist || '')}">${esc(item.artist || '')}</div>
+        <div class="tidal-meta">${esc(meta)}</div>
+      </div>
+      <div class="unified-card-actions">
+        <span class="orpheus-platform-badge" style="--badge-color:${color}">${esc(lbl)}</span>
+        <button class="tidal-dl-btn unified-dl-btn" title="Download via ${esc(lbl)}">⬇ Download</button>
+      </div>
+    </div>`;
+}
+
+// ── Unified zoeken ────────────────────────────────────────────────────────────
+export async function renderUnifiedSearch(query) {
+  const target = document.getElementById('unified-content');
+  if (!target) return;
+  const q = (query || '').trim();
+  if (q.length < 2) {
+    target.innerHTML = `<div class="empty">Begin met typen om over alle bronnen te zoeken.</div>`;
+    return;
+  }
+  target.innerHTML = `<div class="loading"><div class="spinner"></div>Zoeken via alle bronnen…</div>`;
+  try {
+    const type = document.getElementById('unified-type-sel')?.value || 'album';
+    const d    = await apiFetch(`/api/download/search?q=${encodeURIComponent(q)}&type=${type}`);
+    const results = d.results || [];
+    if (d.error) { target.innerHTML = `<div class="error-box">⚠️ ${esc(d.error)}</div>`; return; }
+    if (!results.length) {
+      target.innerHTML = `<div class="empty">Geen resultaten voor "<strong>${esc(q)}</strong>" via alle bronnen.</div>`;
+      return;
+    }
+
+    // Groepeer per type
+    const albums = results.filter(r => r.type === 'album');
+    const tracks = results.filter(r => r.type === 'track');
+    let html = `<div class="unified-results-info">${results.length} resultaten over ${new Set(results.map(r => r.source)).size} bronnen</div>`;
+    if (albums.length)
+      html += `<div class="section-title">Albums (${albums.length})</div>
+        <div class="tidal-grid">${albums.map(unifiedResultCard).join('')}</div>`;
+    if (tracks.length)
+      html += `<div class="section-title" style="margin-top:1.5rem">Nummers (${tracks.length})</div>
+        <div class="tidal-grid">${tracks.map(unifiedResultCard).join('')}</div>`;
+    target.innerHTML = html;
+
+    // Download button handlers
+    target.querySelectorAll('.unified-dl-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const card    = btn.closest('.unified-card');
+        const src     = card.dataset.unifiedSource;
+        const url     = card.dataset.unifiedUrl;
+        const title   = card.dataset.unifiedTitle;
+        const artist  = card.dataset.unifiedArtist;
+        const type    = card.dataset.unifiedType;
+
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await triggerOrchestratorDownload({ artist, album: title, type, source: src, url });
+          btn.textContent = '✓'; btn.classList.add('dl-done');
+        } catch (e) {
+          btn.disabled = false; btn.textContent = '⬇ Download';
+          alert('Download mislukt: ' + e.message);
+        }
+      });
+    });
+  } catch (e) {
+    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Orchestrator download triggeren ──────────────────────────────────────────
+export async function triggerOrchestratorDownload({ artist, album, track, type = 'album', quality, source = 'auto', url: _url }) {
+  const quality_val = quality || localStorage.getItem('downloadQuality') || 'flac';
+  const body = { artist, album, track, type, quality: quality_val, source };
+
+  const res = await fetch('/api/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok && res.status >= 500) throw new Error(data.error || 'Orchestrator fout');
+  if (data.status === 'failed') throw new Error(data.error || 'Alle bronnen mislukt');
+
+  // Optioneel: markeer als gedownload
+  markDownloaded(artist || '', album || track || '');
+  return data;
+}
+
+// ── Orchestrator queue renderen ───────────────────────────────────────────────
+export async function renderOrchestratorQueue() {
+  const target = document.getElementById('unified-content');
+  if (!target) return;
+  target.innerHTML = `<div class="loading"><div class="spinner"></div>Queue laden…</div>`;
+  try {
+    const d = await apiFetch('/api/download/queue');
+    const jobs = d.jobs || [];
+    if (!jobs.length) {
+      target.innerHTML = `<div class="empty">Geen actieve downloads in de orchestrator queue.</div>`;
+      return;
+    }
+    target.innerHTML = `
+      <div class="section-title">${jobs.length} actieve download${jobs.length !== 1 ? 's' : ''}</div>
+      <div class="q-list">${jobs.map(job => orchestratorJobRow(job, false)).join('')}</div>`;
+
+    target.querySelectorAll('.unified-retry-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.jobId;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await fetch(`/api/download/retry/${id}`, { method: 'POST' });
+          await renderOrchestratorQueue();
+        } catch { btn.disabled = false; btn.textContent = 'Retry'; }
+      });
+    });
+  } catch (e) {
+    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Orchestrator history renderen ─────────────────────────────────────────────
+export async function renderOrchestratorHistory() {
+  const target = document.getElementById('unified-content');
+  if (!target) return;
+  target.innerHTML = `<div class="loading"><div class="spinner"></div>Geschiedenis laden…</div>`;
+  try {
+    const d = await apiFetch('/api/download/history?limit=100');
+    const jobs = d.jobs || [];
+    if (!jobs.length) {
+      target.innerHTML = `<div class="empty">Nog geen downloads via de orchestrator.</div>`;
+      return;
+    }
+
+    // Knop om alle gefaalde te herstarten
+    const failedCount = jobs.filter(j => j.status === 'failed').length;
+    target.innerHTML = `
+      <div class="section-title">${jobs.length} downloads
+        ${failedCount > 0 ? `<button class="tool-btn" id="retry-all-btn" style="margin-left:auto;font-size:11px">↺ Herstart ${failedCount} mislukt</button>` : ''}
+      </div>
+      <div class="q-list">${jobs.map(job => orchestratorJobRow(job, true)).join('')}</div>`;
+
+    document.getElementById('retry-all-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        const r = await fetch('/api/download/retry-all', { method: 'POST' }).then(r => r.json());
+        btn.textContent = `↺ ${r.retried} herstart`;
+        setTimeout(() => renderOrchestratorHistory(), 2000);
+      } catch { btn.disabled = false; btn.textContent = 'Fout'; }
+    });
+
+    target.querySelectorAll('.unified-retry-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.jobId;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await fetch(`/api/download/retry/${id}`, { method: 'POST' });
+          await renderOrchestratorHistory();
+        } catch { btn.disabled = false; btn.textContent = 'Retry'; }
+      });
+    });
+  } catch (e) {
+    target.innerHTML = `<div class="error-box">⚠️ ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Job row helper ────────────────────────────────────────────────────────────
+function orchestratorJobRow(job, isHistory) {
+  const statusMap = {
+    pending:   { cls: 'q-pending', lbl: 'In wachtrij' },
+    running:   { cls: 'q-active',  lbl: 'Bezig…' },
+    completed: { cls: 'q-done',    lbl: '✓ Voltooid' },
+    failed:    { cls: 'q-error',   lbl: '✗ Mislukt' },
+  };
+  const { cls, lbl } = statusMap[job.status] || { cls: 'q-pending', lbl: job.status };
+  const src     = job.source_used || job.source_requested || 'auto';
+  const color   = sourceColor(src);
+  const srcLbl  = sourceLabel(src);
+  const date    = job.created_at
+    ? new Date(job.created_at * 1000).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '';
+
+  const retryBtn = (isHistory && job.status === 'failed')
+    ? `<button class="tool-btn unified-retry-btn" data-job-id="${job.id}" title="Opnieuw proberen">↺ Retry</button>` : '';
+
+  const errMsg = (job.status === 'failed' && job.error_log)
+    ? `<div class="unified-job-err" title="${esc(job.error_log)}">${esc(job.error_log.slice(0, 80))}${job.error_log.length > 80 ? '…' : ''}</div>` : '';
+
+  return `
+    <div class="q-row">
+      <div class="q-info" style="flex:1">
+        <div class="q-title">${esc(job.album || job.track || '(onbekend)')}</div>
+        ${job.artist ? `<div class="q-artist artist-link" data-artist="${esc(job.artist)}">${esc(job.artist)}</div>` : ''}
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+          <span class="q-status ${cls}">${esc(lbl)}</span>
+          ${src !== 'auto' && src !== 'none' ? `<span class="orpheus-platform-badge" style="--badge-color:${color};font-size:10px;padding:1px 6px">${esc(srcLbl)}</span>` : ''}
+          ${date ? `<span style="font-size:10px;color:var(--muted2)">${esc(date)}</span>` : ''}
+          ${job.attempts > 1 ? `<span style="font-size:10px;color:var(--muted2)">${job.attempts}× geprobeerd</span>` : ''}
+        </div>
+        ${errMsg}
+      </div>
+      ${retryBtn}
+    </div>`;
+}
+
+// ── View wisselen voor unified sectie ─────────────────────────────────────────
+export function setUnifiedView(view) {
+  state.unifiedView = view;
+  document.querySelectorAll('[data-unified-view]').forEach(b => {
+    const active = b.dataset.unifiedView === view;
+    b.classList.toggle('sel-def', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  const sw = document.getElementById('unified-search-wrap');
+  if (sw) sw.style.display = view === 'search' ? '' : 'none';
+
+  if (view === 'search') {
+    const q = document.getElementById('unified-search')?.value || '';
+    if (q.length >= 2) renderUnifiedSearch(q);
+    else {
+      const t = document.getElementById('unified-content');
+      if (t) t.innerHTML = `<div class="empty">Begin met typen om over alle bronnen te zoeken.</div>`;
+    }
+  } else if (view === 'queue')   renderOrchestratorQueue();
+  else if (view === 'history') renderOrchestratorHistory();
+}
+
+// ── Unified Download tab loader ───────────────────────────────────────────────
+export async function loadUnifiedDownloads() {
+  // Bouw de HTML
+  setContent(`
+    <div class="tidal-page">
+
+      <!-- Bron-status balk -->
+      <div id="src-status-container" class="src-status-container"></div>
+
+      <!-- Unified sectie tabs -->
+      <div class="tidal-tabs-row" style="margin-top:8px">
+        <div class="seg-tabs" role="tablist" aria-label="Download secties">
+          <button class="tool-btn sel-def" data-unified-view="search" role="tab" aria-selected="true">🔍 Zoeken</button>
+          <button class="tool-btn" data-unified-view="queue" role="tab" aria-selected="false">⏳ Queue</button>
+          <button class="tool-btn" data-unified-view="history" role="tab" aria-selected="false">📋 Geschiedenis</button>
+        </div>
+        <div class="tidal-tabs-actions">
+          <button class="tool-btn" id="btn-open-tidarr" type="button">Open Tidarr UI</button>
+        </div>
+      </div>
+
+      <!-- Unified zoekbalk -->
+      <div class="tidal-search-wrap" id="unified-search-wrap">
+        <input id="unified-search" class="tidal-search" type="search"
+               placeholder="Zoek albums of tracks via alle bronnen…" autocomplete="off">
+        <select id="unified-type-sel" class="orpheus-quality-sel" style="margin-left:8px;min-width:90px"
+                title="Type" aria-label="Zoek type">
+          <option value="album">Albums</option>
+          <option value="track">Tracks</option>
+        </select>
+      </div>
+
+      <div id="unified-content">
+        <div class="empty">Begin met typen om over alle bronnen te zoeken.</div>
+      </div>
+
+      <!-- Tidarr iframe (verborgen) -->
+      <div id="tidarr-ui-wrap" style="display:none;flex-direction:column;height:80vh">
+        <button class="tool-btn" id="btn-tidarr-close" style="margin-bottom:8px">← Terug</button>
+        <iframe id="tidarr-iframe" data-src="/tidarr-ui" style="flex:1;border:none;border-radius:8px"></iframe>
+      </div>
+    </div>
+  `);
+
+  // Status balk laden
+  renderSourceStatusBar(document.getElementById('src-status-container'));
+
+  // Tabs
+  document.querySelectorAll('[data-unified-view]').forEach(btn => {
+    btn.addEventListener('click', () => setUnifiedView(btn.dataset.unifiedView));
+  });
+
+  // Zoek-input debounce
+  let searchTimer;
+  document.getElementById('unified-search')?.addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => renderUnifiedSearch(e.target.value), 500);
+  });
+  document.getElementById('unified-type-sel')?.addEventListener('change', () => {
+    const q = document.getElementById('unified-search')?.value || '';
+    if (q.length >= 2) renderUnifiedSearch(q);
+  });
+
+  // Tidarr iframe knoppen
+  document.getElementById('btn-open-tidarr')?.addEventListener('click', loadTidarrUI);
+  document.getElementById('btn-tidarr-close')?.addEventListener('click', () => {
+    document.getElementById('tidarr-ui-wrap').style.display = 'none';
+    document.getElementById('content').style.display = '';
+  });
+
+  // Start Tidarr SSE voor queue badge updates
+  startTidarrQueuePolling();
+}
+
+// Export: overschrijf loadDownloads om unified te laden als dat de voorkeur heeft
+export function loadDownloadsUnified() {
+  state.activeView = 'downloads';
+  hideTidarrUI();
+  loadUnifiedDownloads();
+}
+
 // ── Statische event listeners ──────────────────────────────────────────────
 document.getElementById('dl-confirm-cancel')?.addEventListener('click', () => {
   closeDownloadConfirm();
