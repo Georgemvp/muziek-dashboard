@@ -658,6 +658,96 @@ function getDownloadJobsByStatus(status) {
   }
 }
 
+// ── postprocess_log tabel ─────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS postprocess_log (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      download_id  INTEGER,
+      step         TEXT    NOT NULL,
+      status       TEXT    DEFAULT 'pending',
+      input_path   TEXT,
+      output_path  TEXT,
+      details      TEXT,
+      started_at   INTEGER,
+      completed_at INTEGER,
+      FOREIGN KEY (download_id) REFERENCES download_jobs(id)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pplog_download_id ON postprocess_log(download_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pplog_completed   ON postprocess_log(completed_at)');
+  logger.debug('postprocess_log table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing postprocess_log table');
+  throw err;
+}
+
+const _stmtInsertPPLog = db.prepare(`
+  INSERT INTO postprocess_log
+    (download_id, step, status, input_path, output_path, details, started_at, completed_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const _stmtGetPPLog = db.prepare(`
+  SELECT * FROM postprocess_log
+  ORDER BY completed_at DESC
+  LIMIT ?
+`);
+const _stmtGetPPLogByJob = db.prepare(`
+  SELECT * FROM postprocess_log
+  WHERE download_id = ?
+  ORDER BY completed_at ASC
+`);
+
+/**
+ * Sla een postprocessing-stap op in de log.
+ * @param {object} opts
+ * @param {number} [opts.download_id]
+ * @param {string} opts.step
+ * @param {string} opts.status      - 'ok' | 'error' | 'skipped'
+ * @param {string} [opts.input_path]
+ * @param {string} [opts.output_path]
+ * @param {string} [opts.details]   - JSON-string met extra info
+ * @param {number} [opts.started_at]
+ * @param {number} [opts.completed_at]
+ */
+function logPostprocessStep({ download_id = null, step, status, input_path = null, output_path = null, details = null, started_at = null, completed_at = null } = {}) {
+  try {
+    _stmtInsertPPLog.run(
+      download_id,
+      step,
+      status,
+      input_path,
+      output_path,
+      typeof details === 'string' ? details : JSON.stringify(details ?? null),
+      started_at   ?? Date.now(),
+      completed_at ?? Date.now()
+    );
+  } catch (err) {
+    logger.error({ err, step, status }, 'Error logging postprocess step');
+    throw err;
+  }
+}
+
+/** Haal de laatste N postprocess-logregels op. */
+function getPostprocessLog(limit = 50) {
+  try {
+    return _stmtGetPPLog.all(limit);
+  } catch (err) {
+    logger.error({ err }, 'Error getting postprocess log');
+    return [];
+  }
+}
+
+/** Haal alle postprocess-logregels op voor één download-job. */
+function getPostprocessLogByJob(downloadId) {
+  try {
+    return _stmtGetPPLogByJob.all(downloadId);
+  } catch (err) {
+    logger.error({ err, downloadId }, 'Error getting postprocess log by job');
+    return [];
+  }
+}
+
 // ── Eenmalige startup-prune
 try {
   const deleted = pruneCache();
@@ -672,5 +762,6 @@ module.exports = {
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
   getSettings, getSetting, setSetting, setSettings, getAllSettings,
   createDownloadJob, getDownloadJob, updateDownloadJob,
-  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus
+  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
+  logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
 };

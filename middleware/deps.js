@@ -63,9 +63,11 @@ const { getWikipediaExtract } = require('../services/wikipedia');
 // ── Download Orchestrator ─────────────────────────────────────────────────────
 const events = require('../services/events');
 const { DownloadOrchestrator } = require('../services/downloadOrchestrator');
+const { PostProcessor }        = require('../services/postprocess');
 const {
   createDownloadJob, getDownloadJob, updateDownloadJob,
-  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus
+  getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
+  logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
 } = require('../db');
 
 // Maak orchestrator aan met de beschikbare services
@@ -94,6 +96,17 @@ const downloadOrchestrator = new DownloadOrchestrator({
     getPendingDownloadJobs,
     getRecentDownloadJobs,
     getActiveDownloadJobs,
+  },
+  events,
+});
+
+// ── PostProcessor ─────────────────────────────────────────────────────────────
+// Luistert op download:complete events van de orchestrator en verwerkt bestanden.
+const postProcessor = new PostProcessor({
+  db: {
+    getSetting,
+    updateDownloadJob,
+    getDownloadJob,
   },
   events,
 });
@@ -161,8 +174,21 @@ const deps = {
   createDownloadJob, getDownloadJob, updateDownloadJob,
   getPendingDownloadJobs, getRecentDownloadJobs, getActiveDownloadJobs, getDownloadJobsByStatus,
 
+  // PostProcessor
+  postProcessor,
+  getPostprocessLog,
+  getPostprocessLogByJob,
+  logPostprocessStep,
+
   // Helpers
   limitConcurrency,
+
+  // Expose db-object zodat routes zoals postprocess.js direct DB-functies kunnen aanroepen
+  db: {
+    getSetting, setSetting,
+    getDownloadJob, updateDownloadJob,
+    logPostprocessStep, getPostprocessLog, getPostprocessLogByJob,
+  },
 };
 
 module.exports = deps;
