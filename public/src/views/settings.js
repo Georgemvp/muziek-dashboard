@@ -225,6 +225,59 @@ function renderVerbindingen() {
       <div class="settings-info">ℹ️ Last.fm inloggegevens worden beheerd via de <code>.env</code> omgevingsvariabelen op de server.</div>
     </div>
 
+    <div class="settings-card" id="enrichment-settings-card">
+      <h3 class="settings-card-title">Metadata Enrichment</h3>
+      <div class="settings-group" id="enrichment-settings-form">
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Genius API Key</strong><span>Songteksten + artiest bio (gratis via genius.com/api-clients)</span></div>
+          <div class="settings-row-control">
+            <input class="settings-input settings-input-sm" type="password" id="enr-genius-key" placeholder="Voer API key in…">
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Discogs Token</strong><span>Optioneel — hogere rate limit (60/min)</span></div>
+          <div class="settings-row-control">
+            <input class="settings-input settings-input-sm" type="password" id="enr-discogs-token" placeholder="Persoonlijk token…">
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Discogs User-Agent</strong><span>Verplicht voor Discogs API</span></div>
+          <div class="settings-row-control">
+            <input class="settings-input" type="text" id="enr-discogs-ua" value="LastfmMuziekApp/1.0">
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Genre Whitelist Filter</strong><span>Filter ongeldige genres uit alle enrichment-data</span></div>
+          <div class="settings-row-control">
+            <label class="settings-toggle">
+              <input type="checkbox" id="enr-genre-filter">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="font-size:var(--text-sm);font-weight:600;color:var(--text-secondary);margin:var(--space-4) 0 var(--space-3);">Workers in-/uitschakelen</h4>
+      <div class="settings-group">
+        ${['itunes', 'discogs', 'audiodb', 'genius', 'tidal', 'qobuz'].map(src => `
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>${esc(src.charAt(0).toUpperCase() + src.slice(1))}</strong></div>
+          <div class="settings-row-control">
+            <label class="settings-toggle">
+              <input type="checkbox" class="enr-worker-toggle" data-source="${esc(src)}" checked>
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>`).join('')}
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="settings-btn settings-btn-primary" id="save-enrichment-settings">Opslaan</button>
+        <button class="settings-btn settings-btn-secondary" id="enr-manage-genres">Genre Whitelist Beheren</button>
+      </div>
+      <div id="enrichment-settings-msg" style="font-size:12px;margin-top:8px;min-height:16px;color:var(--color-accent)"></div>
+    </div>
+
     <div class="settings-card">
       <h3 class="settings-card-title">Plex</h3>
       <div class="settings-group">
@@ -1166,9 +1219,189 @@ function attachListeners() {
   // ── DB stats vernieuwen ────────────────────────────────────────────────
   document.getElementById('refresh-db-stats-btn')?.addEventListener('click', loadDbStats);
 
+  // ── Enrichment Settings ────────────────────────────────────────────────
+  _initEnrichmentSettings();
+
   // ── Drag list init ─────────────────────────────────────────────────────
   initDragList();
   initDecadeGrid();
+}
+
+/** Laad en initialiseer de enrichment settings UI. */
+async function _initEnrichmentSettings() {
+  try {
+    const res  = await fetch('/api/enrichment/settings');
+    if (!res.ok) return;
+    const cfg  = await res.json();
+
+    // Vul Genius API key veld (toon alleen placeholder als geconfigureerd)
+    const geniusEl = document.getElementById('enr-genius-key');
+    if (geniusEl && cfg.genius_api_key) geniusEl.placeholder = '••••••••••••••••';
+
+    // Discogs token
+    const discogsEl = document.getElementById('enr-discogs-token');
+    if (discogsEl && cfg.discogs_token) discogsEl.placeholder = '••••••••••••••••';
+
+    // Discogs user-agent
+    const discogsUaEl = document.getElementById('enr-discogs-ua');
+    if (discogsUaEl && cfg.discogs_user_agent) discogsUaEl.value = cfg.discogs_user_agent;
+
+    // Genre filter toggle
+    const genreFilterEl = document.getElementById('enr-genre-filter');
+    if (genreFilterEl) genreFilterEl.checked = !!cfg.genre_filter_enabled;
+
+    // Worker toggles
+    document.querySelectorAll('.enr-worker-toggle').forEach(toggle => {
+      const src   = toggle.dataset.source;
+      const key   = `worker_${src}_enabled`;
+      toggle.checked = cfg[key] !== false;
+    });
+  } catch (err) {
+    console.warn('Enrichment settings load failed:', err);
+  }
+
+  // Opslaan
+  document.getElementById('save-enrichment-settings')?.addEventListener('click', async () => {
+    const msgEl = document.getElementById('enrichment-settings-msg');
+    if (msgEl) msgEl.textContent = 'Opslaan…';
+
+    const body = {};
+
+    const geniusEl   = document.getElementById('enr-genius-key');
+    const discogsEl  = document.getElementById('enr-discogs-token');
+    const discogsUaEl = document.getElementById('enr-discogs-ua');
+    const genreFilterEl = document.getElementById('enr-genre-filter');
+
+    if (geniusEl?.value.trim())    body.genius_api_key   = geniusEl.value.trim();
+    if (discogsEl?.value.trim())   body.discogs_token    = discogsEl.value.trim();
+    if (discogsUaEl?.value.trim()) body.discogs_user_agent = discogsUaEl.value.trim();
+    if (genreFilterEl)             body.genre_filter_enabled = genreFilterEl.checked;
+
+    document.querySelectorAll('.enr-worker-toggle').forEach(toggle => {
+      body[`worker_${toggle.dataset.source}_enabled`] = toggle.checked;
+    });
+
+    try {
+      const res = await fetch('/api/enrichment/settings', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (msgEl) { msgEl.textContent = '✓ Opgeslagen!'; setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 3000); }
+    } catch (err) {
+      if (msgEl) msgEl.textContent = `Fout: ${err.message}`;
+    }
+  });
+
+  // Genre Whitelist beheren
+  document.getElementById('enr-manage-genres')?.addEventListener('click', () => _openGenreWhitelist());
+}
+
+/** Toon een inline genre whitelist beheerder. */
+async function _openGenreWhitelist() {
+  try {
+    const res  = await fetch('/api/enrichment/genres');
+    const data = await res.json();
+    const genres = data.genres || [];
+
+    const card = document.getElementById('enrichment-settings-card');
+    if (!card) return;
+
+    // Verwijder bestaand genre-panel
+    document.getElementById('enr-genre-panel')?.remove();
+
+    const panel = document.createElement('div');
+    panel.id    = 'enr-genre-panel';
+    panel.style.cssText = 'margin-top:16px;padding:14px;background:var(--color-bg2,rgba(128,128,128,.08));border-radius:8px;';
+
+    const searchId = 'enr-genre-search-' + Date.now();
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <strong style="font-size:13px;">Genre Whitelist (${genres.length} genres)</strong>
+        <button id="enr-genre-panel-close" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--color-muted)">✕</button>
+      </div>
+      <input id="${searchId}" type="search" placeholder="Zoek genre…" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--color-border,rgba(128,128,128,.2));border-radius:4px;background:var(--color-bg);color:var(--color-text);margin-bottom:8px;">
+      <div id="enr-genre-list" style="max-height:220px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:4px;">
+        ${genres.map(g => `
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 6px;background:${g.enabled ? 'var(--color-accent,#1a73e8)' : 'var(--color-bg2,rgba(128,128,128,.12))'};color:${g.enabled ? '#fff' : 'var(--color-text)'};border-radius:12px;cursor:pointer;user-select:none;">
+            <input type="checkbox" class="enr-genre-check" data-genre="${g.genre}" ${g.enabled ? 'checked' : ''} style="width:0;height:0;opacity:0;position:absolute;">
+            ${g.genre}
+          </label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button id="enr-genre-save" class="settings-btn settings-btn-primary" style="font-size:12px;">Opslaan</button>
+        <button id="enr-genre-select-all" class="settings-btn settings-btn-secondary" style="font-size:12px;">Alles aan</button>
+        <button id="enr-genre-deselect-all" class="settings-btn settings-btn-secondary" style="font-size:12px;">Alles uit</button>
+      </div>
+      <div id="enr-genre-msg" style="font-size:11px;margin-top:6px;color:var(--color-accent)"></div>`;
+
+    card.appendChild(panel);
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Sluit knop
+    panel.querySelector('#enr-genre-panel-close')?.addEventListener('click', () => panel.remove());
+
+    // Zoek filter
+    panel.querySelector(`#${searchId}`)?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      panel.querySelectorAll('.enr-genre-check').forEach(cb => {
+        const label = cb.closest('label');
+        if (label) label.style.display = cb.dataset.genre.includes(q) ? '' : 'none';
+      });
+    });
+
+    // Toggle styling on change
+    panel.querySelectorAll('.enr-genre-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const label = cb.closest('label');
+        if (label) {
+          label.style.background = cb.checked ? 'var(--color-accent,#1a73e8)' : 'var(--color-bg2,rgba(128,128,128,.12))';
+          label.style.color      = cb.checked ? '#fff' : 'var(--color-text)';
+        }
+      });
+    });
+
+    // Alles aan/uit
+    panel.querySelector('#enr-genre-select-all')?.addEventListener('click', () => {
+      panel.querySelectorAll('.enr-genre-check').forEach(cb => {
+        cb.checked = true;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    panel.querySelector('#enr-genre-deselect-all')?.addEventListener('click', () => {
+      panel.querySelectorAll('.enr-genre-check').forEach(cb => {
+        cb.checked = false;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+
+    // Opslaan
+    panel.querySelector('#enr-genre-save')?.addEventListener('click', async () => {
+      const msgEl = panel.querySelector('#enr-genre-msg');
+      if (msgEl) msgEl.textContent = 'Opslaan…';
+
+      const updated = [];
+      panel.querySelectorAll('.enr-genre-check').forEach(cb => {
+        updated.push({ genre: cb.dataset.genre, enabled: cb.checked });
+      });
+
+      try {
+        const r = await fetch('/api/enrichment/genres', {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ genres: updated }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (msgEl) { msgEl.textContent = `✓ ${updated.length} genres opgeslagen`; }
+      } catch (err) {
+        if (msgEl) msgEl.textContent = `Fout: ${err.message}`;
+      }
+    });
+
+  } catch (err) {
+    console.warn('Genre whitelist load failed:', err);
+  }
 }
 
 // ── Hoofdrender functie ────────────────────────────────────────────────────

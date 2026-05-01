@@ -29,6 +29,15 @@ function runStartup(server, deps) {
     logger.error({ err: err.message }, '⚠ Automation Engine initialisatie mislukt');
   }
 
+  // Enrichment Manager initialiseren
+  try {
+    const enrichmentManager = require('../services/enrichment/manager');
+    enrichmentManager.init(deps);
+    logger.info('✓ Enrichment Manager geïnitialiseerd');
+  } catch (err) {
+    logger.error({ err: err.message }, '⚠ Enrichment Manager initialisatie mislukt');
+  }
+
   logger.info('🔄 Initializing Plex library and discovery services in parallel...');
   Promise.allSettled([syncPlexLibrary(true), initDiscover(), initGaps(), initReleases()])
     .then(([plexResult, discoverResult, gapsResult, releasesResult]) => {

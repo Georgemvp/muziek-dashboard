@@ -1688,6 +1688,9 @@ export async function loadHome() {
         ${renderListeningStats(topArtistsRaw, topTracksRaw)}
       </div>
 
+      <!-- 7. Enrichment Pipeline Widget -->
+      <div id="home-enrichment-section">${renderEnrichmentWidget()}</div>
+
     </div>`;
 
   // ── Post-render initialisatie ──────────────────────────────────────────
@@ -1718,6 +1721,25 @@ export async function loadHome() {
 
   // Genre donut — asynchroon laden (eigen API-calls, geen blokkering)
   loadAndRenderGenres('7day');
+
+  // Enrichment widget — asynchroon laden
+  loadEnrichmentWidget().catch(() => {});
+
+  // "Queue Alles" knop
+  document.getElementById('enrichment-queue-all')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Bezig…';
+    try {
+      const r = await fetch('/api/enrichment/queue/all', { method: 'POST' });
+      const d = await r.json();
+      btn.textContent = `${d.queued || 0} items toegevoegd`;
+      setTimeout(() => loadEnrichmentWidget().catch(() => {}), 1000);
+    } catch {
+      btn.textContent = 'Fout!';
+    }
+    setTimeout(() => { btn.disabled = false; btn.textContent = 'Queue Alles'; }, 3000);
+  });
 
   // "MORE" knoppen → switchView
   content.querySelectorAll('[data-switch]').forEach(btn => {
@@ -1983,6 +2005,110 @@ export async function loadHome() {
 
   // Plex badges asynchroon controleren voor New Releases
   checkPlexBadges(releases, _releasesTab);
+}
+
+// ── Enrichment Widget ─────────────────────────────────────────────────────
+
+/**
+ * Render de enrichment widget als skeleton (wordt asynchroon gevuld).
+ */
+function renderEnrichmentWidget() {
+  return `
+    <section class="home-section enrichment-widget" id="enrichment-widget">
+      <div class="home-section-header">
+        <h2 class="home-section-title">Metadata Enrichment</h2>
+        <div class="enrichment-header-actions">
+          <button class="enrichment-queue-all-btn home-more-btn" id="enrichment-queue-all">
+            Queue Alles
+          </button>
+        </div>
+      </div>
+      <div class="enrichment-workers" id="enrichment-workers">
+        <div class="enrichment-loading">Laden…</div>
+      </div>
+    </section>`;
+}
+
+/**
+ * Render de worker-rij HTML vanuit status-data.
+ * @param {object} statusData - Response van GET /api/enrichment/status
+ */
+function renderEnrichmentWorkers(statusData) {
+  if (!statusData || !Object.keys(statusData).length) {
+    return '<div class="enrichment-empty">Geen enrichment workers geconfigureerd.</div>';
+  }
+
+  return Object.entries(statusData).map(([source, info]) => {
+    const total    = (info.queue.pending || 0) + (info.queue.processing || 0)
+                   + (info.queue.done || 0) + (info.queue.error || 0);
+    const done     = info.queue.done || 0;
+    const pct      = total > 0 ? Math.round((done / total) * 100) : 0;
+    const isPaused = info.paused;
+    const hasError = (info.stats.errors || 0) > 0;
+
+    const statusDot = isPaused
+      ? '<span class="enrichment-dot enrichment-dot--paused" title="Gepauzeerd">⏸</span>'
+      : hasError
+        ? '<span class="enrichment-dot enrichment-dot--error" title="Fouten">⚠</span>'
+        : info.enabled
+          ? '<span class="enrichment-dot enrichment-dot--running" title="Actief">●</span>'
+          : '<span class="enrichment-dot enrichment-dot--disabled" title="Uitgeschakeld">○</span>';
+
+    const lastOk  = info.stats.lastSuccess
+      ? new Date(info.stats.lastSuccess).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+      : '—';
+
+    const btnLabel = isPaused ? 'Hervatten' : 'Pauzeren';
+    const btnAction = isPaused ? 'resume' : 'pause';
+
+    return `
+      <div class="enrichment-worker-card" data-source="${esc(source)}">
+        <div class="enrichment-worker-header">
+          ${statusDot}
+          <span class="enrichment-worker-label">${esc(info.label || source)}</span>
+          <button class="enrichment-pause-btn" data-action="${esc(btnAction)}" data-source="${esc(source)}">${esc(btnLabel)}</button>
+        </div>
+        <div class="enrichment-worker-stats">
+          <span class="enrichment-stat" title="In wachtrij">${info.queue.pending || 0} wachtend</span>
+          <span class="enrichment-stat">${info.queue.done || 0} klaar</span>
+          <span class="enrichment-stat ${hasError ? 'enrichment-stat--error' : ''}">${info.stats.errors || 0} fouten</span>
+          <span class="enrichment-stat enrichment-stat--muted">Laatste: ${esc(lastOk)}</span>
+        </div>
+        <div class="enrichment-progress-bar">
+          <div class="enrichment-progress-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="enrichment-progress-label">${pct}% (${done}/${total})</div>
+      </div>`;
+  }).join('');
+}
+
+/**
+ * Laad enrichment status asynchroon en vul het widget.
+ */
+async function loadEnrichmentWidget() {
+  const workersEl = document.getElementById('enrichment-workers');
+  if (!workersEl) return;
+
+  try {
+    const status = await apiFetch('/api/enrichment/status');
+    workersEl.innerHTML = renderEnrichmentWorkers(status);
+
+    // Event listeners koppelen
+    workersEl.querySelectorAll('.enrichment-pause-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { action, source } = btn.dataset;
+        btn.disabled = true;
+        try {
+          await fetch(`/api/enrichment/${action}/${source}`, { method: 'POST' });
+          await loadEnrichmentWidget(); // Herlaad widget
+        } catch {
+          btn.disabled = false;
+        }
+      });
+    });
+  } catch {
+    workersEl.innerHTML = '<div class="enrichment-error">Enrichment status niet beschikbaar.</div>';
+  }
 }
 
 // ── Bug 4: Now Playing indicator updater ──────────────────────────────────

@@ -1005,6 +1005,292 @@ function pruneExpiredPlaylists() {
   }
 }
 
+// ── Enrichment Queue & Data tabellen ─────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS enrichment_queue (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type  TEXT NOT NULL,
+      entity_name  TEXT NOT NULL,
+      entity_id    TEXT,
+      source       TEXT NOT NULL,
+      status       TEXT DEFAULT 'pending',
+      attempts     INTEGER DEFAULT 0,
+      last_attempt INTEGER,
+      error_message TEXT,
+      created_at   INTEGER DEFAULT (strftime('%s','now'))
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_eq_status   ON enrichment_queue(status)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_eq_source   ON enrichment_queue(source)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_eq_entity   ON enrichment_queue(entity_type, entity_name)');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS enrichment_data (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_name TEXT NOT NULL,
+      source      TEXT NOT NULL,
+      data_json   TEXT NOT NULL,
+      created_at  INTEGER DEFAULT (strftime('%s','now')),
+      updated_at  INTEGER,
+      UNIQUE(entity_type, entity_name, source)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_ed_entity ON enrichment_data(entity_type, entity_name)');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS genre_whitelist (
+      genre   TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 1
+    )
+  `);
+  logger.debug('Enrichment tables initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing enrichment tables');
+  throw err;
+}
+
+// ── Enrichment prepared statements ───────────────────────────────────────────
+const _stmtEnqueueItem = db.prepare(`
+  INSERT OR IGNORE INTO enrichment_queue (entity_type, entity_name, entity_id, source, status)
+  VALUES (?, ?, ?, ?, 'pending')
+`);
+const _stmtGetPendingQueue = db.prepare(`
+  SELECT * FROM enrichment_queue
+  WHERE source = ? AND status = 'pending'
+  ORDER BY created_at ASC
+  LIMIT ?
+`);
+const _stmtUpdateQueueItem = db.prepare(`
+  UPDATE enrichment_queue
+  SET status=?, attempts=attempts+1, last_attempt=strftime('%s','now'), error_message=?
+  WHERE id=?
+`);
+const _stmtResetStuckItems = db.prepare(`
+  UPDATE enrichment_queue SET status='pending'
+  WHERE source = ? AND status = 'processing'
+    AND last_attempt < (strftime('%s','now') - 300)
+`);
+const _stmtGetQueueStats = db.prepare(`
+  SELECT source, status, COUNT(*) as cnt
+  FROM enrichment_queue
+  GROUP BY source, status
+`);
+const _stmtSaveEnrichmentData = db.prepare(`
+  INSERT INTO enrichment_data (entity_type, entity_name, source, data_json, created_at, updated_at)
+  VALUES (?, ?, ?, ?, strftime('%s','now'), strftime('%s','now'))
+  ON CONFLICT(entity_type, entity_name, source)
+  DO UPDATE SET data_json=excluded.data_json, updated_at=strftime('%s','now')
+`);
+const _stmtGetEnrichmentData = db.prepare(`
+  SELECT * FROM enrichment_data WHERE entity_type=? AND entity_name=?
+`);
+const _stmtGetEnrichmentDataSource = db.prepare(`
+  SELECT * FROM enrichment_data WHERE entity_type=? AND entity_name=? AND source=?
+`);
+const _stmtCheckAlreadyQueued = db.prepare(`
+  SELECT id FROM enrichment_queue
+  WHERE entity_type=? AND entity_name=? AND source=?
+    AND status NOT IN ('error','skipped')
+`);
+
+// Genre whitelist statements
+const _stmtGetGenres = db.prepare('SELECT genre, enabled FROM genre_whitelist ORDER BY genre ASC');
+const _stmtSetGenre  = db.prepare('INSERT OR REPLACE INTO genre_whitelist (genre, enabled) VALUES (?, ?)');
+const _stmtToggleGenre = db.prepare('UPDATE genre_whitelist SET enabled=? WHERE genre=?');
+
+/** Voeg een item toe aan de enrichment queue. Negeert duplicaten. */
+function enqueueEnrichment(entityType, entityName, source, entityId = null) {
+  try {
+    const existing = _stmtCheckAlreadyQueued.get(entityType, entityName, source);
+    if (existing) return false;
+    _stmtEnqueueItem.run(entityType, entityName, entityId, source);
+    return true;
+  } catch (err) {
+    logger.error({ entityType, entityName, source, err }, 'Error enqueueing enrichment item');
+    return false;
+  }
+}
+
+/** Haal N pending items op voor een bron. */
+function getPendingEnrichmentItems(source, limit = 10) {
+  try {
+    return _stmtGetPendingQueue.all(source, limit);
+  } catch (err) {
+    logger.error({ source, err }, 'Error getting pending enrichment items');
+    return [];
+  }
+}
+
+/** Update de status van een queue-item. */
+function updateEnrichmentItem(id, status, errorMessage = null) {
+  try {
+    _stmtUpdateQueueItem.run(status, errorMessage, id);
+  } catch (err) {
+    logger.error({ id, status, err }, 'Error updating enrichment item');
+  }
+}
+
+/** Reset vastgelopen 'processing' items (ouder dan 5 minuten) naar 'pending'. */
+function resetStuckEnrichmentItems(source) {
+  try {
+    return _stmtResetStuckItems.run(source).changes;
+  } catch (err) {
+    logger.error({ source, err }, 'Error resetting stuck enrichment items');
+    return 0;
+  }
+}
+
+/** Geeft queue-statistieken terug per bron en status. */
+function getEnrichmentQueueStats() {
+  try {
+    const rows = _stmtGetQueueStats.all();
+    const stats = {};
+    for (const row of rows) {
+      if (!stats[row.source]) stats[row.source] = {};
+      stats[row.source][row.status] = row.cnt;
+    }
+    return stats;
+  } catch (err) {
+    logger.error({ err }, 'Error getting enrichment queue stats');
+    return {};
+  }
+}
+
+/** Sla enrichment data op voor een entiteit+bron. */
+function saveEnrichmentData(entityType, entityName, source, data) {
+  try {
+    _stmtSaveEnrichmentData.run(entityType, entityName, source, JSON.stringify(data));
+  } catch (err) {
+    logger.error({ entityType, entityName, source, err }, 'Error saving enrichment data');
+    throw err;
+  }
+}
+
+/** Haal alle enrichment data op voor een entiteit. */
+function getEnrichmentData(entityType, entityName) {
+  try {
+    const rows = _stmtGetEnrichmentData.all(entityType, entityName);
+    const result = {};
+    for (const row of rows) {
+      try { result[row.source] = JSON.parse(row.data_json); } catch {}
+    }
+    return result;
+  } catch (err) {
+    logger.error({ entityType, entityName, err }, 'Error getting enrichment data');
+    return {};
+  }
+}
+
+/** Haal enrichment data op voor een specifieke bron. */
+function getEnrichmentDataBySource(entityType, entityName, source) {
+  try {
+    const row = _stmtGetEnrichmentDataSource.get(entityType, entityName, source);
+    if (!row) return null;
+    try { return JSON.parse(row.data_json); } catch { return null; }
+  } catch (err) {
+    logger.error({ entityType, entityName, source, err }, 'Error getting enrichment data by source');
+    return null;
+  }
+}
+
+/** Haal genre whitelist op als array van { genre, enabled } objecten. */
+function getGenreWhitelist() {
+  try {
+    return _stmtGetGenres.all();
+  } catch (err) {
+    logger.error({ err }, 'Error getting genre whitelist');
+    return [];
+  }
+}
+
+/** Voeg genre toe of update enabled-status. */
+function setGenreEnabled(genre, enabled) {
+  try {
+    _stmtSetGenre.run(genre.toLowerCase().trim(), enabled ? 1 : 0);
+  } catch (err) {
+    logger.error({ genre, enabled, err }, 'Error setting genre whitelist entry');
+    throw err;
+  }
+}
+
+/** Bulk-update genre whitelist. */
+function setGenreWhitelist(genres) {
+  try {
+    const bulkUpdate = db.transaction((list) => {
+      for (const { genre, enabled } of list) {
+        _stmtSetGenre.run(genre.toLowerCase().trim(), enabled ? 1 : 0);
+      }
+    });
+    bulkUpdate(genres);
+  } catch (err) {
+    logger.error({ err }, 'Error bulk-updating genre whitelist');
+    throw err;
+  }
+}
+
+/** Vul genre_whitelist met standaard genres als de tabel leeg is. */
+function seedGenreWhitelist() {
+  try {
+    const existing = db.prepare('SELECT COUNT(*) as cnt FROM genre_whitelist').get();
+    if (existing.cnt > 0) return;
+
+    const DEFAULT_GENRES = [
+      'acid jazz','acid rock','acoustic','afrobeat','alternative','alternative country',
+      'alternative metal','alternative rock','ambient','americana','art pop','art rock',
+      'avant-garde','avant-garde jazz','baroque','baroque pop','bebop','big band',
+      'black metal','bluegrass','blues','blues rock','boogie woogie','bossanova',
+      'bossa nova','brass band','breakbeat','britpop','bubblegum pop','celtic',
+      'chamber music','chamber pop','chanson','chicago blues','chillout','chillwave',
+      'christian rock','christmas','cinematic','classic rock','classical','club',
+      'comedy','conscious hip-hop','cool jazz','country','country blues','country pop',
+      'country rock','crossover','cumbia','dance','dance pop','dancehall','dark ambient',
+      'dark folk','darkwave','death metal','deep house','delta blues','detroit techno',
+      'disco','doom metal','downtempo','dream pop','drone','drum and bass','dub',
+      'dubstep','east coast hip-hop','easy listening','ebm','electronic','electro',
+      'electro house','electronica','electropop','emo','ethereal','experimental',
+      'experimental rock','flamenco','folk','folk metal','folk pop','folk rock',
+      'freestyle','funk','funk metal','funky house','fusion','g-funk','gangsta rap',
+      'garage rock','glam metal','glam rock','gospel','gothic','gothic metal',
+      'gothic rock','grindcore','grunge','hard bop','hard rock','hardcore',
+      'hardcore punk','heavy metal','hip-hop','hip hop','house','idm',
+      'indie','indie folk','indie pop','indie rock','industrial','industrial metal',
+      'instrumental','j-pop','j-rock','jazz','jazz fusion','jazz pop','jazz rock',
+      'lo-fi','lounge','latin','latin jazz','latin pop','latin rock','math rock',
+      'medieval','melodic death metal','melodic hardcore','metal','metalcore',
+      'minimal','minimal techno','mod','modern classical','motown','neoclassical',
+      'neo soul','new age','new wave','noise','noise rock','nu-jazz','nu-metal',
+      'oldies','opera','orchestral','outlaw country','parody','piano','pop',
+      'pop punk','pop rock','post-hardcore','post-punk','post-rock','power metal',
+      'power pop','progressive','progressive house','progressive metal','progressive rock',
+      'psychedelic','psychedelic rock','psychobilly','punk','punk rock','r&b',
+      'ragtime','rap','rap rock','rave','reggae','reggaeton','rhythm and blues',
+      'rock','rock and roll','rockabilly','roots reggae','salsa','shoegaze',
+      'singer-songwriter','ska','ska punk','sludge metal','smooth jazz','soul',
+      'sound collage','space rock','speed metal','stoner rock','surf rock',
+      'swing','symphonic metal','symphonic rock','synth-pop','synthwave',
+      'technical death metal','techno','thrash metal','trance','trap',
+      'tribal','trip-hop','tropical','turntablism','twee pop','uk garage',
+      'underground hip-hop','urban','vaporwave','viking metal','vocal jazz',
+      'west coast hip-hop','world','world music','worship','zydeco',
+    ];
+
+    const insert = db.transaction((genres) => {
+      for (const g of genres) {
+        _stmtSetGenre.run(g, 1);
+      }
+    });
+    insert(DEFAULT_GENRES);
+    logger.info({ count: DEFAULT_GENRES.length }, 'Genre whitelist seeded with defaults');
+  } catch (err) {
+    logger.warn({ err }, 'Error seeding genre whitelist');
+  }
+}
+
+// Seed genres bij startup
+try { seedGenreWhitelist(); } catch {}
+
 // ── Eenmalige startup-prune
 try {
   const deleted = pruneCache();
@@ -1080,4 +1366,9 @@ module.exports = {
   saveAcoustidResult, getAcoustidResultByJob, getAcoustidResultByPath, getAcoustidResults,
   savePlaylist, getPlaylist, getAllSavedPlaylists, pruneExpiredPlaylists, PLAYLIST_TTL,
   saveStatsSnapshot, getStatsSnapshot, getRecentStatsSnapshots,
+  // Enrichment
+  enqueueEnrichment, getPendingEnrichmentItems, updateEnrichmentItem,
+  resetStuckEnrichmentItems, getEnrichmentQueueStats,
+  saveEnrichmentData, getEnrichmentData, getEnrichmentDataBySource,
+  getGenreWhitelist, setGenreEnabled, setGenreWhitelist, seedGenreWhitelist,
 };
