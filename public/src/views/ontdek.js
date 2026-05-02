@@ -20,6 +20,8 @@ let genreModalOpen   = false;
 let recsData = null;
 let releasesData = null;
 let discoverData = null;
+let _discoverCache = null; // { data: discObj, at: timestamp }
+const DISCOVER_CACHE_TTL = 5 * 60 * 1000;
 let recsFilter = 'all';
 let releasesFilter = 'all';
 let releasesSort = 'date';
@@ -671,6 +673,67 @@ function _dscFillListenBrainz(container, section, data) {
   container.innerHTML = html;
 }
 
+// ── Discover section polling ──────────────────────────────────────────────────
+let _discoverPollTimer = null;
+
+function _stopDiscoverPolling() {
+  if (_discoverPollTimer) { clearInterval(_discoverPollTimer); _discoverPollTimer = null; }
+}
+
+function _startDiscoverPolling(initialBuilding) {
+  _stopDiscoverPolling();
+  if (!Object.values(initialBuilding).some(Boolean)) return;
+
+  let knownBuilding = { ...initialBuilding };
+
+  _discoverPollTimer = setInterval(async () => {
+    if (state.activeView !== 'ontdek' || ontdekCurrentTab !== 'discover') {
+      _stopDiscoverPolling(); return;
+    }
+    try {
+      const status = await apiFetch('/api/discover/status');
+      const newlyReady = Object.keys(knownBuilding).filter(k => knownBuilding[k] && status[k] && !status[k].building && status[k].ready);
+
+      if (newlyReady.length) {
+        const fresh = await apiFetch('/api/discover');
+        if (fresh.status === 'ok') {
+          _discoverCache = { data: fresh, at: Date.now() };
+          discoverData = fresh;
+          const b2 = fresh.building || {};
+          const g = id => document.getElementById(`dsc-body-${id}`);
+          if (newlyReady.includes('undiscovered') && g('undiscovered'))
+            _dscFillUndiscovered(g('undiscovered'), fresh.undiscoveredAlbums || [], b2.undiscovered);
+          if (newlyReady.includes('newInGenres') && g('new-genres'))
+            _dscFillNewInGenres(g('new-genres'), fresh.newInGenres || [], b2.newInGenres);
+          if (newlyReady.includes('similar') && g('similar'))
+            _dscFillSimilar(g('similar'), fresh.similarArtists || [], fresh.basedOn || [], b2.similar);
+          if (newlyReady.includes('fromLabels') && g('labels'))
+            _dscFillFromLabels(g('labels'), fresh.fromYourLabels || [], b2.fromLabels);
+          if (newlyReady.includes('deepCuts') && g('deepcuts'))
+            _dscFillDeepCuts(g('deepcuts'), fresh.deepCuts || [], b2.deepCuts);
+          if (newlyReady.includes('hiddenGems') && g('hiddengems'))
+            _dscFillHiddenGems(g('hiddengems'), fresh.hiddenGems || [], b2.hiddenGems);
+          knownBuilding = { ...b2 };
+        }
+      }
+
+      if (!Object.values(status).some(s => s.building)) _stopDiscoverPolling();
+    } catch {}
+  }, 5000);
+}
+
+// ── Discover secties vullen vanuit een disc-object ────────────────────────────
+function _fillDiscoverSections(disc, overrideBuilding) {
+  const b = overrideBuilding || disc.building || {};
+  const g = id => document.getElementById(`dsc-body-${id}`);
+  if (g('undiscovered'))  _dscFillUndiscovered(g('undiscovered'), disc.undiscoveredAlbums || [], b.undiscovered);
+  if (g('new-genres'))    _dscFillNewInGenres(g('new-genres'),    disc.newInGenres        || [], b.newInGenres);
+  if (g('similar'))       _dscFillSimilar(g('similar'),           disc.similarArtists     || [], disc.basedOn || [], b.similar);
+  if (g('labels'))        _dscFillFromLabels(g('labels'),         disc.fromYourLabels     || [], b.fromLabels);
+  if (g('deepcuts'))      _dscFillDeepCuts(g('deepcuts'),         disc.deepCuts           || [], b.deepCuts);
+  if (g('hiddengems'))    _dscFillHiddenGems(g('hiddengems'),     disc.hiddenGems         || [], b.hiddenGems);
+}
+
 // ── Discover tab hoofdrenderer ────────────────────────────────────────────────
 async function renderDiscoverTab() {
   const skelList = Array(5).fill(`<div class="vk-track-row">
@@ -738,9 +801,42 @@ async function renderDiscoverTab() {
 
   </div>`;
 
+  const now = Date.now();
+  const cachedDisc = _discoverCache && _discoverCache.data.status === 'ok' ? _discoverCache : null;
+  const isFresh    = cachedDisc && (now - cachedDisc.at) < DISCOVER_CACHE_TTL;
+
   setContent(pageHtml);
 
-  // Alle endpoints parallel ophalen
+  if (isFresh) {
+    // Toon gecachede data direct, haal niet-discover endpoints op de achtergrond op
+    if (cachedDisc.data.plexConnected) state.plexOk = true;
+    discoverData = cachedDisc.data;
+    _fillDiscoverSections(cachedDisc.data);
+
+    const [genresRes, plRes, lbRes] = await Promise.allSettled([
+      apiFetch('/api/genres'),
+      apiFetch('/api/playlists'),
+      apiFetch('/api/listenbrainz/recommendations'),
+    ]);
+    const g = id => document.getElementById(`dsc-body-${id}`);
+    _dscFillHero(g('hero'), genresRes.status === 'fulfilled' ? genresRes.value : null);
+    _dscFillPlaylists(g('playlists'), plRes.status === 'fulfilled' ? plRes.value : null);
+    const lbSection = document.getElementById('dsc-lb-section');
+    if (lbSection) _dscFillListenBrainz(g('lb'), lbSection, lbRes.status === 'fulfilled' ? lbRes.value : null);
+
+    // Stille achtergrond-update van discover-data
+    apiFetch('/api/discover').then(fresh => {
+      if (fresh.status === 'ok') {
+        _discoverCache = { data: fresh, at: Date.now() };
+        discoverData = fresh;
+        _fillDiscoverSections(fresh);
+        _startDiscoverPolling(fresh.building || {});
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  // Geen verse cache: alle endpoints parallel ophalen
   const [discRes, genresRes, plRes, lbRes] = await Promise.allSettled([
     apiFetch('/api/discover'),
     apiFetch('/api/genres'),
@@ -771,30 +867,32 @@ async function renderDiscoverTab() {
 
   const disc = discRes.value;
   if (disc.status === 'building') {
-    const buildHtml = `<div class="vk-building">
-      <div class="spinner" style="margin-bottom:10px"></div>
-      <div class="vk-building-title">Muziekontdekkingen worden geanalyseerd</div>
-      <div class="vk-building-sub">${esc(disc.message || '')}<br>Pagina ververst over 20 seconden.</div>
-    </div>`;
-    ['undiscovered','new-genres','similar','labels','deepcuts','hiddengems'].forEach(id => {
-      const el = g(id); if (el) el.innerHTML = buildHtml;
-    });
-    setTimeout(() => {
-      if (state.activeView === 'ontdek' && ontdekCurrentTab === 'discover') renderDiscoverTab();
-    }, 20000);
+    if (cachedDisc) {
+      // Toon verouderde data met "wordt bijgewerkt" per sectie die bouwt
+      if (cachedDisc.data.plexConnected) state.plexOk = true;
+      discoverData = cachedDisc.data;
+      const allBuilding = { similar: true, undiscovered: true, newInGenres: true, fromLabels: true, deepCuts: true, hiddenGems: true };
+      _fillDiscoverSections(cachedDisc.data, allBuilding);
+    } else {
+      const buildHtml = `<div class="vk-building">
+        <div class="spinner" style="margin-bottom:10px"></div>
+        <div class="vk-building-title">Muziekontdekkingen worden geanalyseerd</div>
+        <div class="vk-building-sub">${esc(disc.message || '')}<br>Pagina ververst over 20 seconden.</div>
+      </div>`;
+      ['undiscovered','new-genres','similar','labels','deepcuts','hiddengems'].forEach(id => {
+        const el = g(id); if (el) el.innerHTML = buildHtml;
+      });
+    }
+    _startDiscoverPolling({ similar: true, undiscovered: true, newInGenres: true, fromLabels: true, deepCuts: true, hiddenGems: true });
     return;
   }
 
   if (disc.plexConnected) state.plexOk = true;
   discoverData = disc;
+  _discoverCache = { data: disc, at: Date.now() };
 
-  const b = disc.building || {};
-  _dscFillUndiscovered(g('undiscovered'), disc.undiscoveredAlbums || [], b.undiscovered);
-  _dscFillNewInGenres(g('new-genres'),    disc.newInGenres        || [], b.newInGenres);
-  _dscFillSimilar(g('similar'),           disc.similarArtists     || [], disc.basedOn || [], b.similar);
-  _dscFillFromLabels(g('labels'),         disc.fromYourLabels     || [], b.fromLabels);
-  _dscFillDeepCuts(g('deepcuts'),         disc.deepCuts           || [], b.deepCuts);
-  _dscFillHiddenGems(g('hiddengems'),     disc.hiddenGems         || [], b.hiddenGems);
+  _fillDiscoverSections(disc);
+  _startDiscoverPolling(disc.building || {});
 
   // Sectie-niveau refresh (delegeert op contentEl, loopt onschadelijk af op andere tabs)
   contentEl.addEventListener('click', async e => {
@@ -819,6 +917,7 @@ async function renderDiscoverTab() {
         // Volledige discover refresh — herlaad de hele tab
         await p('/api/discover/refresh', { method: 'POST' }).catch(() => {});
         discoverData = null;
+        _discoverCache = null;
         invalidate('discover');
         renderDiscoverTab();
         return;
@@ -1301,6 +1400,8 @@ export async function loadOntdek() {
       else if (ontdekCurrentTab === 'discover') {
         invalidate('discover');
         discoverData = null;
+        _discoverCache = null;
+        _stopDiscoverPolling();
         try { await Promise.allSettled([
           p('/api/discover/refresh', { method: 'POST' }),
           p('/api/genres/refresh',   { method: 'POST' }),

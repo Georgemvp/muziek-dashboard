@@ -35,7 +35,7 @@ const {
   getDeezerArtistTopTracks, searchDeezerArtist, getSimilarArtists
 } = require('../services/deezer');
 
-const { getDiscover, refreshDiscover, initDiscover }              = require('../services/discover');
+const { getDiscover, refreshDiscover, initDiscover, getDiscoverStatus } = require('../services/discover');
 const { getGenreMap, getGenreDeepDive, refreshGenres, initGenres } = require('../services/genres');
 const { getGaps, refreshGaps, initGaps, getArtistGaps }           = require('../services/gaps');
 const { getReleases, refreshReleases, initReleases }    = require('../services/releases');
@@ -173,7 +173,7 @@ const deps = {
   getDeezerArtistTopTracks, searchDeezerArtist, getSimilarArtists,
 
   // Discovery & gaps
-  getDiscover, refreshDiscover, initDiscover,
+  getDiscover, refreshDiscover, initDiscover, getDiscoverStatus,
   getGenreMap, getGenreDeepDive, refreshGenres, initGenres,
   getGaps, getArtistGaps, refreshGaps, initGaps,
   getReleases, refreshReleases, initReleases,
