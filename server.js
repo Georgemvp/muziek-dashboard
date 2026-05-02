@@ -33,6 +33,13 @@ app.use(compression());
 registerProxies(app);
 app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); next(); });
 
+// sw.js mag nooit gecached worden — browser moet altijd de nieuwste versie ophalen
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   setHeaders: (res, filePath) => {
