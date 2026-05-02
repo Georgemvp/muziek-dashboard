@@ -9,7 +9,6 @@ import { state } from './state.js';
 const viewMeta = {
   home:        { title: 'Muziek · Home',                       renderFn: 'loadHome' },
   ontdek:      { title: 'Muziek · Ontdek',                     renderFn: 'loadOntdek' },
-  gaps:        { title: 'Muziek · Gaps',                       renderFn: 'loadGaps' },
   downloads:   { title: 'Muziek · Downloads',                  renderFn: 'loadDownloads' },
   nu:          { title: 'Muziek · Nu Bezig',                   renderFn: 'loadNu' },
   genres:      { title: 'Muziek · Genres',                     renderFn: 'loadGenres' },
@@ -34,8 +33,6 @@ const viewMeta = {
   audiomuse:                     { title: 'Muziek · AudioMuse',        renderFn: 'loadAudioMuse' },
   'audiomuse-smart-playlists':   { title: 'Muziek · Smart Playlists',  renderFn: 'loadAudioMuseSmartPlaylists' },
   orpheus:                       { title: 'Muziek · OrpheusDL',        renderFn: 'loadOrpheus' },
-  releases:                      { title: 'Muziek · New Releases',      renderFn: 'loadReleases' },
-  watchlist:                     { title: 'Muziek · Watchlist',          renderFn: 'loadWatchlistView' },
   settings:                      { title: 'Muziek · Instellingen',      renderFn: 'loadSettings' },
   automations:                   { title: 'Muziek · Automatisering',    renderFn: 'loadAutomations' },
   maintenance:                   { title: 'Muziek · Bibliotheek Onderhoud', renderFn: 'loadMaintenance' },
@@ -46,7 +43,6 @@ const viewMeta = {
 const viewLoaders = {
   home:        () => import('./views/home.js'),
   ontdek:      () => import('./views/ontdek.js'),
-  gaps:        () => import('./views/gaps.js'),
   downloads:   () => import('./views/downloads.js'),
   nu:          () => import('./views/nu.js'),
   genres:      () => import('./views/genres.js'),
@@ -71,8 +67,6 @@ const viewLoaders = {
   audiomuse:                     () => import('./views/audiomuse.js'),
   'audiomuse-smart-playlists':   () => import('./views/audiomuse-smart-playlists.js'),
   orpheus:                       () => import('./views/orpheus.js'),
-  releases:                      () => import('./views/releases.js'),
-  watchlist:                     () => import('./views/watchlist.js'),
   settings:                      () => import('./views/settings.js'),
   automations:                   () => import('./views/automations.js'),
   maintenance:                   () => import('./views/maintenance.js'),
