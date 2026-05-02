@@ -1,0 +1,329 @@
+/* ═══════════════════════════════════════════════════════════════
+   stats.css — Luisterstatistieken Dashboard
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Toolbar (periode filter) ─────────────────────────────────────────── */
+.stats-toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.stats-period-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.stats-period-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+  background: var(--surface3);
+}
+
+.stats-period-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Samenvattingscards ────────────────────────────────────────────────── */
+.stats-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stats-summary-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: box-shadow 0.18s;
+}
+
+.stats-summary-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-summary-icon {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.stats-summary-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.stats-summary-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stats-summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.stats-summary-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Grafieken rij ─────────────────────────────────────────────────────── */
+.stats-charts-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+  align-items: start;
+}
+
+.stats-chart-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.stats-chart-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 10px;
+}
+
+.stats-chart-header .section-title {
+  font-size: 17px;
+}
+
+.stats-chart-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Canvas containers — vaste hoogte zodat Chart.js weet hoe groot te renderen */
+.stats-line-wrap {
+  position: relative;
+  height: 220px;
+}
+
+.stats-bar-wrap {
+  position: relative;
+  height: 280px;
+}
+
+.stats-line-wrap canvas,
+.stats-bar-wrap canvas {
+  width: 100% !important;
+}
+
+/* ── Top artiesten sectie ──────────────────────────────────────────────── */
+.stats-section {
+  margin-bottom: 40px;
+}
+
+.stats-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.stats-section-header .section-title {
+  font-size: 17px;
+}
+
+.stats-artist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats-artist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  transition: background 0.12s;
+}
+
+.stats-artist-row:hover {
+  background: var(--surface2);
+}
+
+.stats-artist-rank {
+  width: 24px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.stats-artist-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.stats-artist-ph {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+}
+
+.stats-artist-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stats-artist-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 5px;
+}
+
+.stats-artist-bar-wrap {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stats-artist-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.stats-artist-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 50px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Skeleton loader ────────────────────────────────────────────────────── */
+.stats-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stats-skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stats-skel-card {
+  height: 100px;
+  border-radius: var(--radius-lg);
+}
+
+.stats-skeleton-charts {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+}
+
+.stats-skel-chart {
+  height: 280px;
+  border-radius: var(--radius-lg);
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+.skeleton-pulse {
+  background: var(--surface2);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── Lege/fout state ────────────────────────────────────────────────────── */
+.stats-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .stats-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stats-skeleton-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .stats-charts-row,
+  .stats-skeleton-charts {
+    grid-template-columns: 1fr;
+  }
+  .stats-bar-wrap {
+    height: 240px;
+  }
+}
+
+@media (max-width: 560px) {
+  .stats-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-skeleton-cards {
+    grid-template-columns: 1fr;
+  }
+  .stats-summary-value {
+    font-size: 22px;
+  }
+}

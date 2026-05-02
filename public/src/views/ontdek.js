@@ -300,7 +300,7 @@ async function renderReleasesTab() {
     if (!releasesData) {
       let d = getCached('releases', 5 * 60 * 1000);
       if (!d) {
-        d = await apiFetch('/api/releases');
+        d = await apiFetch('/api/core/releases');
         if (d.status === 'building') {
           setContent(`<div class="loading"><div class="spinner"></div><div>${esc(d.message)}</div>
             <div class="build-hint">Pagina ververst automatisch over 5 seconden</div></div>`);
@@ -691,11 +691,11 @@ function _startDiscoverPolling(initialBuilding) {
       _stopDiscoverPolling(); return;
     }
     try {
-      const status = await apiFetch('/api/discover/status');
+      const status = await apiFetch('/api/core/discover/status');
       const newlyReady = Object.keys(knownBuilding).filter(k => knownBuilding[k] && status[k] && !status[k].building && status[k].ready);
 
       if (newlyReady.length) {
-        const fresh = await apiFetch('/api/discover');
+        const fresh = await apiFetch('/api/core/discover');
         if (fresh.status === 'ok') {
           _discoverCache = { data: fresh, at: Date.now() };
           discoverData = fresh;
@@ -825,7 +825,7 @@ async function renderDiscoverTab() {
     if (lbSection) _dscFillListenBrainz(g('lb'), lbSection, lbRes.status === 'fulfilled' ? lbRes.value : null);
 
     // Stille achtergrond-update van discover-data
-    apiFetch('/api/discover').then(fresh => {
+    apiFetch('/api/core/discover').then(fresh => {
       if (fresh.status === 'ok') {
         _discoverCache = { data: fresh, at: Date.now() };
         discoverData = fresh;
@@ -838,7 +838,7 @@ async function renderDiscoverTab() {
 
   // Geen verse cache: alle endpoints parallel ophalen
   const [discRes, genresRes, plRes, lbRes] = await Promise.allSettled([
-    apiFetch('/api/discover'),
+    apiFetch('/api/core/discover'),
     apiFetch('/api/genres'),
     apiFetch('/api/playlists'),
     apiFetch('/api/listenbrainz/recommendations'),
@@ -915,7 +915,7 @@ async function renderDiscoverTab() {
         _dscFillPlaylists(container, await apiFetch('/api/playlists'));
       } else if (type === 'discover') {
         // Volledige discover refresh — herlaad de hele tab
-        await p('/api/discover/refresh', { method: 'POST' }).catch(() => {});
+        await p('/api/core/discover/refresh', { method: 'POST' }).catch(() => {});
         discoverData = null;
         _discoverCache = null;
         invalidate('discover');
@@ -1396,14 +1396,14 @@ export async function loadOntdek() {
 
     if (e.target.id === 'ontdek-refresh') {
       if (ontdekCurrentTab === 'recs') { invalidate('recs'); recsData = null; renderRecsTab(); }
-      else if (ontdekCurrentTab === 'releases') { invalidate('releases'); releasesData = null; try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) {} renderReleasesTab(); }
+      else if (ontdekCurrentTab === 'releases') { invalidate('releases'); releasesData = null;  renderReleasesTab(); }
       else if (ontdekCurrentTab === 'discover') {
         invalidate('discover');
         discoverData = null;
         _discoverCache = null;
         _stopDiscoverPolling();
         try { await Promise.allSettled([
-          p('/api/discover/refresh', { method: 'POST' }),
+          p('/api/core/discover/refresh', { method: 'POST' }),
           p('/api/genres/refresh',   { method: 'POST' }),
         ]); } catch {}
         renderDiscoverTab();

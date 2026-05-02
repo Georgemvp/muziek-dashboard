@@ -1,0 +1,1 @@
+function d(){let e=document.getElementById("mediasage-iframe"),t=document.getElementById("mediasage-iframe-wrap"),a=document.getElementById("content");!t||!e||(t.style.display="flex",a.style.display="none",e.dataset.loaded||(e.src=e.dataset.src,e.dataset.loaded="1"))}export{d as loadMediaSageIframe};

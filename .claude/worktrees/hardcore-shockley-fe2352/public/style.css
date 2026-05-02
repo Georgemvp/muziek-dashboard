@@ -1,0 +1,17 @@
+/* ════════════════════════════════════════════════════════════════════
+   style.css — entry point, importeert alle partials
+   ════════════════════════════════════════════════════════════════════ */
+
+@import './css/base.css';       /* reset, CSS variabelen, keyframes, body, .app  */
+@import './css/layout.css';    /* app-shell, sidebar, topbar, content, player-bar */
+@import './css/header.css';     /* plex widget/card + search-result/zone styles   */
+@import './css/tabs.css';       /* section tags/badges/bookmark utility styles    */
+@import './css/cards.css';      /* .card, .ag-card, .rec-card, .album-card, etc. */
+@import './css/panel.css';      /* .panel-overlay, .artist-panel, stats, wishlist */
+@import './css/discover.css';   /* .discover-grid, .discover-card, collapsed UI  */
+@import './css/tidal.css';      /* .tidal-*, .tidarr-*, queue, download dialogs  */
+@import './css/spotify.css';    /* .spotify-*, .mood-btn                         */
+@import './css/sections.css';   /* .section-block, .section-hdr, .bib-*, .plib-* */
+@import './css/utils.css';      /* .skeleton, .loading, .error-box, .empty       */
+@import './css/responsive.css'; /* alle @media queries gebundeld                 */
+@import './css/player.css';     /* persistent player bar styling                 */

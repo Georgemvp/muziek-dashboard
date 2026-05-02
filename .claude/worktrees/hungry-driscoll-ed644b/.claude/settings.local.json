@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh pr create --title 'docs: herschrijf CLAUDE.md — bijgewerkt naar huidige codebase' --body ' *)"
+    ]
+  }
+}

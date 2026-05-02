@@ -1,0 +1,699 @@
+{% extends "includes/layout.html" %}
+
+{% block content %}
+<style>
+    .suggestion-btn {
+        padding: 0.15rem 0.25rem !important;
+        font-size: 0.88rem !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 0.2rem !important;
+        background-color: var(--bg-card) !important;
+        cursor: pointer !important;
+        transition: all 0.15s ease !important;
+        color: var(--text-muted) !important;
+        font-weight: 400 !important;
+        white-space: nowrap !important;
+        box-shadow: var(--shadow-input) !important;
+        line-height: 1 !important;
+        display: inline-block !important;
+        margin: 0 !important;
+    }
+
+    .suggestion-btn:hover {
+        background-color: var(--bg-code) !important;
+        border-color: var(--border-color-darker) !important;
+        color: var(--text-sub) !important;
+    }
+
+    .suggestion-btn:active {
+        transform: scale(0.98) !important;
+    }
+
+    .suggestions-container {
+        margin-top: 0.5rem !important;
+        padding: 0.25rem !important;
+        background-color: var(--bg-body) !important;
+        border-radius: 0.375rem !important;
+        border: 1px dashed var(--border-color-darker) !important;
+        display: grid !important;
+        grid-template-columns: repeat(5, 1fr) !important;
+        gap: 0.2rem !important;
+    }
+
+    @media (max-width: 768px) {
+        .suggestions-container {
+            grid-template-columns: repeat(3, 1fr) !important;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .suggestions-container {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+    }
+</style>
+
+<section>
+    <header class="page-header">
+        <h1>AudioMuse-AI - Instant Playlist</h1>
+        <p>Tell me your mood, and I'll craft the perfect playlist for you.</p>
+    </header>
+
+    <!-- Main Form -->
+    <form id="playlistForm">
+        <!-- AI Configuration Section -->
+        <fieldset>
+            <legend>AI Configuration</legend>
+            <div class="param-group">
+                <div>
+                    <label for="aiProvider" class="label-with-tooltip">
+                        AI Provider
+                        <span class="info-tooltip" tabindex="0">
+                            <span class="info-icon"></span>
+                            <span class="tooltip-text">Choose an AI service to help create your playlist. Gemini and Mistral are cloud services (require API key). Ollama runs locally on your computer. "None" lets you describe moods manually.</span>
+                        </span>
+                    </label>
+                    <select id="aiProvider">
+                        <option value="NONE">None</option>
+                        <option value="OLLAMA">Ollama</option>
+                        <option value="OPENAI">OpenAI / OpenRouter</option>
+                        <option value="GEMINI">Gemini</option>
+                        <option value="MISTRAL">Mistral</option>
+                    </select>
+                </div>
+                <div id="ollamaConfig" class="hidden">
+                    <label for="ollamaModel" class="label-with-tooltip">
+                        Ollama Model
+                        <span class="info-tooltip" tabindex="0">
+                            <span class="info-icon"></span>
+                            <span class="tooltip-text">The specific AI model running on your Ollama server. Popular choices: mistral:7b, llama2, phi. Larger models give better results but need more RAM.</span>
+                        </span>
+                    </label>
+                    <input type="text" id="ollamaModel" placeholder="e.g., mistral:7b">
+                    <div style="margin-top: 1.5rem;">
+                        <label for="ollamaServerUrl" class="label-with-tooltip">
+                            Ollama Server URL
+                            <span class="info-tooltip" tabindex="0">
+                                <span class="info-icon"></span>
+                                <span class="tooltip-text">The web address where your Ollama server is running. Usually http://localhost:11434/api/generate if running on the same machine.</span>
+                            </span>
+                        </label>
+                        <input type="text" id="ollamaServerUrl" placeholder="e.g., http://localhost:11434/api/generate">
+                    </div>
+                </div>
+                <div id="openaiConfig" class="hidden">
+                    <label for="openaiModel">OpenAI Model</label>
+                    <input type="text" id="openaiModel" placeholder="e.g., openai/gpt-4 or meta-llama/llama-3.2-3b-instruct:free">
+                    <div style="margin-top: 1.5rem;">
+                        <label for="openaiServerUrl">OpenAI Server URL</label>
+                        <input type="text" id="openaiServerUrl" placeholder="e.g., https://openrouter.ai/api/v1/chat/completions">
+                    </div>
+                </div>
+                <!-- REMOVED: The Gemini API Key input field is removed as it should not be sent from the frontend -->
+                <div id="geminiConfig" class="hidden">
+                    <label for="geminiModel" class="label-with-tooltip">
+                        Gemini Model
+                        <span class="info-tooltip" tabindex="0">
+                            <span class="info-icon"></span>
+                            <span class="tooltip-text">Google's AI model to use. gemini-2.0-flash-exp is fast and free. gemini-2.5-pro gives better quality but may have usage limits.</span>
+                        </span>
+                    </label>
+                    <input type="text" id="geminiModel" placeholder="e.g., gemini-2.5-pro">
+                </div>
+                <div id="mistralConfig" class="hidden">
+                    <label for="mistralModel" class="label-with-tooltip">
+                        Mistral Model
+                        <span class="info-tooltip" tabindex="0">
+                            <span class="info-icon"></span>
+                            <span class="tooltip-text">Mistral AI's model to use. ministral-3b-latest is lightweight and fast. mistral-large-latest gives the best understanding of complex requests.</span>
+                        </span>
+                    </label>
+                    <input type="text" id="mistralModel" placeholder="e.g., ministral-3b-latest">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- User Input Section -->
+        <div class="param-group" style="margin-top: 2rem;">
+            <div>
+                <label for="userInput" class="label-with-tooltip">
+                    What kind of music are you in the mood for?
+                    <span class="info-tooltip" tabindex="0">
+                        <span class="info-icon"></span>
+                        <span class="tooltip-text">Describe the vibe you want! Examples: "Upbeat songs for a workout", "Calm acoustic music for studying", "Dark and moody electronic". The AI will find songs that match your description.</span>
+                    </span>
+                </label>
+                <textarea id="userInput" placeholder="e.g., Upbeat indie rock for a summer road trip" rows="4" required></textarea>
+                
+                <!-- Quick Suggestions - Compact single line -->
+                <div class="suggestions-container">
+                    <button type="button" class="suggestion-btn" data-text="Similar song to Red Hot Chili Peppers - By The Way">🎵 Similar Song</button>
+                    <button type="button" class="suggestion-btn" data-text="Songs from Blink-182 and Green Day">🎸 From Artists</button>
+                    <button type="button" class="suggestion-btn" data-text="Songs that sound like Iron Maiden, Metallica and Deep Purple">🤘 Sounds Like</button>
+                    <button type="button" class="suggestion-btn" data-text="Give me the top songs of Madonna">👑 Artist's Own Hits</button>
+                    <button type="button" class="suggestion-btn" data-text="Danceable happy songs with 120 BPM">💃 Genre/Mood/Tempo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="submitChat">
+            <span>Get Playlist Idea</span>
+        </button>
+    </form>
+</section>
+
+<!-- Response Section -->
+<section>
+    <h2>AI Response</h2>
+    <div id="responseArea">
+        <p class="italic">Your generated playlist will appear here...</p>
+    </div>
+    <!-- MODIFIED: Changed section title and form details to be more generic -->
+    <div id="createPlaylistSection" class="hidden">
+        <h3>Create Playlist on Media Server</h3>
+        <form id="createPlaylistForm">
+            <input type="hidden" id="playlistItemIds" name="item_ids">
+            <div class="param-group">
+                <div>
+                    <label for="mediaServerPlaylistName">Playlist Name:</label>
+                    <input type="text" id="mediaServerPlaylistName" name="playlist_name" placeholder="Enter playlist name" required>
+                </div>
+            </div>
+            <button type="submit" id="submitMediaServerPlaylist">Create Playlist</button>
+        </form>
+        <div id="mediaServerResponseArea"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block bodyAdditions %}
+    <script>
+        // --- Self-Executing Anonymous Function to Encapsulate Code ---
+        (() => {
+            let globalConfig = {};
+
+            // --- DOM Element References ---
+            const aiProviderSelect = document.getElementById('aiProvider');
+            const ollamaConfigDiv = document.getElementById('ollamaConfig');
+            const openaiConfigDiv = document.getElementById('openaiConfig');
+            const geminiConfigDiv = document.getElementById('geminiConfig');
+            const mistralConfigDiv = document.getElementById('mistralConfig');
+            const ollamaModelSelect = document.getElementById('ollamaModel');
+            const ollamaServerUrlInput = document.getElementById('ollamaServerUrl'); // Added Ollama Server URL input
+            const openaiModelSelect = document.getElementById('openaiModel');
+            const openaiServerUrlInput = document.getElementById('openaiServerUrl');
+            const geminiModelSelect = document.getElementById('geminiModel');
+            const mistralModelSelect = document.getElementById('mistralModel');
+            const playlistForm = document.getElementById('playlistForm');
+            const userInput = document.getElementById('userInput');
+            const submitButton = document.getElementById('submitChat');
+            const responseArea = document.getElementById('responseArea');
+            const submitButtonText = submitButton.querySelector('span');
+            const createPlaylistSection = document.getElementById('createPlaylistSection');
+            const createPlaylistForm = document.getElementById('createPlaylistForm');
+            const mediaServerResponseArea = document.getElementById('mediaServerResponseArea');
+
+            // --- Core Functions ---
+
+            /**
+             * Fetches the initial AI configuration from the server.
+             */
+            async function fetchConfig() {
+                try {
+                    const response = await fetch("{{ url_for('chat_bp.chat_config_defaults_api') }}"); // Changed to new chat-specific config endpoint
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    globalConfig = await response.json();
+                    populateAIConfigSelectors();
+                    updateAIProviderVisibility(); // Call this after populating
+                } catch (error) {
+                    console.error("Failed to fetch config:", error);
+                    showError('Error: Could not load AI configuration.');
+                }
+            }
+
+            /**
+             * Populates the model dropdowns based on the fetched configuration.
+             */
+            function populateAIConfigSelectors() {
+                if (globalConfig.default_ai_provider) {
+                    aiProviderSelect.value = globalConfig.default_ai_provider.toUpperCase();
+                }
+
+                // ollamaModelSelect.innerHTML = ''; // Not needed for input field
+                ollamaModelSelect.value = globalConfig.default_ollama_model_name || ""; // Set default value for input
+                ollamaServerUrlInput.value = globalConfig.ollama_server_url || "http://localhost:11434/api/generate"; // Pre-fill Ollama Server URL
+
+                openaiModelSelect.value = globalConfig.default_openai_model_name || ""; // Set default value for OpenAI
+                openaiServerUrlInput.value = globalConfig.openai_server_url || "https://openrouter.ai/api/v1/chat/completions"; // Pre-fill OpenAI Server URL
+
+                geminiModelSelect.value = globalConfig.default_gemini_model_name || "gemini-2.5-pro";
+                mistralModelSelect.value = globalConfig.default_mistral_model_name || "ministral-3b-latest";
+            }
+
+            /**
+             * Shows or hides model selection based on the chosen provider.
+             * This function now uses classList to avoid conflicts with CSS !important.
+             */
+            function updateAIProviderVisibility() {
+                const provider = aiProviderSelect.value;
+                if (provider === 'OLLAMA') {
+                    ollamaConfigDiv.classList.remove('hidden');
+                    openaiConfigDiv.classList.add('hidden');
+                    geminiConfigDiv.classList.add('hidden');
+                    mistralConfigDiv.classList.add('hidden');
+                } else if (provider === 'OPENAI') {
+                    ollamaConfigDiv.classList.add('hidden');
+                    openaiConfigDiv.classList.remove('hidden');
+                    geminiConfigDiv.classList.add('hidden');
+                    mistralConfigDiv.classList.add('hidden');
+                } else if (provider === 'GEMINI') {
+                    ollamaConfigDiv.classList.add('hidden');
+                    openaiConfigDiv.classList.add('hidden');
+                    geminiConfigDiv.classList.remove('hidden');
+                    mistralConfigDiv.classList.add('hidden');
+                } else if (provider === 'MISTRAL') {
+                    ollamaConfigDiv.classList.add('hidden');
+                    openaiConfigDiv.classList.add('hidden');
+                    geminiConfigDiv.classList.add('hidden');
+                    mistralConfigDiv.classList.remove('hidden');
+                } else {
+                    ollamaConfigDiv.classList.add('hidden');
+                    openaiConfigDiv.classList.add('hidden');
+                    geminiConfigDiv.classList.add('hidden');
+                    mistralConfigDiv.classList.add('hidden');
+                }
+            }
+
+            /**
+             * Handles the form submission to the chat API.
+             * @param {Event} event - The form submission event.
+             */
+            async function handleChatSubmit(event) {
+                event.preventDefault(); // Prevent default form submission
+
+                if (!userInput.value.trim()) {
+                    showError('Please enter your music preference.');
+                    return;
+                }
+
+                setLoadingState(true);
+
+                const payload = {
+                    userInput: userInput.value,
+                    ai_provider: aiProviderSelect.value,
+                    ai_model: null
+                };
+
+                if (payload.ai_provider === 'OLLAMA') {
+                    payload.ai_model = ollamaModelSelect.value;
+                    payload.ollama_server_url = ollamaServerUrlInput.value; // Include Ollama Server URL
+                } else if (payload.ai_provider === 'OPENAI') {
+                    payload.ai_model = openaiModelSelect.value;
+                    payload.openai_server_url = openaiServerUrlInput.value; // Include OpenAI Server URL
+                } else if (payload.ai_provider === 'GEMINI') {
+                    payload.ai_model = geminiModelSelect.value;
+                    // REMOVED: The API key is no longer sent from the frontend
+                } else if (payload.ai_provider === 'MISTRAL') {
+                    payload.ai_model = mistralModelSelect.value;
+                }
+                try {
+                    const response = await fetch("{{ url_for('chat_bp.chat_playlist_api') }}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: "An unknown error occurred." }));
+                        throw new Error(`API Error: ${response.status} - ${errorData.detail || "Failed to get details"}`);
+                    }
+
+                    const data = await response.json();
+                    renderResponse(data.response); // Pass the whole response object
+
+                } catch (error) {
+                    console.error('Error submitting chat:', error);
+                    showError(`Error: ${error.message}`);
+                } finally {
+                    setLoadingState(false);
+                }
+            }
+            
+            // --- UI Helper Functions ---
+
+            /**
+             * Toggles the loading state of the submit button.
+             * @param {boolean} isLoading - Whether the app is in a loading state.
+             */
+            function setLoadingState(isLoading) {
+                submitButton.disabled = isLoading;
+                if (isLoading) {
+                    submitButtonText.textContent = 'Processing...';
+                } else {
+                    submitButtonText.textContent = 'Get Playlist Idea';
+                }
+            }
+
+            /**
+             * Renders the AI's playlist response in a formatted way.
+             * @param {object} responseData - The response object from the API.
+             * Expected structure: { message: "...", query_results: [{title: "...", artist: "..."}, ...] }
+             */
+            /** Read a CSS custom property from the body element. */
+            function cv(varName) {
+                return getComputedStyle(document.body).getPropertyValue(varName).trim();
+            }
+
+            function renderResponse(responseData) {
+                responseArea.innerHTML = '';
+                responseArea.classList.remove('text-red-600');
+                createPlaylistSection.classList.add('hidden'); // Hide by default
+                mediaServerResponseArea.textContent = ''; // Clear previous responses
+
+                // --- Parse the log messages for better formatting ---
+                const logText = responseData.message || "No message from AI.";
+                const logLines = logText.split('\n');
+                
+                // Create structured sections
+                const sections = {
+                    main: [],
+                    attempts: []
+                };
+                
+                let currentSection = 'main';
+                let currentAttempt = null;
+                
+                for (const line of logLines) {
+                    if (line.includes('========== ATTEMPT')) {
+                        // Save previous attempt
+                        if (currentAttempt) {
+                            sections.attempts.push(currentAttempt);
+                        }
+                        // Start new attempt
+                        currentAttempt = {
+                            title: line.replace(/=/g, '').trim(),
+                            content: []
+                        };
+                        currentSection = 'attempt';
+                    } else if (line.trim()) {
+                        if (currentSection === 'main') {
+                            sections.main.push(line);
+                        } else if (currentSection === 'attempt' && currentAttempt) {
+                            currentAttempt.content.push(line);
+                        }
+                    }
+                }
+                
+                // Add last attempt
+                if (currentAttempt) {
+                    sections.attempts.push(currentAttempt);
+                }
+
+                // --- 1. Main Summary (Collapsed by default) ---
+                const mainSummaryDetails = document.createElement('details');
+                mainSummaryDetails.style.marginBottom = '1rem';
+                mainSummaryDetails.open = false; // Explicitly collapsed
+                
+                const mainSummarySummary = document.createElement('summary');
+                mainSummarySummary.style.cursor = 'pointer';
+                mainSummarySummary.style.fontWeight = '600';
+                mainSummarySummary.style.padding = '0.75rem';
+                mainSummarySummary.style.backgroundColor = cv('--bg-code');
+                mainSummarySummary.style.borderRadius = '0.375rem';
+                mainSummarySummary.style.borderLeft = '4px solid ' + cv('--color-primary');
+                mainSummarySummary.textContent = 'Request Summary';
+                mainSummaryDetails.appendChild(mainSummarySummary);
+                
+                const mainSummaryContent = document.createElement('div');
+                mainSummaryContent.style.padding = '1rem';
+                mainSummaryContent.style.marginTop = '0.5rem';
+                mainSummaryContent.style.border = '1px solid ' + cv('--border-color');
+                mainSummaryContent.style.borderRadius = '0.375rem';
+                mainSummaryContent.style.backgroundColor = cv('--bg-body');
+                
+                sections.main.forEach(line => {
+                    const p = document.createElement('p');
+                    p.textContent = line;
+                    p.style.marginBottom = '0.25rem';
+                    mainSummaryContent.appendChild(p);
+                });
+                
+                mainSummaryDetails.appendChild(mainSummaryContent);
+                responseArea.appendChild(mainSummaryDetails);
+
+                // --- 2. Processing Details (Collapsible per Attempt) ---
+                if (sections.attempts.length > 0) {
+                const processingDetails = document.createElement('details');
+                processingDetails.style.marginTop = '1.5rem';
+                processingDetails.style.marginBottom = '1rem';
+                processingDetails.open = false; // Collapsed by default
+                
+                const processingSummary = document.createElement('summary');
+                processingSummary.style.cursor = 'pointer';
+                processingSummary.style.fontWeight = '600';
+                processingSummary.style.padding = '0.75rem';
+                processingSummary.style.backgroundColor = cv('--bg-code');
+                processingSummary.style.borderRadius = '0.375rem';
+                processingSummary.style.borderLeft = '4px solid ' + cv('--color-primary');
+                processingSummary.textContent = `AI Processing Details (${sections.attempts.length} iterations)`;
+                processingDetails.appendChild(processingSummary);
+                
+                const processingContent = document.createElement('div');
+                processingContent.style.padding = '1rem';
+                
+                sections.attempts.forEach((attempt, attemptIdx) => {
+                    const attemptDetails = document.createElement('details');
+                    attemptDetails.style.marginBottom = '1rem';
+                    attemptDetails.open = false; // All collapsed                        const attemptSummary = document.createElement('summary');
+                        attemptSummary.style.cursor = 'pointer';
+                        attemptSummary.style.fontWeight = '600';
+                        attemptSummary.style.padding = '0.75rem';
+                        attemptSummary.style.backgroundColor = attemptIdx === sections.attempts.length - 1 ? cv('--status-success-bg') : cv('--status-failure-bg');
+                        attemptSummary.style.borderRadius = '0.375rem';
+                        attemptSummary.style.borderLeft = attemptIdx === sections.attempts.length - 1 ? '4px solid ' + cv('--color-success') : '4px solid ' + cv('--color-danger');
+                        attemptSummary.textContent = attempt.title;
+                        attemptDetails.appendChild(attemptSummary);
+                        
+                        const attemptContent = document.createElement('div');
+                        attemptContent.style.padding = '1rem';
+                        attemptContent.style.marginTop = '0.5rem';
+                        attemptContent.style.border = '1px solid ' + (attemptIdx === sections.attempts.length - 1 ? cv('--status-success-text') : cv('--status-failure-text'));
+                        attemptContent.style.borderRadius = '0.375rem';
+                        attemptContent.style.backgroundColor = cv('--bg-body');
+                        attemptContent.style.maxHeight = '500px';
+                        attemptContent.style.overflowY = 'auto';
+                        
+                        // Add all content with intelligent formatting
+                        attempt.content.forEach(line => {
+                            const p = document.createElement('p');
+                            p.style.fontSize = '0.9rem';
+                            p.style.marginBottom = '0.5rem';
+                            p.style.lineHeight = '1.5';
+                            
+                            // Highlight important lines
+                            if (line.includes('📋 AI EXECUTION PLAN') || line.includes('🤖 EXECUTING')) {
+                                p.style.fontWeight = '700';
+                                p.style.color = cv('--text-main');
+                                p.style.backgroundColor = cv('--bg-code');
+                                p.style.padding = '0.5rem';
+                                p.style.borderRadius = '0.25rem';
+                                p.style.marginTop = '0.75rem';
+                            } else if (line.includes('✓') || line.includes('✅ SUCCESS')) {
+                                p.style.color = cv('--color-success');
+                                if (line.includes('✅ SUCCESS')) {
+                                    p.style.fontWeight = '700';
+                                    p.style.fontSize = '1rem';
+                                }
+                            } else if (line.includes('⚠️') || line.includes('Failed') || line.includes('Error')) {
+                                p.style.color = '#D97706';
+                            } else if (line.includes('❌') || line.includes('failed')) {
+                                p.style.color = cv('--color-danger');
+                                p.style.fontWeight = '600';
+                            } else if (line.includes('🔄 PROGRESSIVE REFINEMENT')) {
+                                p.style.fontWeight = '700';
+                                p.style.color = cv('--color-primary');
+                                p.style.backgroundColor = cv('--bg-code');
+                                p.style.padding = '0.5rem';
+                                p.style.borderRadius = '0.25rem';
+                                p.style.marginTop = '0.75rem';
+                            } else if (line.includes('Parameters:') || line.includes('Intent:') || line.includes('Strategy:')) {
+                                p.style.fontWeight = '600';
+                                p.style.color = cv('--text-muted');
+                            } else if (line.includes('📝 SQL:')) {
+                                p.style.fontFamily = 'monospace';
+                                p.style.fontSize = '0.85rem';
+                                p.style.backgroundColor = cv('--bg-code');
+                                p.style.padding = '0.5rem';
+                                p.style.borderRadius = '0.25rem';
+                                p.style.borderLeft = '3px solid #d97706';
+                                p.style.overflowX = 'auto';
+                            }
+                            
+                            p.textContent = line;
+                            attemptContent.appendChild(p);
+                        });
+                        
+                        attemptDetails.appendChild(attemptContent);
+                        processingContent.appendChild(attemptDetails);
+                    });
+                    
+                    processingDetails.appendChild(processingContent);
+                    responseArea.appendChild(processingDetails);
+                }
+
+                // --- 3. Executed Query (Collapsed by default) ---
+                if (responseData.executed_query) {
+                    const queryDetailsElement = document.createElement('details');
+                    queryDetailsElement.style.marginTop = '1.5rem';
+                    queryDetailsElement.style.marginBottom = '1rem';
+                    queryDetailsElement.open = false; // Explicitly collapsed
+
+                    const querySummaryElement = document.createElement('summary');
+                    querySummaryElement.style.cursor = 'pointer';
+                    querySummaryElement.style.fontWeight = '600';
+                    querySummaryElement.style.padding = '0.75rem';
+                    querySummaryElement.style.backgroundColor = cv('--bg-code');
+                    querySummaryElement.style.borderRadius = '0.375rem';
+                    querySummaryElement.textContent = 'Show/Hide Executed SQL Query';
+                    queryDetailsElement.appendChild(querySummaryElement);
+
+                    const queryContentDiv = document.createElement('div');
+                    queryContentDiv.style.padding = '1rem';
+                    queryContentDiv.style.marginTop = '0.5rem';
+                    queryContentDiv.style.border = '1px solid ' + cv('--border-color-darker');
+                    queryContentDiv.style.borderRadius = '0.375rem';
+                    queryContentDiv.style.backgroundColor = cv('--bg-code');
+                    queryContentDiv.style.whiteSpace = 'pre-wrap';
+                    queryContentDiv.style.wordBreak = 'break-all';
+                    queryContentDiv.style.fontFamily = 'monospace';
+                    queryContentDiv.style.fontSize = '0.875rem';
+                    
+                    const queryCodeElement = document.createElement('code');
+                    queryCodeElement.textContent = responseData.executed_query;
+                    queryContentDiv.appendChild(queryCodeElement);
+
+                    queryDetailsElement.appendChild(queryContentDiv);
+                    responseArea.appendChild(queryDetailsElement);
+                }
+
+                // --- 4. Playlist Results (Always Expanded) ---
+                if (responseData.query_results && responseData.query_results.length > 0) {
+                    const resultsDiv = document.createElement('div');
+                    resultsDiv.style.marginTop = '2rem';
+                    resultsDiv.style.padding = '1.5rem';
+                    resultsDiv.style.backgroundColor = cv('--status-success-bg');
+                    resultsDiv.style.borderRadius = '0.5rem';
+                    resultsDiv.style.border = '2px solid ' + cv('--color-success');
+
+                    const title = document.createElement('h3');
+                    title.style.color = cv('--color-success');
+                    title.style.marginBottom = '1rem';
+                    title.style.fontWeight = '700';
+                    title.textContent = `Generated Playlist (${responseData.query_results.length} songs)`;
+                    resultsDiv.appendChild(title);
+
+                    const songList = document.createElement('ol');
+                    songList.className = 'song-list';
+                    songList.style.maxHeight = '400px';
+                    songList.style.overflowY = 'auto';
+                    
+                    document.getElementById('playlistItemIds').value = ''; // Clear previous item IDs
+
+                    responseData.query_results.forEach(song => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = `${song.title || 'Unknown Title'} by ${song.artist || 'Unknown Artist'}`;
+                        songList.appendChild(listItem);
+                        const currentItemIds = document.getElementById('playlistItemIds').value;
+                        document.getElementById('playlistItemIds').value = currentItemIds ? `${currentItemIds},${song.item_id}` : song.item_id;
+                    });
+                    resultsDiv.appendChild(songList);
+                    responseArea.appendChild(resultsDiv);
+                    createPlaylistSection.classList.remove('hidden'); // Show the create playlist form
+                } else if (responseData.executed_query) {
+                     const noResultsMessage = document.createElement('p');
+                    noResultsMessage.className = 'italic';
+                    noResultsMessage.style.marginTop = '1rem';
+                    noResultsMessage.style.color = cv('--text-muted');
+                    noResultsMessage.textContent = "The query returned no songs.";
+                    responseArea.appendChild(noResultsMessage);
+                }
+            }
+            
+            /**
+             * Displays an error message in the response area.
+             * @param {string} message - The error message to display.
+             */
+            function showError(message) {
+                responseArea.innerHTML = '';
+                responseArea.classList.add('text-red-600');
+                responseArea.textContent = message;
+            }
+
+            /**
+             * Handles the submission of the "Create Playlist on Media Server" form.
+             * @param {Event} event - The form submission event.
+             */
+            async function handleCreateMediaServerPlaylist(event) {
+                event.preventDefault();
+                mediaServerResponseArea.textContent = 'Creating playlist...';
+                mediaServerResponseArea.className = '';
+
+                const playlistNameInput = document.getElementById('mediaServerPlaylistName');
+                const itemIdsInput = document.getElementById('playlistItemIds');
+
+                if (!playlistNameInput.value.trim()) {
+                    mediaServerResponseArea.textContent = 'Error: Playlist name cannot be empty.';
+                    mediaServerResponseArea.className = 'status-error';
+                    return;
+                }
+                if (!itemIdsInput.value) {
+                    mediaServerResponseArea.textContent = 'Error: No song IDs found to create the playlist.';
+                    mediaServerResponseArea.className = 'status-error';
+                    return;
+                }
+
+                const payload = {
+                    playlist_name: playlistNameInput.value,
+                    item_ids: itemIdsInput.value.split(',') // Send as an array
+                };
+
+                try {
+                    // MODIFIED: Changed API endpoint to be more generic
+                    const response = await fetch("{{ url_for('chat_bp.create_media_server_playlist_api') }}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await response.json();
+                    mediaServerResponseArea.textContent = data.message;
+                    if(response.ok) {
+                        mediaServerResponseArea.className = 'status-success';
+                    } else {
+                        mediaServerResponseArea.className = 'status-error';
+                    }
+                } catch (error) {
+                    mediaServerResponseArea.textContent = `Error: ${error.message}`;
+                    mediaServerResponseArea.className = 'status-error';
+                }
+            }
+
+            // --- Event Listeners ---
+            document.addEventListener('DOMContentLoaded', fetchConfig);
+            aiProviderSelect.addEventListener('change', updateAIProviderVisibility);
+            playlistForm.addEventListener('submit', handleChatSubmit);
+            createPlaylistForm.addEventListener('submit', handleCreateMediaServerPlaylist);
+            
+            // --- Suggestion Button Handlers ---
+            document.querySelectorAll('.suggestion-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    userInput.value = this.getAttribute('data-text');
+                    userInput.focus();
+                });
+            });
+        })();
+    </script>
+    <script src="{{ url_for('static', filename='menu.js') }}"></script>
+{% endblock %}

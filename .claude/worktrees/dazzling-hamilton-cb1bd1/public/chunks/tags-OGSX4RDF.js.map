@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/views/tags.js"],
+  "sourcesContent": ["// \u2500\u2500 Tags view \u2014 placeholder for future implementation\n\nexport async function loadTags() {\n  const content = document.getElementById('content');\n  if (!content) return;\n\n  content.innerHTML = `\n    <div style=\"display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px;\">\n      <h1 style=\"font-size: 24px; margin: 0;\">Tags</h1>\n      <p style=\"color: var(--text-muted);\">Coming soon\u2026</p>\n    </div>\n  `;\n\n  document.title = 'Muziek \u00B7 Tags';\n}\n"],
+  "mappings": "AAEA,eAAsBA,GAAW,CAC/B,IAAMC,EAAU,SAAS,eAAe,SAAS,EAC5CA,IAELA,EAAQ,UAAY;AAAA;AAAA;AAAA;AAAA;AAAA,IAOpB,SAAS,MAAQ,mBACnB",
+  "names": ["loadTags", "content"]
+}

@@ -34,15 +34,35 @@ docker compose down -v              # destroy container + data volume (clears SQ
 
 | Process | Port | Description |
 |---------|------|-------------|
-| lastfm (Express) | 80 | Main dashboard — backend + vanilla JS SPA |
+| lastfm (Express) | 80 | Main dashboard — frontend SPA + Last.fm/Plex/Spotify/download routes |
 | Tidarr (Node) | 8484 | Tidal downloader (git subtree in `tidarr/`) |
 | OrpheusDL (Python) | 5000 | Multi-platform downloader (9 services) |
+| Core (Python/Flask) | 5001 | Discovery, gaps, releases, enrichment — proxied via Express at `/api/core/*` |
 
 Two additional Python services are embedded as subdirectories:
 - **`audiomuse/`** — Flask app backed by Jellyfin, Redis, PostgreSQL; AI-powered playlist clustering (CLAP embeddings)
 - **`mediasage/`** — Flask app; LLM-powered playlist & album recommendations against Plex library
 
 These are third-party projects included verbatim. Changes to them should be made carefully.
+
+### Express vs. Core (Python) split
+
+Express (`server.js`) now handles only:
+- Serving the frontend SPA
+- Last.fm, Plex, Spotify, ListenBrainz API routes
+- Download orchestration (Tidarr + OrpheusDL)
+- Automation, playlists, scrobbler, wishlist, settings
+
+**Discovery, gaps, releases, and enrichment run in the Python Core backend** (`core/`):
+- `GET /api/core/discover` — all discovery sections
+- `GET /api/core/discover/status` — build status
+- `POST /api/core/discover/refresh` — trigger rebuild
+- `GET /api/core/gaps` — missing albums from top artists
+- `GET /api/core/releases` — recent releases in your genres/labels
+
+Express proxies all `/api/core/*` requests to `http://localhost:5001`. The frontend (`public/src/views/ontdek.js`) fetches from these `/api/core/` endpoints directly.
+
+Node.js services `services/discover.js` and `services/releases.js` are stubs (no longer active). `services/gaps.js` is retained only for the per-artist gaps function used by `routes/artist.js` (`GET /api/gaps/:artist`).
 
 ### Dependency injection
 
@@ -84,11 +104,13 @@ When external APIs fail, services return stale SQLite data with `_stale: true`. 
 
 `middleware/startup.js` runs on boot and starts these in parallel:
 - Plex library sync (also runs every 30 min)
-- Discovery/Gaps/Releases/Genres initialization
+- Genres initialization (`services/genres.js`)
 - SoulSync playlist engine
 - ListenBrainz client
-- Automation engine + Enrichment manager
+- Automation engine
 - Mirrored playlist sync (every hour)
+
+Discovery, gaps, releases, and enrichment background jobs are now handled by the Python Core backend (`core/workers/`).
 
 ### Key services
 
@@ -97,7 +119,8 @@ When external APIs fail, services return stale SQLite data with `_stale: true`. 
 | `services/plex.js` | Plex library — maintains in-memory Sets/Maps for artist/album lookups; ~1200 lines |
 | `services/downloadOrchestrator.js` | Unified download facade over Tidarr + OrpheusDL |
 | `services/automation.js` | Rule-based automation engine |
-| `services/enrichment/` | Background metadata enrichment pipeline |
+| `services/enrichment/` | Node enrichment API routes (worker control, genre whitelist, settings) — enrichment jobs run in Python Core |
+| `core/` | Python Flask backend: discovery, gaps, releases, enrichment workers |
 | `services/scrobbler.js` | Scrobbling to Last.fm + ListenBrainz |
 | `services/playlists.js` | SoulSync playlist engine |
 | `services/mirroredPlaylists.js` | Keeps Plex playlists in sync with external sources |

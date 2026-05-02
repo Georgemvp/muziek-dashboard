@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test *)",
+      "Bash(git stash *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(command -v hub)",
+      "Read(//usr/bin/**)",
+      "Bash(node --check middleware/startup.js)",
+      "Read(//Users/casper/**)",
+      "Read(//Users/casper/bin/**)"
+    ]
+  }
+}

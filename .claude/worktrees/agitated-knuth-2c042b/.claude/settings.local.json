@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(brew list *)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\")",
+      "Bash(gh pr create --repo Georgemvp/muziek-dashboard --base main --head claude/agitated-knuth-2c042b --title 'refactor\\(discover\\): 6 onafhankelijke cache-secties, nul API-calls bij laden' --body ' *)"
+    ]
+  }
+}

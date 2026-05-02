@@ -1,0 +1,592 @@
+/* ── AudioMuse styles ─────────────────────────────────────────────────────── */
+
+/* ── Status dot (global, used in topbar + views) ────────────────────────── */
+.am-status-dot {
+  display:         inline-block;
+  width:           8px;
+  height:          8px;
+  border-radius:   50%;
+  flex-shrink:     0;
+  transition:      background 0.3s;
+}
+.am-dot-grey   { background: var(--muted2, #888); }
+.am-dot-green  { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.45); }
+.am-dot-orange { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,.45); animation: am-pulse 1.4s infinite; }
+.am-dot-red    { background: #ef4444; }
+
+@keyframes am-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .5; }
+}
+
+/* ── Topbar status indicator ─────────────────────────────────────────────── */
+.am-topbar-status {
+  display:        flex;
+  align-items:    center;
+  gap:            5px;
+  padding:        4px 8px;
+  border:         1px solid var(--border, #e5e7eb);
+  border-radius:  6px;
+  background:     transparent;
+  cursor:         pointer;
+  color:          var(--fg, #111);
+  font-size:      11px;
+  font-weight:    600;
+  letter-spacing: .03em;
+  transition:     background 0.2s, border-color 0.2s;
+  white-space:    nowrap;
+}
+.am-topbar-status:hover {
+  background:     var(--hover-bg, #f3f4f6);
+  border-color:   var(--accent, #6366f1);
+}
+.am-topbar-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted2, #888);
+  min-width: 20px;
+  text-align: center;
+}
+
+/* ── Similar Songs button (injected on track items) ─────────────────────── */
+.am-similar-btn {
+  display:      inline-flex;
+  align-items:  center;
+  justify-content: center;
+  width:        26px;
+  height:       26px;
+  padding:      0;
+  border:       none;
+  border-radius:6px;
+  background:   transparent;
+  color:        var(--muted2, #888);
+  cursor:       pointer;
+  flex-shrink:  0;
+  opacity:      0;
+  transition:   opacity 0.15s, color 0.15s, background 0.15s;
+}
+/* Show on row hover */
+.am-track-item:hover .am-similar-btn,
+.track-row:hover .am-similar-btn,
+.card-item:hover .am-similar-btn,
+tr:hover .am-similar-btn {
+  opacity: 1;
+}
+.am-similar-btn:hover {
+  color:       var(--accent, #6366f1);
+  background:  var(--hover-bg, #f3f4f6);
+}
+
+/* ── AudioMuse view (deep integration hub) ───────────────────────────────── */
+.am-view {
+  max-width:   900px;
+  margin:      0 auto;
+  padding:     24px 20px 48px;
+  display:     flex;
+  flex-direction: column;
+  gap:         20px;
+}
+
+.am-header {
+  display:      flex;
+  align-items:  center;
+  justify-content: space-between;
+  flex-wrap:    wrap;
+  gap:          12px;
+}
+.am-header-left {
+  display:     flex;
+  align-items: center;
+  gap:         14px;
+}
+.am-logo-icon {
+  width:        48px;
+  height:       48px;
+  border-radius:12px;
+  background:   var(--hover-bg, #f3f4f6);
+  display:      flex;
+  align-items:  center;
+  justify-content: center;
+  color:        var(--accent, #6366f1);
+  flex-shrink:  0;
+}
+.am-view-title {
+  font-size:   1.5rem;
+  font-weight: 700;
+  margin:      0;
+  line-height: 1.2;
+}
+.am-view-sub {
+  font-size:  13px;
+  color:      var(--muted2, #888);
+  margin:     2px 0 0;
+}
+.am-header-right {
+  display:    flex;
+  align-items:center;
+  gap:        10px;
+}
+.am-status-inline {
+  display:    flex;
+  align-items:center;
+  gap:        7px;
+  font-size:  13px;
+  color:      var(--muted2, #888);
+}
+.am-open-btn {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       7px 14px;
+  border:        1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  background:    transparent;
+  color:         var(--fg, #111);
+  font-size:     13px;
+  font-weight:   500;
+  text-decoration: none;
+  transition:    background 0.2s, border-color 0.2s;
+}
+.am-open-btn:hover {
+  background:   var(--hover-bg, #f3f4f6);
+  border-color: var(--accent, #6366f1);
+  color:        var(--accent, #6366f1);
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.am-card {
+  background:   var(--card-bg, #fff);
+  border:       1px solid var(--border, #e5e7eb);
+  border-radius:12px;
+  padding:      20px;
+}
+.am-card-title {
+  font-size:  14px;
+  font-weight:700;
+  color:      var(--fg, #111);
+  margin:     0 0 14px;
+  display:    flex;
+  align-items:center;
+  gap:        7px;
+}
+.am-card-hint {
+  font-size:  13px;
+  color:      var(--muted2, #888);
+  margin:     0 0 14px;
+  line-height:1.5;
+}
+
+/* ── Status card ─────────────────────────────────────────────────────────── */
+.am-status-row {
+  display:    flex;
+  align-items:center;
+  gap:        10px;
+  font-size:  14px;
+}
+.am-status-text {
+  color: var(--fg, #111);
+}
+.am-status-hint {
+  font-size: 12px;
+  color: var(--muted2, #888);
+  margin: 8px 0 0;
+}
+.am-progress-wrap {
+  height:       6px;
+  background:   var(--hover-bg, #f3f4f6);
+  border-radius:3px;
+  overflow:     hidden;
+  margin:       12px 0 6px;
+}
+.am-progress-bar {
+  height:           100%;
+  background:       var(--accent, #6366f1);
+  border-radius:    3px;
+  transition:       width 0.6s ease;
+  min-width:        4px;
+}
+.am-progress-label {
+  font-size: 12px;
+  color:     var(--muted2, #888);
+}
+
+/* ── Two-column layout ───────────────────────────────────────────────────── */
+.am-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 680px) {
+  .am-two-col { grid-template-columns: 1fr; }
+}
+
+/* ── Search forms ────────────────────────────────────────────────────────── */
+.am-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.am-input {
+  flex:          1 1 120px;
+  padding:       8px 12px;
+  border:        1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  background:    var(--input-bg, #fff);
+  color:         var(--fg, #111);
+  font-size:     13px;
+  outline:       none;
+  transition:    border-color 0.2s;
+}
+.am-input:focus { border-color: var(--accent, #6366f1); }
+.am-input-full  { flex: 1 1 100%; }
+.am-submit-btn {
+  padding:       8px 16px;
+  background:    var(--accent, #6366f1);
+  color:         #fff;
+  border:        none;
+  border-radius: 8px;
+  font-size:     13px;
+  font-weight:   600;
+  cursor:        pointer;
+  white-space:   nowrap;
+  display:       inline-flex;
+  align-items:   center;
+  gap:           6px;
+  transition:    background 0.2s, opacity 0.2s;
+}
+.am-submit-btn:hover   { background: var(--accent-dark, #4f46e5); }
+.am-submit-btn:disabled{ opacity: .6; cursor: default; }
+
+/* ── Results ─────────────────────────────────────────────────────────────── */
+.am-results-area {
+  max-height:  380px;
+  overflow-y:  auto;
+}
+.am-results-header {
+  font-size:    12px;
+  color:        var(--muted2, #888);
+  padding:      0 0 8px;
+  border-bottom:1px solid var(--border, #e5e7eb);
+  margin-bottom:8px;
+}
+.am-empty {
+  font-size:   13px;
+  color:       var(--muted2, #888);
+  padding:     12px 0;
+  text-align:  center;
+}
+.am-loading-small {
+  display:    flex;
+  align-items:center;
+  gap:        10px;
+  color:      var(--muted2, #888);
+  font-size:  13px;
+  padding:    8px 0;
+}
+
+/* ── Track list items ────────────────────────────────────────────────────── */
+.am-track-list { display: flex; flex-direction: column; gap: 2px; }
+.am-track-item {
+  display:      flex;
+  align-items:  center;
+  gap:          8px;
+  padding:      6px 4px;
+  border-radius:6px;
+  transition:   background 0.15s;
+}
+.am-track-item:hover { background: var(--hover-bg, #f3f4f6); }
+.am-track-info {
+  flex:        1;
+  min-width:   0;
+  display:     flex;
+  flex-direction: column;
+}
+.am-track-title {
+  font-size:     13px;
+  font-weight:   500;
+  color:         var(--fg, #111);
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+.am-track-artist {
+  font-size:     12px;
+  color:         var(--muted2, #888);
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+.am-score {
+  font-size:    11px;
+  color:        var(--muted2, #888);
+  background:   var(--hover-bg, #f3f4f6);
+  border-radius:4px;
+  padding:      2px 5px;
+  flex-shrink:  0;
+}
+.am-play-btn {
+  width:        28px;
+  height:       28px;
+  border:       none;
+  border-radius:50%;
+  background:   var(--accent, #6366f1);
+  color:        #fff;
+  cursor:       pointer;
+  display:      flex;
+  align-items:  center;
+  justify-content: center;
+  flex-shrink:  0;
+  transition:   background 0.2s, transform 0.15s;
+}
+.am-play-btn:hover     { background: var(--accent-dark, #4f46e5); transform: scale(1.1); }
+.am-play-btn:disabled  { opacity: .5; cursor: default; transform: none; }
+
+/* ── Smart Playlists promo card ──────────────────────────────────────────── */
+.am-playlists-promo-inner {
+  display:      flex;
+  align-items:  center;
+  justify-content: space-between;
+  gap:          16px;
+  flex-wrap:    wrap;
+}
+.am-nav-btn {
+  padding:       9px 20px;
+  background:    var(--accent, #6366f1);
+  color:         #fff;
+  border:        none;
+  border-radius: 8px;
+  font-size:     14px;
+  font-weight:   600;
+  cursor:        pointer;
+  white-space:   nowrap;
+  transition:    background 0.2s;
+  flex-shrink:   0;
+}
+.am-nav-btn:hover { background: var(--accent-dark, #4f46e5); }
+
+/* ── Back button ─────────────────────────────────────────────────────────── */
+.am-back-btn {
+  display:     inline-flex;
+  align-items: center;
+  gap:         6px;
+  padding:     6px 12px;
+  border:      1px solid var(--border, #e5e7eb);
+  border-radius:8px;
+  background:  transparent;
+  color:       var(--muted2, #888);
+  font-size:   13px;
+  cursor:      pointer;
+  transition:  background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.am-back-btn:hover {
+  background:  var(--hover-bg, #f3f4f6);
+  color:       var(--fg, #111);
+}
+
+/* ── Smart Playlist grid ─────────────────────────────────────────────────── */
+.am-pl-grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap:                   16px;
+}
+.am-pl-card {
+  background:   var(--card-bg, #fff);
+  border:       1px solid var(--border, #e5e7eb);
+  border-radius:12px;
+  overflow:     hidden;
+  cursor:       pointer;
+  transition:   transform 0.15s, box-shadow 0.15s;
+}
+.am-pl-card:hover {
+  transform:  translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.10);
+}
+.am-pl-cover {
+  height:          120px;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+.am-pl-info {
+  padding: 12px 14px 14px;
+}
+.am-pl-name {
+  font-size:     14px;
+  font-weight:   700;
+  color:         var(--fg, #111);
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.am-pl-meta {
+  font-size: 12px;
+  color:     var(--muted2, #888);
+  margin-bottom: 6px;
+}
+.am-mood-list {
+  display:  flex;
+  flex-wrap:wrap;
+  gap:      4px;
+}
+.am-mood-badge {
+  font-size:    11px;
+  padding:      2px 7px;
+  border-radius:4px;
+  background:   var(--hover-bg, #f3f4f6);
+  color:        var(--muted2, #888);
+  border:       1px solid var(--border, #e5e7eb);
+}
+
+/* ── Playlist detail ─────────────────────────────────────────────────────── */
+.am-pl-detail-header {
+  display:      flex;
+  align-items:  center;
+  justify-content: space-between;
+  margin-bottom:14px;
+  flex-wrap:    wrap;
+  gap:          10px;
+}
+.am-pl-detail-count {
+  font-size:  13px;
+  color:      var(--muted2, #888);
+}
+.am-play-all-btn {
+  display:    inline-flex;
+  align-items:center;
+  gap:        6px;
+}
+
+/* ── Similar Songs Modal ─────────────────────────────────────────────────── */
+.am-modal-overlay {
+  position:   fixed;
+  inset:      0;
+  background: rgba(0,0,0,.55);
+  z-index:    3000;
+  display:    flex;
+  align-items:center;
+  justify-content:center;
+  padding:    16px;
+  opacity:    0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.am-modal-overlay.open {
+  opacity:        1;
+  pointer-events: all;
+}
+.am-modal-box {
+  background:   var(--card-bg, #fff);
+  border:       1px solid var(--border, #e5e7eb);
+  border-radius:16px;
+  width:        min(520px, 100%);
+  max-height:   80vh;
+  display:      flex;
+  flex-direction:column;
+  box-shadow:   0 20px 60px rgba(0,0,0,.25);
+  overflow:     hidden;
+  transform:    translateY(12px) scale(.97);
+  transition:   transform 0.25s;
+}
+.am-modal-overlay.open .am-modal-box {
+  transform: translateY(0) scale(1);
+}
+.am-modal-header {
+  display:       flex;
+  align-items:   center;
+  justify-content:space-between;
+  padding:       16px 20px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  flex-shrink:   0;
+}
+.am-modal-title {
+  font-size:  15px;
+  font-weight:700;
+  color:      var(--fg, #111);
+  overflow:   hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.am-modal-close {
+  width:        30px;
+  height:       30px;
+  border:       none;
+  border-radius:50%;
+  background:   var(--hover-bg, #f3f4f6);
+  cursor:       pointer;
+  font-size:    14px;
+  color:        var(--muted2, #888);
+  flex-shrink:  0;
+  transition:   background 0.15s;
+}
+.am-modal-close:hover { background: var(--border, #e5e7eb); }
+.am-modal-body {
+  overflow-y: auto;
+  padding:    16px 20px;
+  flex:       1;
+}
+
+/* ── Search: Sonic search mode ───────────────────────────────────────────── */
+.search-mode-toggle {
+  position:     absolute;
+  right:        8px;
+  top:          50%;
+  transform:    translateY(-50%);
+  width:        28px;
+  height:       28px;
+  border:       1px solid var(--border, #e5e7eb);
+  border-radius:6px;
+  background:   var(--card-bg, #fff);
+  cursor:       pointer;
+  display:      flex;
+  align-items:  center;
+  justify-content:center;
+  color:        var(--muted2, #888);
+  transition:   background 0.2s, color 0.2s, border-color 0.2s;
+  z-index:      2;
+}
+.search-mode-toggle:hover {
+  background:   var(--hover-bg, #f3f4f6);
+  color:        var(--accent, #6366f1);
+  border-color: var(--accent, #6366f1);
+}
+.search-mode-toggle.active {
+  background:   var(--accent, #6366f1);
+  color:        #fff;
+  border-color: var(--accent, #6366f1);
+}
+/* Make sure search-wrap is positioned */
+.search-wrap { position: relative; }
+
+.search-sonic-header {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       8px 14px 6px;
+  font-size:     12px;
+  font-weight:   600;
+  color:         var(--accent, #6366f1);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  margin-bottom: 4px;
+}
+.search-sonic-item .search-result-ph {
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  font-size:        18px;
+  color:            rgba(255,255,255,.8);
+}
+
+/* ── Dark theme overrides ────────────────────────────────────────────────── */
+[data-theme="dark"] .am-input {
+  background: var(--input-bg, #1e1e2e);
+  color:      var(--fg, #e2e8f0);
+}
+[data-theme="dark"] .am-modal-box {
+  background: var(--card-bg, #1e1e2e);
+}
+[data-theme="dark"] .am-pl-card {
+  background: var(--card-bg, #1e1e2e);
+}

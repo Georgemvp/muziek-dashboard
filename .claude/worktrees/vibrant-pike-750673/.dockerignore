@@ -1,0 +1,13 @@
+node_modules
+.env
+.git
+data
+*.log
+*.backup
+*.bak
+tests/
+docs/
+*.md
+commit-*.sh
+.commit-message
+COMMIT_MESSAGE.txt

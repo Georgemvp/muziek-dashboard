@@ -1,0 +1,110 @@
+name: "Support in Test"
+description: "Help test clustering algorithms and evaluate playlists with AudioMuse"
+title: "[Test] Your Library Name / YYYY-MM-DD"
+labels:
+  - "Support in Test"
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # AudioMuse Testing Form
+
+        Thanks for helping us improve automatic mixes for Jellyfin with AudioMuse!  
+        Our goal with this survey is to understand which algorithms and parameter sets are the most reliable for creating solid mixes across different libraries.  
+        Eventually we would like for Jellyfin to have similar capabilities as Plex's "Sonic Analysis", but for free!
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Your Task
+
+        Your job is to set up AudioMuse (easily done via Docker, [instructions here](https://neptunehub.github.io/AudioMuse-AI/#local-deployment-with-docker-compose)), run the analysis once, and then run multiple clustering tests using different algorithms and parameters.  
+        Depending on your library size this might take a while, but most of the time is just waiting for the clustering to finish; you only have to change some settings, press a button, and evaluate the result every couple hours.
+
+        The process is as follows:
+
+        1. **Setup**: Install AudioMuse and verify it runs by completing an analysis + clustering.
+        2. **Analyze**: Run at least one analysis task (skip if already done). You may limit "Number of recent albums" to speed up, but for best results leave it at `0`.
+        3. **Configure**: Select the next parameter set from **Test Parameters** below. In the **Advanced** tab, enter values under **Clustering Parameters**. Leave any unspecified settings at default. **If** you tweak additional parameters after Test 8, please note them below.
+        4. **Cluster**: Click **Start Clustering** in **Run Tasks** and wait for completion.
+        5. **Record**: Copy runtime, best score, and playlists generated into the **Performance Properties** table.
+        6. **Evaluate**: Review the playlists (in Jellyfin or AudioMuse) and rate them in **Playlist Evaluation**.
+        7. **Feedback**: Add any notes, bugs, or suggestions. If you hit errors, please [file a bug](https://github.com/NeptuneHub/AudioMuse-AI/issues/new?template=bug_report.md).
+
+  - type: textarea
+    id: test-setup
+    attributes:
+      label: "1. Test Setup"
+      description: "In this section, please fill in the details of your setup."
+      value: |
+        1. **Docker Image** (tag & SHA256): e.g. `devel@2c541573eb15e42e51bdf176700132db04d78ade991ddc7fef9ccd5ee9c161df`
+        2. **System Specs** (Arch, OS, CPU): e.g. `x86, TrueNAS SCALE (Debian), Ryzen 5600G`
+        3. **Albums/Tracks Analyzed**: e.g. `250 albums → 2 138 tracks`
+        4. **Analysis Duration**: e.g. `2 h 37 m`
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: test-parameters
+    attributes:
+      label: "2. Test Parameters (check all that apply)"
+      options:
+        - label: "Test 1 – K-Means, 5 000 runs, PCA 0–8, Embeddings: NO"
+        - label: "Test 2 – K-Means, 5 000 runs, PCA 0–199, Embeddings: YES"
+        - label: "Test 3 – GMM, 5 000 runs, PCA 0–8, Embeddings: NO"
+        - label: "Test 4 – GMM, 5 000 runs, PCA 0–199, Embeddings: YES"
+        - label: "Test 5 – DBSCAN, 5 000 runs, PCA 0–8, Embeddings: NO"
+        - label: "Test 6 – DBSCAN, 5 000 runs, PCA 0–199, Embeddings: YES"
+        - label: "Test 7 – Spectral, 5 000 runs, PCA 0–8, Embeddings: NO"
+        - label: "Test 8 – Spectral, 5 000 runs, PCA 0–199, Embeddings: YES"
+        - label: "Test 9 – Custom/Other (describe below)"
+
+  - type: textarea
+    id: performance-properties
+    attributes:
+      label: "2.1 Performance Properties"
+      description: "Paste runtime, best score, and number of playlists created for each test."
+      value: |
+        | Test # | Runtime  HH:MM:SS| Best Score xx.xx|
+        |-------:|:-------:|:----------:|
+        | 1      |         |            |
+        | 2      |         |            |
+        | 3      |         |            |
+        | 4      |         |            |
+        | 5      |         |            |
+        | 6      |         |            |
+        | 7      |         |            |
+        | 8      |         |            |
+        | 9      |         |            |
+
+  - type: textarea
+    id: playlist-evaluation
+    attributes:
+      label: "3. Playlist Evaluation"
+      description: "Genre Coherence = how well were the different genres within your library represented by the generated playlists?"
+      value: |
+              | Test # | Genre Coherence (out of 5) |Overall Quality (out of 5)| Comments|
+              |-------:|:---------------:|:------------------:|:--------------:|
+              | 1      |                 |                    |                |
+              | 2      |                 |                    |                |
+              | 3      |                 |                    |                |
+              | 4      |                 |                    |                |
+              | 5      |                 |                    |                |
+              | 6      |                 |                    |                |
+              | 7      |                 |                    |                |
+              | 8      |                 |                    |                |
+              | 9      |                 |                    |                |
+
+
+  - type: textarea
+    id: additional-feedback
+    attributes:
+      label: "4. Additional Feedback"
+      description: "Any bugs, unexpected behavior, or suggestions? Let us know!"
+      placeholder: |
+        - Playlist creation failed after Test 4
+        - UI lag during clustering
+        - Would love a dark theme option
+    validations:
+      required: false

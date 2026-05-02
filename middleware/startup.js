@@ -20,7 +20,7 @@ const logger = require('../logger');
  * @param {object}                deps     - Gedeeld dependency-object
  */
 function runStartup(server, deps) {
-  const { syncPlexLibrary, initDiscover, initGenres, initGaps, initReleases, automationService, initPlaylists } = deps;
+  const { syncPlexLibrary, initGenres, automationService, initPlaylists } = deps;
 
   // Automation Engine initialiseren (vóór alles, want het registreert alleen DB + listeners)
   try {
@@ -29,43 +29,23 @@ function runStartup(server, deps) {
     logger.error({ err: err.message }, '⚠ Automation Engine initialisatie mislukt');
   }
 
-  // Enrichment Manager initialiseren
-  try {
-    const enrichmentManager = require('../services/enrichment/manager');
-    enrichmentManager.init(deps);
-    logger.info('✓ Enrichment Manager geïnitialiseerd');
-  } catch (err) {
-    logger.error({ err: err.message }, '⚠ Enrichment Manager initialisatie mislukt');
-  }
-
   logger.info('🔄 Initializing Plex library...');
   (async () => {
-    // Plex-sync eerst afwachten zodat discovery services een gevulde bibliotheek hebben
+    // Plex-sync eerst afwachten zodat genres service een gevulde bibliotheek heeft
     try {
       await syncPlexLibrary(true);
       logger.info({ status: 'ready' }, '✓ Plex library initialized');
-      const enrichmentManager = require('../services/enrichment/manager');
-      enrichmentManager.queueAll();
     } catch (plexErr) {
       logger.warn({ err: plexErr, message: plexErr?.message },
         '⚠ Plex library initialization failed (will retry on first request)');
     }
 
-    logger.info('🔄 Starting discovery services...');
-    const [discoverResult, genresResult, gapsResult, releasesResult] =
-      await Promise.allSettled([initDiscover(), initGenres(), initGaps(), initReleases()]);
-
-    const failed = [
-      discoverResult.status === 'rejected'  && 'discover',
-      genresResult.status   === 'rejected'  && 'genres',
-      gapsResult.status     === 'rejected'  && 'gaps',
-      releasesResult.status === 'rejected'  && 'releases',
-    ].filter(Boolean);
-
-    if (failed.length) {
-      logger.warn({ services: failed }, `⚠ ${failed.join(', ')} service(s) initialization failed`);
-    } else {
-      logger.info('✓ All discovery services initialized');
+    logger.info('🔄 Starting genres service...');
+    try {
+      await initGenres();
+      logger.info('✓ Genres service initialized');
+    } catch (err) {
+      logger.warn({ err: err.message }, '⚠ Genres service initialization failed');
     }
     logger.info('✓ All initialization tasks completed - app fully operational');
   })();
@@ -75,11 +55,7 @@ function runStartup(server, deps) {
   setInterval(() => {
     logger.debug('🔄 Running background Plex sync...');
     syncPlexLibrary(true)
-      .then(() => {
-        logger.debug('✓ Background Plex sync completed');
-        const enrichmentManager = require('../services/enrichment/manager');
-        enrichmentManager.queueAll();
-      })
+      .then(() => logger.debug('✓ Background Plex sync completed'))
       .catch(e => logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed'));
   }, 30 * 60 * 1_000);
 

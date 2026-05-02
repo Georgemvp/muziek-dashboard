@@ -23,36 +23,9 @@ async function checkService(url, maxMs = 3000) {
 
 module.exports = function(app, deps) {
   const {
-    proxyImage, getDiscover, refreshDiscover, getDiscoverStatus, getGaps, refreshGaps, getReleases,
-    refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache, setCache,
+    proxyImage, getWishlist, addToWishlist, removeFromWishlist, getCache, setCache,
     getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN, TIDARR_URL, ORPHEUS_URL
   } = deps;
-
-  // ── /api/discover, /api/gaps, /api/releases ───────────────────────────────
-
-  app.get('/api/discover', (req, res) => {
-    res.set('Cache-Control', 'private, max-age=600');
-    res.json(getDiscover());
-  });
-
-  app.get('/api/discover/status', (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    res.json(getDiscoverStatus());
-  });
-
-  app.get('/api/gaps', (req, res) => {
-    res.set('Cache-Control', 'private, max-age=600');
-    res.json(getGaps());
-  });
-
-  app.get('/api/releases', (req, res) => {
-    res.set('Cache-Control', 'private, max-age=300');
-    res.json(getReleases());
-  });
-
-  app.post('/api/discover/refresh', (req, res) => res.json(refreshDiscover()));
-  app.post('/api/gaps/refresh', (req, res) => res.json(refreshGaps()));
-  app.post('/api/releases/refresh', (req, res) => res.json(refreshReleases()));
 
   // ── /api/wishlist ──────────────────────────────────────────────────────────
 
@@ -209,8 +182,6 @@ module.exports = function(app, deps) {
     const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
     const plexStatus      = getPlexStatus();
-    const discoverAge     = getCacheAge('discover');
-    const gapsAge         = getCacheAge('gaps');
     const lastFmDown      = deps.lastFmDown      ? deps.lastFmDown()      : false;
     const lastFmDownSince = deps.lastFmDownSince ? deps.lastFmDownSince() : null;
 
@@ -238,11 +209,7 @@ module.exports = function(app, deps) {
       status:          'ok',
       plexConnected:   plexStatus.ok === true,
       lastFmDown,
-      lastFmDownSince: lastFmDownSince ? new Date(lastFmDownSince).toISOString() : null,
-      cache: {
-        discover: discoverAge < Infinity ? Math.round(discoverAge / 1000) + 's' : 'leeg',
-        gaps:     gapsAge     < Infinity ? Math.round(gapsAge     / 1000) + 's' : 'leeg'
-      }
+      lastFmDownSince: lastFmDownSince ? new Date(lastFmDownSince).toISOString() : null
     });
   });
 };

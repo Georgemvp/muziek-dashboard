@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/views/mediasage-iframe.js"],
+  "sourcesContent": ["// \u2500\u2500 MediaSage iframe fallback view \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Tijdelijke view die MediaSage als iframe laadt zolang de SSE proxy-fix\n// nog niet actief is. Toont een waarschuwingsbanner in de wrap-div.\n\nexport function loadMediaSageIframe() {\n  const iframe  = document.getElementById('mediasage-iframe');\n  const wrap    = document.getElementById('mediasage-iframe-wrap');\n  const content = document.getElementById('content');\n\n  if (!wrap || !iframe) return;\n\n  wrap.style.display    = 'flex';\n  content.style.display = 'none';\n\n  // Laad iframe src eenmalig (lazy)\n  if (!iframe.dataset.loaded) {\n    iframe.src = iframe.dataset.src;\n    iframe.dataset.loaded = '1';\n  }\n}\n"],
+  "mappings": "AAIO,SAASA,GAAsB,CACpC,IAAMC,EAAU,SAAS,eAAe,kBAAkB,EACpDC,EAAU,SAAS,eAAe,uBAAuB,EACzDC,EAAU,SAAS,eAAe,SAAS,EAE7C,CAACD,GAAQ,CAACD,IAEdC,EAAK,MAAM,QAAa,OACxBC,EAAQ,MAAM,QAAU,OAGnBF,EAAO,QAAQ,SAClBA,EAAO,IAAMA,EAAO,QAAQ,IAC5BA,EAAO,QAAQ,OAAS,KAE5B",
+  "names": ["loadMediaSageIframe", "iframe", "wrap", "content"]
+}
