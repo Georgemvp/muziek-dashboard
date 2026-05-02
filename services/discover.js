@@ -8,11 +8,12 @@ const { lfm }                                       = require('./lastfm');
 const { getSimilarArtists, getDeezerArtistTopTracks } = require('./deezer');
 const { getMBZAlbums, mbzGet }                      = require('./musicbrainz');
 const {
-  syncPlexLibrary, artistInPlex, albumInPlex,
+  artistInPlex, albumInPlex,
   getPlexArtistNames, getPlexStatus,
 }                                                   = require('./plex');
 const {
-  getCache, setCache, getCacheAge, getEnrichmentData,
+  getEnrichmentData,
+  getDiscoverSection, setDiscoverSection, getDiscoverSectionAge,
 }                                                   = require('../db');
 
 // ── Cache-sleutels & TTLs ─────────────────────────────────────────────────────
@@ -76,9 +77,7 @@ async function buildSimilarArtists() {
   const period2 = SEED_PERIODS[Math.floor(Math.random() * SEED_PERIODS.length)];
   logger.info({ period1, period2 }, 'Discover: similar artists bouwen');
   try {
-    await syncPlexLibrary();
-
-    const historyArray = getCache(KEYS.history, 7 * 86_400_000) || [];
+    const historyArray = getDiscoverSection('history') || [];
     const historySet   = new Set(historyArray.map(n => n.toLowerCase()));
 
     const [data1, data2, lovedData, recentData] = await Promise.all([
@@ -160,10 +159,10 @@ async function buildSimilarArtists() {
       }
     }
 
-    setCache(KEYS.similar, { artists: diversePool, basedOn: topArtists, builtAt: Date.now(), periods: [period1, period2] });
+    setDiscoverSection('similar', { artists: diversePool, basedOn: topArtists, builtAt: Date.now(), periods: [period1, period2] }, TTL.similar);
 
     const newHistory = [...historyArray, ...diversePool.map(a => a.name)].slice(-200);
-    setCache(KEYS.history, newHistory);
+    setDiscoverSection('history', newHistory, 7 * 86_400_000);
 
     logger.info({ artists: diversePool.length }, 'Discover: similar artists klaar');
   } catch (e) {
@@ -208,7 +207,7 @@ async function buildUndiscoveredAlbums() {
     // Meest gespeelde artiesten eerst, dan nieuwste albums
     results.sort((a, b) => b.playcount - a.playcount || (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
 
-    setCache(KEYS.undiscovered, { albums: results.slice(0, 30), builtAt: Date.now() });
+    setDiscoverSection('undiscovered', { albums: results.slice(0, 30), builtAt: Date.now() }, TTL.undiscovered);
     logger.info({ albums: Math.min(results.length, 30) }, 'Discover: undiscovered albums klaar');
   } catch (e) {
     logger.error({ err: e }, 'Discover: undiscovered albums mislukt');
@@ -238,7 +237,7 @@ async function buildNewInGenres() {
       .map(([g]) => g);
 
     if (!topGenres.length) {
-      setCache(KEYS.newInGenres, { releases: [], genres: [], builtAt: Date.now() });
+      setDiscoverSection('newInGenres', { releases: [], genres: [], builtAt: Date.now() }, TTL.newInGenres);
       return;
     }
 
@@ -280,7 +279,7 @@ async function buildNewInGenres() {
 
     results.sort((a, b) => b.releaseDate.localeCompare(a.releaseDate));
 
-    setCache(KEYS.newInGenres, { releases: results, genres: topGenres, builtAt: Date.now() });
+    setDiscoverSection('newInGenres', { releases: results, genres: topGenres, builtAt: Date.now() }, TTL.newInGenres);
     logger.info({ releases: results.length, genres: topGenres }, 'Discover: new in genres klaar');
   } catch (e) {
     logger.error({ err: e }, 'Discover: new in genres mislukt');
@@ -311,7 +310,7 @@ async function buildFromYourLabels() {
       .map(([l]) => l);
 
     if (!topLabels.length) {
-      setCache(KEYS.fromLabels, { releases: [], labels: [], builtAt: Date.now() });
+      setDiscoverSection('fromLabels', { releases: [], labels: [], builtAt: Date.now() }, TTL.fromLabels);
       return;
     }
 
@@ -344,7 +343,7 @@ async function buildFromYourLabels() {
     // Artiesten die je nog NIET hebt krijgen voorrang
     results.sort((a, b) => Number(a.inPlex) - Number(b.inPlex));
 
-    setCache(KEYS.fromLabels, { releases: results, labels: topLabels, builtAt: Date.now() });
+    setDiscoverSection('fromLabels', { releases: results, labels: topLabels, builtAt: Date.now() }, TTL.fromLabels);
     logger.info({ releases: results.length, labels: topLabels.length }, 'Discover: from labels klaar');
   } catch (e) {
     logger.error({ err: e }, 'Discover: from labels mislukt');
@@ -385,7 +384,7 @@ async function buildDeepCuts() {
       if (results.length >= 20) break;
     }
 
-    setCache(KEYS.deepCuts, { artists: shuffle(results), builtAt: Date.now() });
+    setDiscoverSection('deepCuts', { artists: shuffle(results), builtAt: Date.now() }, TTL.deepCuts);
     logger.info({ artists: results.length }, 'Discover: deep cuts klaar');
   } catch (e) {
     logger.error({ err: e }, 'Discover: deep cuts mislukt');
@@ -421,7 +420,7 @@ async function buildHiddenGems() {
       });
     }
 
-    setCache(KEYS.hiddenGems, { artists: results, builtAt: Date.now() });
+    setDiscoverSection('hiddenGems', { artists: results, builtAt: Date.now() }, TTL.hiddenGems);
     logger.info({ artists: results.length }, 'Discover: hidden gems klaar');
   } catch (e) {
     logger.error({ err: e }, 'Discover: hidden gems mislukt');
@@ -445,7 +444,7 @@ function triggerBuild(section) {
 }
 
 function checkAndTrigger(section, ttl) {
-  if (getCacheAge(KEYS[section]) > ttl) triggerBuild(section);
+  if (getDiscoverSectionAge(section) > ttl) triggerBuild(section);
 }
 
 // ── Publieke API ──────────────────────────────────────────────────────────────
@@ -459,12 +458,12 @@ function getDiscover() {
     checkAndTrigger(section, ttl);
   }
 
-  const similar      = getCache(KEYS.similar);
-  const undiscovered = getCache(KEYS.undiscovered);
-  const newInGenres  = getCache(KEYS.newInGenres);
-  const fromLabels   = getCache(KEYS.fromLabels);
-  const deepCuts     = getCache(KEYS.deepCuts);
-  const hiddenGems   = getCache(KEYS.hiddenGems);
+  const similar      = getDiscoverSection('similar');
+  const undiscovered = getDiscoverSection('undiscovered');
+  const newInGenres  = getDiscoverSection('newInGenres');
+  const fromLabels   = getDiscoverSection('fromLabels');
+  const deepCuts     = getDiscoverSection('deepCuts');
+  const hiddenGems   = getDiscoverSection('hiddenGems');
 
   if (!similar && !undiscovered && !newInGenres && !fromLabels && !deepCuts && !hiddenGems) {
     return { status: 'building', message: 'Muziekontdekkingen worden geanalyseerd (ca. 30 sec)...' };
@@ -500,6 +499,18 @@ function refreshDiscover() {
   return { ok: true, building: true };
 }
 
+/** Retourneert per sectie of er gecachede data aanwezig is en of er een build loopt. */
+function getDiscoverStatus() {
+  const status = {};
+  for (const section of Object.keys(BUILDERS)) {
+    status[section] = {
+      ready:    getDiscoverSectionAge(section) < Infinity,
+      building: !!_builds[section],
+    };
+  }
+  return status;
+}
+
 /** Start achtergrond-builds bij opstarten (na 8 sec zodat Plex eerst kan synchroniseren). */
 function initDiscover() {
   setTimeout(() => {
@@ -509,4 +520,4 @@ function initDiscover() {
   }, 8_000);
 }
 
-module.exports = { getDiscover, refreshDiscover, initDiscover };
+module.exports = { getDiscover, refreshDiscover, initDiscover, getDiscoverStatus };
