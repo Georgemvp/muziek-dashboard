@@ -20,7 +20,7 @@ const logger = require('../logger');
  * @param {object}                deps     - Gedeeld dependency-object
  */
 function runStartup(server, deps) {
-  const { syncPlexLibrary, initDiscover, initGaps, initReleases, automationService } = deps;
+  const { syncPlexLibrary, initDiscover, initGenres, initGaps, initReleases, automationService } = deps;
 
   // Automation Engine initialiseren (vóór alles, want het registreert alleen DB + listeners)
   try {
@@ -39,8 +39,8 @@ function runStartup(server, deps) {
   }
 
   logger.info('🔄 Initializing Plex library and discovery services in parallel...');
-  Promise.allSettled([syncPlexLibrary(true), initDiscover(), initGaps(), initReleases()])
-    .then(([plexResult, discoverResult, gapsResult, releasesResult]) => {
+  Promise.allSettled([syncPlexLibrary(true), initDiscover(), initGenres(), initGaps(), initReleases()])
+    .then(([plexResult, discoverResult, genresResult, gapsResult, releasesResult]) => {
       if (plexResult.status === 'fulfilled') {
         logger.info({ status: 'ready' }, '✓ Plex library initialized');
       } else {
@@ -50,6 +50,7 @@ function runStartup(server, deps) {
 
       const failed = [
         discoverResult.status === 'rejected' && 'Discover',
+        genresResult.status   === 'rejected' && 'Genres',
         gapsResult.status     === 'rejected' && 'Gaps',
         releasesResult.status === 'rejected' && 'Releases',
       ].filter(Boolean);
