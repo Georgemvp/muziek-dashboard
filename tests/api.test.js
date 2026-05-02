@@ -98,13 +98,12 @@ describe('GET /api/topartists', () => {
 // Discover
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('GET /api/discover', () => {
-  it('geeft 200 – status is ok of building', async () => {
-    const res = await request(app).get('/api/discover');
-    assert.equal(res.status, 200);
+describe('GET /api/core/discover', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait (CI-omgeving)', async () => {
+    const res = await request(app).get('/api/core/discover');
     assert.ok(
-      res.body.status === 'ok' || res.body.status === 'building',
-      `status moet 'ok' of 'building' zijn, kreeg: ${res.body.status}`
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
     );
   });
 });
