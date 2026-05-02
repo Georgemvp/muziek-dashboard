@@ -14,7 +14,7 @@ import { skeletonGrid } from '../modules/skeleton.js';
 // ────────────────────────────────────────────────────────────────────────────
 // MODULE STATE
 // ────────────────────────────────────────────────────────────────────────────
-let ontdekCurrentTab = localStorage.getItem('ontdekTab') || 'recs';
+let ontdekCurrentTab = localStorage.getItem('ontdekTab') || 'discover';
 let verkennerData    = {};   // cache per sectie: undiscovered, genres_new, labels, deep_cuts, genre_explorer
 let genreModalOpen   = false;
 let recsData = null;
