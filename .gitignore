@@ -29,3 +29,4 @@ mediasage/.git/
 *.sh
 .commit-message
 COMMIT_MESSAGE.txt
+.claude/
