@@ -68,6 +68,13 @@ const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../se
 const { Scrobbler } = require('../services/scrobbler');
 const { getWikipediaExtract } = require('../services/wikipedia');
 const mirroredPlaylistsService = require('../services/mirroredPlaylists');
+const {
+  getPlaylists: getSsPlaylists,
+  getPlaylistTracks: getSsPlaylistTracks,
+  refreshPlaylist: refreshSsPlaylist,
+  syncPlaylistToPlex: syncSsPlaylistToPlex,
+  initPlaylists,
+} = require('../services/playlists');
 
 // ── Scrobbler ─────────────────────────────────────────────────────────────────
 const scrobbler = new Scrobbler({
@@ -225,6 +232,9 @@ const deps = {
 
   // Mirrored Playlists
   mirroredPlaylistsService,
+
+  // SoulSync Playlist Engine
+  getSsPlaylists, getSsPlaylistTracks, refreshSsPlaylist, syncSsPlaylistToPlex, initPlaylists,
 
   // Helpers
   limitConcurrency,

@@ -23,6 +23,11 @@ const {
   getAvailableGenres,
   currentSeason,
   SEASON_TAGS,
+  // SoulSync Playlist Engine
+  getPlaylists,
+  getPlaylistTracks,
+  refreshPlaylist,
+  syncPlaylistToPlex,
 } = require('../services/playlists');
 const {
   savePlaylist,
@@ -380,4 +385,72 @@ module.exports = function(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // ── SoulSync Playlist Engine ──────────────────────────────────────────────────
+  // Deezer-gebaseerde playlists met caching en Plex-sync.
+
+  // GET /api/playlists/generated — metadata van alle SoulSync-playlists
+  app.get('/api/playlists/generated', (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'private, max-age=30');
+      res.json({ playlists: getPlaylists() });
+    } catch (err) {
+      logger.error({ err }, 'GET /api/playlists/generated mislukt');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/playlists/generated/:type — tracks van een specifieke SoulSync-playlist
+  // Query params: decade=1980, genre=rock (voor multi-instance playlists)
+  app.get('/api/playlists/generated/:type', (req, res) => {
+    const { type } = req.params;
+    const params = _ssParamsFromQuery(type, req.query);
+    try {
+      const data = getPlaylistTracks(type, params);
+      if (!data) {
+        return res.status(404).json({
+          error: 'Playlist niet beschikbaar',
+          hint: 'Gebruik POST /refresh om de playlist te bouwen'
+        });
+      }
+      res.setHeader('Cache-Control', 'private, max-age=120');
+      res.json(data);
+    } catch (err) {
+      logger.error({ type, err }, 'GET /api/playlists/generated/:type mislukt');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/playlists/generated/:type/refresh — forceer rebuild
+  app.post('/api/playlists/generated/:type/refresh', (req, res) => {
+    const { type } = req.params;
+    const params = _ssParamsFromQuery(type, req.query);
+    try {
+      const result = refreshPlaylist(type, params);
+      res.json(result);
+    } catch (err) {
+      logger.error({ type, err }, 'POST /api/playlists/generated/:type/refresh mislukt');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/playlists/generated/:type/sync-plex — sync naar Plex als afspeellijst
+  app.post('/api/playlists/generated/:type/sync-plex', async (req, res) => {
+    const { type } = req.params;
+    const params = _ssParamsFromQuery(type, req.query);
+    try {
+      const result = await syncPlaylistToPlex(type, params);
+      res.json(result);
+    } catch (err) {
+      logger.error({ type, err }, 'POST /api/playlists/generated/:type/sync-plex mislukt');
+      res.status(500).json({ error: err.message });
+    }
+  });
 };
+
+/** Vertaalt query-parameters naar een params-object op basis van het playlist-type. */
+function _ssParamsFromQuery(type, query) {
+  if (type === 'decade')    return { decade: parseInt(query.decade, 10) || undefined };
+  if (type === 'genre_mix') return { genre: query.genre || undefined };
+  return null;
+}

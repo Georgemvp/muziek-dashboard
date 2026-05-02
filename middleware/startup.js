@@ -20,7 +20,7 @@ const logger = require('../logger');
  * @param {object}                deps     - Gedeeld dependency-object
  */
 function runStartup(server, deps) {
-  const { syncPlexLibrary, initDiscover, initGenres, initGaps, initReleases, automationService } = deps;
+  const { syncPlexLibrary, initDiscover, initGenres, initGaps, initReleases, automationService, initPlaylists } = deps;
 
   // Automation Engine initialiseren (vóór alles, want het registreert alleen DB + listeners)
   try {
@@ -71,6 +71,11 @@ function runStartup(server, deps) {
       .then(() => logger.debug('✓ Background Plex sync completed'))
       .catch(e => logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed'));
   }, 30 * 60 * 1_000);
+
+  // SoulSync playlist engine initialiseren (60s na start)
+  if (typeof initPlaylists === 'function') {
+    try { initPlaylists(); } catch (e) { logger.warn({ err: e.message }, '⚠ Playlists init mislukt'); }
+  }
 
   // Achtergrond-sync gespiegelde playlists elk uur
   const mirroredService = require('../services/mirroredPlaylists');
