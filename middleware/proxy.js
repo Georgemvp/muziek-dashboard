@@ -13,6 +13,7 @@ const { escapeHtml } = require('./helpers');
 const TIDARR_BASE    = (process.env.TIDARR_URL    || 'http://tidarr:8484').replace(/\/$/, '');
 const MEDIASAGE_BASE = (process.env.MEDIASAGE_URL || 'http://localhost:5765').replace(/\/$/, '');
 const AUDIOMUSE_BASE = (process.env.AUDIOMUSE_URL || 'http://localhost:8000').replace(/\/$/, '');
+const CORE_BASE      = (process.env.CORE_URL      || 'http://localhost:5001').replace(/\/$/, '');
 
 /**
  * Maakt een gestandaardiseerde proxy-foutafhandelaar.
@@ -162,6 +163,17 @@ function mountAudioMuse(app) {
   }));
 }
 
+/** Core Flask backend: /api/core/* → CORE_BASE */
+function mountCore(app) {
+  app.use('/api/core', createProxyMiddleware({
+    target:      CORE_BASE,
+    changeOrigin: true,
+    on: {
+      error: createProxyErrorHandler('Core', CORE_BASE)
+    }
+  }));
+}
+
 /**
  * Registreert alle proxy-middleware op de Express-app.
  * Aanroepen vóór statische bestanden en API-routes.
@@ -172,10 +184,12 @@ function registerProxies(app) {
   logger.info({ tidarrUrl: TIDARR_BASE },    'Tidarr proxy configured');
   logger.info({ mediasageUrl: MEDIASAGE_BASE }, 'MediaSage proxy configured');
   logger.info({ audiomuseUrl: AUDIOMUSE_BASE }, 'AudioMuse proxy configured');
+  logger.info({ coreUrl: CORE_BASE },          'Core proxy configured');
 
   mountTidarr(app);
   mountMediaSage(app);
   mountAudioMuse(app);
+  mountCore(app);
 }
 
 module.exports = { registerProxies };

@@ -303,6 +303,12 @@ COPY routes/         ./routes/
 COPY services/       ./services/
 COPY middleware/     ./middleware/
 COPY utils/          ./utils/
+COPY core/           ./core/
+
+# ── Core Flask backend: Python-afhankelijkheden ───────────────────────────────
+# Installeert Flask + Gunicorn in de system Python (3.11-slim-bookworm).
+# Geïsoleerd van AudioMuse venv — core/requirements.txt is bewust minimaal.
+RUN pip install --no-cache-dir -r /app/core/requirements.txt
 
 # ── Supervisord: beheert beide processen ─────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
