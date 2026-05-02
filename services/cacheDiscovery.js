@@ -427,6 +427,71 @@ function _buildGenreExplorer() {
     }));
 }
 
+// ── 6. getGenreDetail ──────────────────────────────────────────────────────
+/**
+ * Gedetailleerde informatie over één genre:
+ * - Artiesten in Plex die dit genre hebben (via artistGenres cache)
+ * - Top albums per artiest (uit Plex library)
+ * - Playcount statistieken (uit Last.fm cache)
+ *
+ * @param {string} genre - Naam van het genre
+ * @returns {object|null} { genre, artists: [{ name, playcount, albums, coverUrl }] }
+ */
+async function getGenreDetail(genre) {
+  if (!genre) return null;
+  const normGenre = genre.toLowerCase().trim();
+
+  const plexRaw      = getRawPlexCache();
+  const artistGenres = new Map(Object.entries(plexRaw.artistGenres || {}));
+  const artistMap    = new Map(Object.entries(plexRaw.artistMap    || {}));
+  const library      = plexRaw.library || [];
+
+  // Bouw Plex album-index
+  const albumsByArtist = new Map();
+  for (const item of library) {
+    const key = (item.artist || '').toLowerCase();
+    if (!albumsByArtist.has(key)) albumsByArtist.set(key, []);
+    albumsByArtist.get(key).push(item);
+  }
+
+  // Artiesten met dit genre
+  const matchedArtists = [];
+  for (const [normName, genres] of artistGenres.entries()) {
+    const hasGenre = genres.some(g => g.toLowerCase().includes(normGenre) || normGenre.includes(g.toLowerCase()));
+    if (!hasGenre) continue;
+
+    const origName = artistMap.get(normName) || normName;
+    const albums   = (albumsByArtist.get(normName) || []).map(a => ({
+      title:    a.album,
+      ratingKey:a.ratingKey,
+      thumb:    a.thumb ? `/api/plex/thumb?path=${encodeURIComponent(a.thumb)}` : null,
+      addedAt:  a.addedAt || null,
+    })).slice(0, 6);
+
+    // Last.fm playcount via cache
+    let playcount = 0;
+    const topData = getCache('api:topartists:overall', Infinity);
+    if (topData?.topartists?.artist) {
+      const found = topData.topartists.artist.find(a => a.name?.toLowerCase() === normName);
+      if (found) playcount = parseInt(found.playcount, 10) || 0;
+    }
+
+    // Cover: eerste album thumb
+    const coverUrl = albums[0]?.thumb || null;
+
+    matchedArtists.push({ name: origName, playcount, albums, coverUrl });
+  }
+
+  // Sorteer op playcount (meest gespeeld bovenaan)
+  matchedArtists.sort((a, b) => b.playcount - a.playcount);
+
+  return {
+    genre,
+    artistCount: matchedArtists.length,
+    artists:     matchedArtists.slice(0, 50),
+  };
+}
+
 // ── Herbouw alle discovery caches ───────────────────────────────────────────
 let _rebuildPromise = null;
 
@@ -465,5 +530,6 @@ module.exports = {
   getFromYourLabels,
   getDeepCuts,
   getGenreExplorer,
+  getGenreDetail,
   rebuildAllCaches,
 };

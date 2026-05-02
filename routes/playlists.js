@@ -14,6 +14,12 @@ const {
   generateHiddenGems,
   generateDailyMix,
   generateCustomPlaylist,
+  generateBecauseYouListenTo,
+  generateDailyGenreMixes,
+  generatePopularPicks,
+  generateDiscoveryShuffle,
+  generateFamiliarFavorites,
+  generateCustomPlaylistBuilder,
   getAvailableGenres,
   currentSeason,
   SEASON_TAGS,
@@ -68,6 +74,30 @@ const PLAYLIST_CATALOG = [
     params:      null,
     ttl:         PLAYLIST_TTL.hidden_gems,
   },
+  {
+    type:        'popular_picks',
+    name:        'Popular Picks',
+    description: 'Populaire tracks uit je bibliotheek die je al een tijdje niet hebt geluisterd',
+    icon:        '🔥',
+    params:      null,
+    ttl:         PLAYLIST_TTL.popular_picks,
+  },
+  {
+    type:        'discovery_shuffle',
+    name:        'Discovery Shuffle',
+    description: 'Verborgen artiesten in je bibliotheek die je zelden speelt',
+    icon:        '🎲',
+    params:      null,
+    ttl:         PLAYLIST_TTL.discovery_shuffle,
+  },
+  {
+    type:        'familiar_favorites',
+    name:        'Familiar Favorites',
+    description: 'Je meest gespeelde tracks, slim geroteerd voor afwisseling',
+    icon:        '⭐',
+    params:      null,
+    ttl:         PLAYLIST_TTL.familiar_favorites,
+  },
 ];
 
 // Decade types
@@ -114,25 +144,37 @@ function seasonEmoji(s) {
 // ── Generator map ─────────────────────────────────────────────────────────────
 async function runGenerator(type, params) {
   switch (type) {
-    case 'discovery_weekly':   return generateDiscoveryWeekly();
-    case 'release_radar':      return generateReleaseRadar();
-    case 'daily_mix':          return generateDailyMix();
-    case 'forgotten_favorites':return generateForgottenFavorites();
-    case 'hidden_gems':        return generateHiddenGems();
-    case 'decade':             return generateDecadePlaylist(params?.decade);
-    case 'seasonal':           return generateSeasonalPlaylist(params?.season);
-    case 'genre':              return generateGenrePlaylist(params?.genre);
-    case 'custom':             return generateCustomPlaylist(params?.seeds || []);
+    case 'discovery_weekly':      return generateDiscoveryWeekly();
+    case 'release_radar':         return generateReleaseRadar();
+    case 'daily_mix':             return generateDailyMix();
+    case 'forgotten_favorites':   return generateForgottenFavorites();
+    case 'hidden_gems':           return generateHiddenGems();
+    case 'decade':                return generateDecadePlaylist(params?.decade);
+    case 'seasonal':              return generateSeasonalPlaylist(params?.season);
+    case 'genre':                 return generateGenrePlaylist(params?.genre);
+    case 'custom':                return generateCustomPlaylist(params?.seeds || []);
+    // Nieuwe generators
+    case 'because_you_listen_to': return generateBecauseYouListenTo(params?.seeds || []);
+    case 'daily_genre_mixes':     return generateDailyGenreMixes().then(mixes =>
+                                    // Flatten naar een track-array met genre als 'reason'
+                                    mixes.flatMap(m => m.tracks.map(t => ({ ...t, reason: m.genre }))).slice(0, 50));
+    case 'popular_picks':         return generatePopularPicks();
+    case 'discovery_shuffle':     return generateDiscoveryShuffle();
+    case 'familiar_favorites':    return generateFamiliarFavorites(params || {});
+    case 'custom_builder':        return generateCustomPlaylistBuilder(params || {});
     default: throw new Error(`Onbekend playlist-type: ${type}`);
   }
 }
 
 function playlistDisplayName(type, params) {
   switch (type) {
-    case 'decade':   return `${params?.decade || ''}s`;
-    case 'seasonal': return seasonName(params?.season || '');
-    case 'genre':    return `${params?.genre || 'Genre'} Mix`;
-    case 'custom':   return `Mix: ${(params?.seeds || []).slice(0, 2).join(', ')}`;
+    case 'decade':               return `${params?.decade || ''}s`;
+    case 'seasonal':             return seasonName(params?.season || '');
+    case 'genre':                return `${params?.genre || 'Genre'} Mix`;
+    case 'custom':               return `Mix: ${(params?.seeds || []).slice(0, 2).join(', ')}`;
+    case 'because_you_listen_to':return `Omdat je luistert naar: ${(params?.seeds || []).slice(0, 2).join(', ')}`;
+    case 'daily_genre_mixes':    return 'Daily Genre Mixes';
+    case 'custom_builder':       return `Builder Mix: ${(params?.seeds || []).slice(0, 2).join(', ')}`;
     default:
       return PLAYLIST_CATALOG.find(p => p.type === type && !p.params)?.name || type;
   }
@@ -195,14 +237,21 @@ module.exports = function(app, deps) {
   // GET /api/playlists/generate/:type — genereer een playlist (met cache)
   app.get('/api/playlists/generate/:type', async (req, res) => {
     const { type } = req.params;
-    const { decade, genre, season, seeds, force } = req.query;
+    const { decade, genre, season, seeds, force, diversity, trackCount, includeSeeds } = req.query;
 
     // Bouw params-object
     let params = null;
-    if (type === 'decade')   params = { decade: parseInt(decade, 10) || 1990 };
-    if (type === 'seasonal') params = { season: season || currentSeason() };
-    if (type === 'genre')    params = { genre: genre || 'rock' };
-    if (type === 'custom')   params = { seeds: seeds ? seeds.split(',').map(s => s.trim()) : [] };
+    if (type === 'decade')               params = { decade: parseInt(decade, 10) || 1990 };
+    if (type === 'seasonal')             params = { season: season || currentSeason() };
+    if (type === 'genre')                params = { genre: genre || 'rock' };
+    if (type === 'custom')               params = { seeds: seeds ? seeds.split(',').map(s => s.trim()) : [] };
+    if (type === 'because_you_listen_to')params = { seeds: seeds ? seeds.split(',').map(s => s.trim()) : [] };
+    if (type === 'custom_builder')       params = {
+      seeds:          seeds ? seeds.split(',').map(s => s.trim()) : [],
+      trackCount:     parseInt(trackCount, 10) || 50,
+      diversityFactor:parseFloat(diversity) || 0.5,
+      includeSeeds:   includeSeeds !== 'false',
+    };
 
     // Check cache (tenzij force=true)
     if (force !== 'true') {

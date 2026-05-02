@@ -648,62 +648,111 @@ async function renderGenreExplorer(container) {
   }
 }
 
-/** Genre-modal: toont alle artiesten die in het genre vallen */
+/** Genre-modal Deep Dive: toont artiesten, albums en playcount-statistieken */
 function openGenreModal(genre, allGenres) {
   const entry = allGenres.find(g => g.genre === genre);
   if (!entry) return;
 
-  // Verwijder eventueel bestaande modal
   document.getElementById('vk-genre-modal')?.remove();
 
   const modal = document.createElement('div');
   modal.id = 'vk-genre-modal';
   modal.className = 'vk-modal-overlay';
   modal.innerHTML = `
-    <div class="vk-modal">
+    <div class="vk-modal vk-modal--genre">
       <div class="vk-modal-header">
-        <span class="vk-modal-title"># ${esc(entry.genre)}</span>
-        <span class="vk-modal-count">${entry.artistCount} artiest${entry.artistCount !== 1 ? 'en' : ''}</span>
-        <button class="vk-modal-close" id="vk-modal-close">✕</button>
+        <div>
+          <span class="vk-modal-title"># ${esc(entry.genre)}</span>
+          <span class="vk-modal-count">${entry.artistCount} artiest${entry.artistCount !== 1 ? 'en' : ''}</span>
+        </div>
+        <div class="vk-modal-header-acts">
+          <button class="vk-genre-gen-btn" id="vk-genre-gen-btn" title="Genereer playlist voor dit genre">
+            🎵 Genereer Playlist
+          </button>
+          <button class="vk-modal-close" id="vk-modal-close">✕</button>
+        </div>
       </div>
-      <div class="vk-modal-body">
-        <div class="vk-modal-loading"><div class="spinner"></div></div>
+      <div class="vk-modal-body" id="vk-genre-modal-body">
+        <div class="vk-modal-loading"><div class="spinner"></div> Laden…</div>
       </div>
     </div>`;
   document.body.appendChild(modal);
 
-  // Sluit via ✕ of klik buiten modal
   document.getElementById('vk-modal-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Laad artiesten van dat genre via plex-genre endpoint (al beschikbaar)
-  apiFetch(`/api/plex/genre/${encodeURIComponent(genre)}`)
+  // Genereer playlist knop
+  const genBtn = document.getElementById('vk-genre-gen-btn');
+  genBtn?.addEventListener('click', async () => {
+    genBtn.disabled = true;
+    genBtn.textContent = '⏳ Genereren…';
+    try {
+      const data = await apiFetch(
+        `/api/playlists/generate/genre?force=true&genre=${encodeURIComponent(genre)}`
+      );
+      const tracks = data.tracks || [];
+      genBtn.textContent = `✅ ${tracks.length} tracks`;
+      setTimeout(() => { genBtn.disabled = false; genBtn.innerHTML = '🎵 Genereer Playlist'; }, 3000);
+    } catch (e) {
+      genBtn.textContent = '❌ Mislukt';
+      genBtn.disabled = false;
+      setTimeout(() => { genBtn.innerHTML = '🎵 Genereer Playlist'; }, 2000);
+    }
+  });
+
+  const body = document.getElementById('vk-genre-modal-body');
+
+  // Laad rijke data via nieuwe endpoint
+  apiFetch(`/api/discover/genre-detail/${encodeURIComponent(genre)}`)
     .then(data => {
-      const artists = data.artists || data || [];
-      const body = modal.querySelector('.vk-modal-body');
+      const artists = data.artists || [];
       if (!artists.length) {
-        body.innerHTML = `<div class="vk-empty">Geen artiesten voor dit genre.</div>`;
+        body.innerHTML = `<div class="vk-empty">Geen artiesten voor dit genre gevonden in je bibliotheek.</div>`;
         return;
       }
-      let html = `<div class="vk-modal-artist-grid">`;
+
+      // Statistieken header
+      const totalPlaycount = artists.reduce((s, a) => s + (a.playcount || 0), 0);
+      let html = `
+        <div class="vk-genre-stats">
+          <div class="vk-genre-stat"><span class="vk-gs-num">${artists.length}</span><span class="vk-gs-lbl">Artiesten</span></div>
+          <div class="vk-genre-stat"><span class="vk-gs-num">${totalPlaycount.toLocaleString()}</span><span class="vk-gs-lbl">Totale Plays</span></div>
+        </div>
+        <div class="vk-genre-artist-list">`;
+
       artists.forEach(a => {
-        const name = a.name || a;
-        const bg = gradientFor(name);
-        const img = a.image
-          ? `<img class="vk-modal-artist-img" src="${esc(proxyImg(a.image, 80) || a.image)}" alt="${esc(name)}" loading="lazy"
-               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-             <div class="vk-modal-artist-ph" style="display:none;background:${bg}">${initials(name)}</div>`
-          : `<div class="vk-modal-artist-ph" style="background:${bg}">${initials(name)}</div>`;
-        html += `<div class="vk-modal-artist-card artist-link" data-artist="${esc(name)}">
-          <div class="vk-modal-artist-thumb">${img}</div>
-          <div class="vk-modal-artist-name">${esc(name)}</div>
+        const bg    = gradientFor(a.name);
+        const cover = a.coverUrl
+          ? `<img class="vk-ga-img" src="${esc(a.coverUrl)}" alt="${esc(a.name)}" loading="lazy"
+               onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">`
+          : '';
+        const ph = `<div class="vk-ga-ph" style="${a.coverUrl?'display:none;':''}background:${bg}">${initials(a.name)}</div>`;
+
+        const albumPills = (a.albums || []).slice(0, 4).map(alb =>
+          `<span class="vk-ga-album">${esc(alb.title)}</span>`
+        ).join('');
+
+        const playbar = a.playcount
+          ? `<div class="vk-ga-playbar" title="${a.playcount.toLocaleString()} plays">
+               <div class="vk-ga-playbar-fill" style="width:${Math.min(100, Math.round(a.playcount / Math.max(1, artists[0].playcount) * 100))}%"></div>
+             </div>`
+          : '';
+
+        html += `<div class="vk-genre-artist-row artist-link" data-artist="${esc(a.name)}">
+          <div class="vk-ga-thumb">${cover}${ph}</div>
+          <div class="vk-ga-info">
+            <div class="vk-ga-name">${esc(a.name)}</div>
+            <div class="vk-ga-albums">${albumPills}</div>
+            ${playbar}
+          </div>
+          <div class="vk-ga-plays">${a.playcount ? a.playcount.toLocaleString() : '—'}</div>
         </div>`;
       });
+
       body.innerHTML = html + `</div>`;
     })
     .catch(() => {
-      // Fallback: toon sampleArtists uit onze eigen data
-      const body = modal.querySelector('.vk-modal-body');
+      // Fallback: sampleArtists
       body.innerHTML = `<div class="vk-modal-artist-grid">${
         (entry.sampleArtists || []).map(name =>
           `<div class="vk-modal-artist-card artist-link" data-artist="${esc(name)}">

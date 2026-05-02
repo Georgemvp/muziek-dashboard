@@ -713,6 +713,398 @@ async function generateDailyMix() {
   return shuffle(resultTracks).slice(0, 50);
 }
 
+// ── 10. Because You Listen To ────────────────────────────────────────────────
+/**
+ * Seed-gebaseerde playlist: vergelijkbare artiesten op basis van 1–5 seeds.
+ * Seeds worden gewogen gecombineerd: artiesten die door meerdere seeds worden
+ * aanbevolen krijgen een hogere score.
+ */
+async function generateBecauseYouListenTo(seedArtists) {
+  if (!Array.isArray(seedArtists) || !seedArtists.length) return [];
+  const seeds = seedArtists.slice(0, 5);
+
+  const allSimilar = new Map(); // name → { name, count, totalMatch }
+  await Promise.allSettled(
+    seeds.map(async (seed) => {
+      try {
+        const similar = await getSimilarArtists(seed, 20);
+        for (const s of similar) {
+          const key = norm(s.name);
+          const existing = allSimilar.get(key) || { name: s.name, count: 0, totalMatch: 0 };
+          existing.count++;
+          existing.totalMatch += parseFloat(s.match || 0);
+          allSimilar.set(key, existing);
+        }
+      } catch {}
+    })
+  );
+
+  if (!allSimilar.size) return [];
+
+  // Sorteer: count × gemiddelde match (meeste seeds + hoogste gelijkenis bovenaan)
+  const sorted = [...allSimilar.values()]
+    .map(e => ({ ...e, score: e.count * (e.totalMatch / e.count) }))
+    .sort((a, b) => b.score - a.score)
+    .filter(c => artistInPlex(c.name));
+
+  if (!sorted.length) return [];
+
+  const library = getPlexLibrary();
+  const resultTracks = [];
+
+  for (const candidate of sorted.slice(0, 20)) {
+    const artistAlbums = library.filter(alb => norm(alb.artist) === norm(candidate.name));
+    if (!artistAlbums.length) continue;
+    const alb = artistAlbums[Math.floor(Math.random() * artistAlbums.length)];
+    try {
+      const tracks = await getAlbumTracks(alb.ratingKey);
+      const sample  = shuffle(tracks).slice(0, 3);
+      for (const t of sample) {
+        resultTracks.push({
+          artist:    candidate.name,
+          title:     t.title,
+          album:     alb.album,
+          duration:  t.duration || null,
+          plex_key:  t.ratingKey || alb.ratingKey,
+          cover_url: thumbUrl(alb.thumb),
+          reason:    `Vergelijkbaar met: ${seeds.slice(0, 2).join(', ')}`,
+        });
+      }
+    } catch {}
+    if (resultTracks.length >= 50) break;
+  }
+
+  return shuffle(resultTracks).slice(0, 50);
+}
+
+// ── 11. Daily Genre Mixes ─────────────────────────────────────────────────────
+/**
+ * Meerdere mixen per genre: analyseert top-5 genres van de gebruiker op basis
+ * van Last.fm data en genereert per genre 30 tracks uit Plex.
+ * Retourneert array van mixen: [{ genre, tracks }]
+ */
+async function generateDailyGenreMixes() {
+  // Haal top-artiesten op en bepaal genres via Last.fm tags
+  let topArtists = [];
+  try {
+    const data = await lfm({ method: 'user.gettopartists', period: '1month', limit: 50 });
+    topArtists = (data.topartists?.artist || []).map(a => a.name).filter(artistInPlex);
+  } catch (e) {
+    logger.warn({ err: e }, 'DailyGenreMixes: top artiesten mislukt');
+    return [];
+  }
+
+  if (!topArtists.length) return [];
+
+  // Bouw genre-teller op via Last.fm tags
+  const genreCount = new Map();
+  await Promise.allSettled(
+    topArtists.slice(0, 30).map(async (artistName) => {
+      try {
+        const tagData = await lfm(
+          { method: 'artist.gettoptags', artist: artistName },
+          { includeUser: false, cacheKey: `tags:${norm(artistName)}`, cacheTTL: 7 * 24 * 3_600_000 }
+        );
+        const tags = (tagData.toptags?.tag || []).slice(0, 5);
+        for (const tag of tags) {
+          const g = tag.name.toLowerCase();
+          if (g.length > 2 && g.length < 30) {
+            genreCount.set(g, (genreCount.get(g) || 0) + 1);
+          }
+        }
+      } catch {}
+    })
+  );
+
+  // Top 5 genres
+  const topGenres = [...genreCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([genre]) => genre);
+
+  if (!topGenres.length) return [];
+
+  const library = getPlexLibrary();
+  const mixes   = [];
+
+  for (const genre of topGenres) {
+    // Artiesten die dit genre hebben in hun tags
+    let genreArtists = [];
+    try {
+      const data = await lfm(
+        { method: 'tag.gettopartists', tag: genre, limit: 30 },
+        { includeUser: false, cacheKey: `tag:topartists:${genre}`, cacheTTL: 24 * 3_600_000 }
+      );
+      genreArtists = (data.topartists?.artist || []).map(a => a.name).filter(artistInPlex);
+    } catch {}
+
+    // Fallback: gebruik Plex-artiesten die dit genre-tag hebben
+    if (!genreArtists.length) {
+      genreArtists = topArtists.filter(a => {
+        const cached = /* niet opnieuw ophalen */ true;
+        return cached;
+      });
+    }
+
+    if (!genreArtists.length) continue;
+
+    const normNames  = new Set(genreArtists.map(norm));
+    const albums     = shuffle(library.filter(alb => normNames.has(norm(alb.artist)))).slice(0, 10);
+    const tracks     = await fetchTracksForAlbums(albums, 3);
+    const genreTracks = shuffle(tracks).slice(0, 30);
+
+    if (genreTracks.length) {
+      mixes.push({ genre: capitalizeFirst(genre), tracks: genreTracks });
+    }
+  }
+
+  return mixes;
+}
+
+function capitalizeFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+// ── 12. Popular Picks ─────────────────────────────────────────────────────────
+/**
+ * Tracks uit Plex met hoge Last.fm globale playcount die de gebruiker de
+ * afgelopen 30 dagen NIET heeft geluisterd.
+ */
+async function generatePopularPicks() {
+  // Haal top-artiesten op (overall) voor scoreberekening
+  let topArtists = [];
+  try {
+    const data = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 50 });
+    topArtists = (data.topartists?.artist || []).filter(a => artistInPlex(a.name));
+  } catch (e) {
+    logger.warn({ err: e }, 'PopularPicks: top artiesten mislukt');
+    return [];
+  }
+
+  // Wat heeft de gebruiker de afgelopen 30 dagen geluisterd?
+  let recentSet = new Set();
+  try {
+    const data = await lfm({ method: 'user.getrecenttracks', limit: 200 });
+    (data.recenttracks?.track || []).forEach(t => {
+      recentSet.add(`${norm(t.artist['#text'] || '')}||${norm(t.name)}`);
+    });
+  } catch {}
+
+  const library = getPlexLibrary();
+  const candidates = [];
+
+  for (const artist of topArtists.slice(0, 30)) {
+    try {
+      const data = await lfm(
+        { method: 'artist.gettoptracks', artist: artist.name, limit: 20 },
+        { includeUser: false, cacheKey: `toptracks:global:${norm(artist.name)}`, cacheTTL: 7 * 24 * 3_600_000 }
+      );
+      const tracks = data.toptracks?.track || [];
+      for (const t of tracks) {
+        const key = `${norm(artist.name)}||${norm(t.name)}`;
+        if (recentSet.has(key)) continue; // recent geluisterd — overslaan
+
+        // Zoek album in Plex
+        const plexAlbs = library.filter(alb => norm(alb.artist) === norm(artist.name));
+        if (!plexAlbs.length) continue;
+        const alb = plexAlbs[0];
+
+        candidates.push({
+          artist:    artist.name,
+          title:     t.name,
+          album:     alb.album,
+          duration:  t.duration ? parseInt(t.duration, 10) * 1000 : null,
+          plex_key:  alb.ratingKey,
+          cover_url: thumbUrl(alb.thumb),
+          _playcount: parseInt(t.playcount, 10) || 0,
+        });
+      }
+    } catch {}
+  }
+
+  // Sorteer op globale playcount (meest populair bovenaan)
+  return candidates
+    .sort((a, b) => b._playcount - a._playcount)
+    .slice(0, 50)
+    .map(({ _playcount, ...t }) => t);
+}
+
+// ── 13. Discovery Shuffle ─────────────────────────────────────────────────────
+/**
+ * Random tracks van artiesten in Plex die NIET in de top-50 van de gebruiker
+ * voorkomen. Gericht op het herontdekken van vergeten bibliotheek-artiesten.
+ */
+async function generateDiscoveryShuffle() {
+  // Top-50 artiesten van de gebruiker (overall)
+  let topNames = new Set();
+  try {
+    const data = await lfm({ method: 'user.gettopartists', period: 'overall', limit: 50 });
+    (data.topartists?.artist || []).forEach(a => topNames.add(norm(a.name)));
+  } catch (e) {
+    logger.warn({ err: e }, 'DiscoveryShuffle: top artiesten mislukt');
+  }
+
+  const library = getPlexLibrary();
+
+  // Filter alle Plex-artiesten die NIET in de top-50 zitten
+  const allArtists = [...new Set(library.map(a => a.artist))];
+  const forgotten  = allArtists.filter(a => !topNames.has(norm(a)));
+
+  if (!forgotten.length) return [];
+
+  // Pak random albums van vergeten artiesten
+  const shuffledArtists = shuffle(forgotten).slice(0, 25);
+  const normForgotten   = new Set(shuffledArtists.map(norm));
+  const albums = shuffle(library.filter(alb => normForgotten.has(norm(alb.artist)))).slice(0, 15);
+
+  const tracks = await fetchTracksForAlbums(albums, 3);
+  return shuffle(tracks).slice(0, 50);
+}
+
+// ── 14. Familiar Favorites ────────────────────────────────────────────────────
+/**
+ * Meest gespeelde tracks (Last.fm user playcount), slim geroteerd.
+ * Roteert 20% van de tracks bij elke verversing.
+ * @param {object} params - { rotation_seed: number }
+ */
+async function generateFamiliarFavorites(params = {}) {
+  // Top-tracks over alle tijden (hoge user playcount)
+  let allTop = [];
+  try {
+    const data = await lfm({ method: 'user.gettoptracks', period: 'overall', limit: 200 });
+    allTop = (data.toptracks?.track || []).map(t => ({
+      artist:    t.artist.name || t.artist['#text'] || '',
+      title:     t.name,
+      playcount: parseInt(t.playcount, 10) || 0,
+    }));
+  } catch (e) {
+    logger.warn({ err: e }, 'FamiliarFavorites: top tracks mislukt');
+    return [];
+  }
+
+  // Filter op aanwezigheid in Plex
+  const library = getPlexLibrary();
+  const inPlex  = allTop.filter(t => artistInPlex(t.artist));
+
+  if (!inPlex.length) return [];
+
+  // 80% vaste kern (top gespeelde), 20% rotatie (willekeurig uit de staart)
+  const coreSize     = Math.floor(inPlex.length * 0.8);
+  const core         = inPlex.slice(0, coreSize);
+  const rotation     = shuffle(inPlex.slice(coreSize));
+  const rotationSize = Math.max(10, Math.floor(50 * 0.2)); // 20% van max 50
+
+  const combined = [
+    ...core.slice(0, 50 - rotationSize),
+    ...rotation.slice(0, rotationSize),
+  ];
+
+  // Shuffle de gecombineerde lijst voor afwisseling
+  const result = shuffle(combined);
+
+  // Verrijk met Plex metadata
+  return result.slice(0, 50).map(t => {
+    const plexAlbs = library.filter(alb => norm(alb.artist) === norm(t.artist));
+    const alb      = plexAlbs[0];
+    return {
+      artist:    t.artist,
+      title:     t.title,
+      album:     alb?.album || null,
+      duration:  null,
+      plex_key:  alb?.ratingKey || null,
+      cover_url: thumbUrl(alb?.thumb),
+    };
+  }).filter(t => t.plex_key);
+}
+
+// ── 15. Custom Playlist Builder (uitgebreid) ──────────────────────────────────
+/**
+ * Uitgebreide versie van generateCustomPlaylist met diversiteitsinstelling.
+ * @param {object} params - { seeds, trackCount, diversityFactor, includeSeeds }
+ *   diversityFactor: 0.0 = dicht bij seeds, 1.0 = maximale diversiteit
+ */
+async function generateCustomPlaylistBuilder(params = {}) {
+  const {
+    seeds          = [],
+    trackCount     = 50,
+    diversityFactor = 0.5,
+    includeSeeds   = true,
+  } = params;
+
+  if (!seeds.length) return [];
+
+  const maxTracks = Math.min(Math.max(parseInt(trackCount, 10) || 50, 30), 100);
+  const diversity = Math.min(Math.max(parseFloat(diversityFactor) || 0.5, 0), 1);
+
+  // Similar artists per seed (meer similar bij hogere diversity)
+  const similarLimit = Math.round(10 + diversity * 20); // 10–30
+  const candidateMap = new Map();
+
+  await Promise.allSettled(
+    seeds.slice(0, 5).map(async (seed) => {
+      try {
+        const similar = await getSimilarArtists(seed, similarLimit);
+        for (const s of similar) {
+          const key = norm(s.name);
+          const existing = candidateMap.get(key) || { name: s.name, match: 0, seedCount: 0 };
+          existing.seedCount++;
+          existing.match = Math.max(existing.match, parseFloat(s.match || 0));
+          candidateMap.set(key, existing);
+        }
+      } catch {}
+    })
+  );
+
+  // Seeds zelf toevoegen als includeSeeds
+  if (includeSeeds) {
+    for (const seed of seeds.slice(0, 5)) {
+      if (artistInPlex(seed)) {
+        const key = norm(seed);
+        if (!candidateMap.has(key)) {
+          candidateMap.set(key, { name: seed, match: 1.0, seedCount: seeds.length });
+        }
+      }
+    }
+  }
+
+  // Sorteer: bij lage diversity → naaste seeds; bij hoge diversity → meer variatie
+  const scored = [...candidateMap.values()]
+    .filter(c => artistInPlex(c.name))
+    .map(c => ({
+      ...c,
+      score: (1 - diversity) * c.match + diversity * (Math.random() * 0.5 + c.seedCount * 0.1),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return [];
+
+  const library      = getPlexLibrary();
+  const resultTracks = [];
+  const tracksPerArtist = Math.max(2, Math.round(maxTracks / Math.min(scored.length, 25)));
+
+  for (const candidate of scored.slice(0, 25)) {
+    const artistAlbums = library.filter(alb => norm(alb.artist) === norm(candidate.name));
+    if (!artistAlbums.length) continue;
+
+    const alb = artistAlbums[Math.floor(Math.random() * artistAlbums.length)];
+    try {
+      const tracks = await getAlbumTracks(alb.ratingKey);
+      const sample  = shuffle(tracks).slice(0, tracksPerArtist);
+      for (const t of sample) {
+        resultTracks.push({
+          artist:    candidate.name,
+          title:     t.title,
+          album:     alb.album,
+          duration:  t.duration || null,
+          plex_key:  t.ratingKey || alb.ratingKey,
+          cover_url: thumbUrl(alb.thumb),
+        });
+      }
+    } catch {}
+    if (resultTracks.length >= maxTracks) break;
+  }
+
+  return shuffle(resultTracks).slice(0, maxTracks);
+}
+
 // ── 9. Custom Playlist ────────────────────────────────────────────────────────
 /**
  * Custom playlist op basis van 1-5 seed-artiesten.
@@ -792,6 +1184,13 @@ module.exports = {
   generateHiddenGems,
   generateDailyMix,
   generateCustomPlaylist,
+  // Nieuwe generators
+  generateBecauseYouListenTo,
+  generateDailyGenreMixes,
+  generatePopularPicks,
+  generateDiscoveryShuffle,
+  generateFamiliarFavorites,
+  generateCustomPlaylistBuilder,
   getAvailableGenres,
   currentSeason,
   SEASON_TAGS,

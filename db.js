@@ -891,15 +891,23 @@ try {
 
 // Playlist TTLs per type (in seconden)
 const PLAYLIST_TTL = {
-  discovery_weekly:   7 * 24 * 3600,   // 7 dagen
-  release_radar:      24 * 3600,        // 24 uur
-  daily_mix:          24 * 3600,        // 24 uur
-  seasonal:           30 * 24 * 3600,   // 30 dagen
-  decade:             14 * 24 * 3600,   // 14 dagen
-  genre:              14 * 24 * 3600,   // 14 dagen
-  forgotten_favorites:24 * 3600,        // 24 uur
-  hidden_gems:        7 * 24 * 3600,    // 7 dagen
-  custom:             24 * 3600,        // 24 uur
+  discovery_weekly:       7 * 24 * 3600,   // 7 dagen
+  release_radar:          24 * 3600,        // 24 uur
+  daily_mix:              24 * 3600,        // 24 uur
+  seasonal:               30 * 24 * 3600,   // 30 dagen
+  decade:                 14 * 24 * 3600,   // 14 dagen
+  genre:                  14 * 24 * 3600,   // 14 dagen
+  forgotten_favorites:    24 * 3600,        // 24 uur
+  hidden_gems:            7 * 24 * 3600,    // 7 dagen
+  custom:                 24 * 3600,        // 24 uur
+  // Nieuwe playlist types
+  because_you_listen_to:  24 * 3600,        // 24 uur
+  daily_genre_mixes:      24 * 3600,        // 24 uur
+  popular_picks:          7 * 24 * 3600,    // 7 dagen
+  discovery_shuffle:      24 * 3600,        // 24 uur
+  familiar_favorites:     24 * 3600,        // 24 uur
+  custom_builder:         24 * 3600,        // 24 uur
+  listenbrainz:           7 * 24 * 3600,    // 7 dagen
 };
 
 const _stmtSavePlaylist = db.prepare(`

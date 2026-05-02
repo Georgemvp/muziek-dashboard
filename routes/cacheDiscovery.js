@@ -8,6 +8,7 @@ const {
   getFromYourLabels,
   getDeepCuts,
   getGenreExplorer,
+  getGenreDetail,
   rebuildAllCaches,
 } = require('../services/cacheDiscovery');
 
@@ -87,6 +88,23 @@ module.exports = function(app, deps) {
       sendDiscovery(res, data, 'genre_explorer');
     } catch (err) {
       logger.error({ err }, 'GET /api/discover/genre-explorer fout');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/discover/genre-detail/:genre ────────────────────────────────────
+  app.get('/api/discover/genre-detail/:genre', async (req, res) => {
+    try {
+      const genre = decodeURIComponent(req.params.genre || '');
+      if (!genre) return res.status(400).json({ error: 'genre is verplicht' });
+
+      const data = await getGenreDetail(genre);
+      if (!data) return res.status(404).json({ error: 'Genre niet gevonden of geen data' });
+
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.json(data);
+    } catch (err) {
+      logger.error({ err }, 'GET /api/discover/genre-detail fout');
       res.status(500).json({ error: err.message });
     }
   });

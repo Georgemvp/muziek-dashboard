@@ -35,9 +35,22 @@ const SEASON_EMOJI = {
   halloween: '🎃', christmas: '🎄', valentines: '❤️',
 };
 const TYPE_ICONS = {
-  discovery_weekly: '🔭', release_radar: '📡', daily_mix: '🎯',
-  forgotten_favorites: '🕰️', hidden_gems: '💎', decade: '📅',
-  seasonal: '🌸', genre: '🎸', custom: '✨',
+  discovery_weekly:       '🔭',
+  release_radar:          '📡',
+  daily_mix:              '🎯',
+  forgotten_favorites:    '🕰️',
+  hidden_gems:            '💎',
+  decade:                 '📅',
+  seasonal:               '🌸',
+  genre:                  '🎸',
+  custom:                 '✨',
+  // Nieuwe types
+  because_you_listen_to:  '🎧',
+  daily_genre_mixes:      '🎼',
+  popular_picks:          '🔥',
+  discovery_shuffle:      '🎲',
+  familiar_favorites:     '⭐',
+  custom_builder:         '🛠️',
 };
 
 function capitalizeFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
@@ -287,6 +300,81 @@ function bindCard(card) {
   });
 }
 
+// ── Because You Listen To builder ────────────────────────────────────────────
+let _byltSeeds = [];
+
+function bindBecauseYouListenTo() {
+  const input   = document.getElementById('dpl-bylt-input');
+  const addBtn  = document.getElementById('dpl-bylt-add');
+  const genBtn  = document.getElementById('dpl-bylt-gen');
+  const seedsEl = document.getElementById('dpl-bylt-seeds');
+  const resultEl= document.getElementById('dpl-bylt-result');
+  const dl      = document.getElementById('dpl-artists-dl2');
+
+  const render = () => {
+    seedsEl.innerHTML = _byltSeeds.map((s, i) =>
+      `<span class="dpl-stag">${esc(s)}<button class="dpl-srem" data-i="${i}">✕</button></span>`
+    ).join('');
+    genBtn.disabled = !_byltSeeds.length;
+    seedsEl.querySelectorAll('.dpl-srem').forEach(b => {
+      b.addEventListener('click', () => { _byltSeeds.splice(+b.dataset.i, 1); render(); });
+    });
+  };
+
+  const addSeed = () => {
+    const v = input?.value.trim();
+    if (!v || _byltSeeds.includes(v) || _byltSeeds.length >= 5) return;
+    _byltSeeds.push(v);
+    if (input) input.value = '';
+    render();
+  };
+
+  addBtn?.addEventListener('click', addSeed);
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') addSeed(); });
+
+  let _act2;
+  input?.addEventListener('input', () => {
+    clearTimeout(_act2);
+    const q = input.value.trim();
+    if (q.length < 2) return;
+    _act2 = setTimeout(async () => {
+      try {
+        const d = await apiFetch(`/api/plex/search?q=${encodeURIComponent(q)}`);
+        const artists = (d.artists || []).map(a => a.title || a.name);
+        if (dl) dl.innerHTML = artists.map(a => `<option value="${esc(a)}">`).join('');
+      } catch {}
+    }, 250);
+  });
+
+  genBtn?.addEventListener('click', async () => {
+    if (!_byltSeeds.length) return;
+    genBtn.disabled = true; genBtn.textContent = 'Genereren…';
+    resultEl.innerHTML = `<div class="dpl-loading"><span class="dpl-spin"></span> Even geduld…</div>`;
+    try {
+      const data = await apiFetch(
+        `/api/playlists/generate/because_you_listen_to?force=true&seeds=${encodeURIComponent(_byltSeeds.join(','))}`
+      );
+      const tracks = data.tracks || [];
+      if (!tracks.length) {
+        resultEl.innerHTML = `<p class="dpl-empty">Geen vergelijkbare artiesten gevonden in je bibliotheek.</p>`;
+      } else {
+        resultEl.innerHTML = `<div class="dpl-cres">
+          <strong>${tracks.length} tracks</strong> gevonden —
+          <button class="dpl-btn dpl-primary" id="dpl-open-bylt">Bekijk →</button>
+        </div>`;
+        document.getElementById('dpl-open-bylt')?.addEventListener('click', () => {
+          openModal({
+            type: 'because_you_listen_to',
+            name: `Omdat je luistert naar: ${_byltSeeds.slice(0,2).join(', ')}`,
+            params: { seeds: _byltSeeds },
+          }, tracks);
+        });
+      }
+    } catch (e) { resultEl.innerHTML = `<p class="dpl-err">Fout: ${esc(e.message)}</p>`; }
+    finally { genBtn.disabled = false; genBtn.textContent = 'Genereer'; }
+  });
+}
+
 // ── Custom playlist builder ───────────────────────────────────────────────────
 let _seeds = [];
 
@@ -332,12 +420,30 @@ function bindCustomBuilder() {
     }, 250);
   });
 
+  // Slider waarden live tonen
+  document.getElementById('dpl-track-count')?.addEventListener('input', function() {
+    const el = document.getElementById('dpl-tc-val');
+    if (el) el.textContent = this.value;
+  });
+  document.getElementById('dpl-diversity')?.addEventListener('input', function() {
+    const el = document.getElementById('dpl-div-val');
+    if (el) el.textContent = this.value + '%';
+  });
+
   genBtn?.addEventListener('click', async () => {
     if (!_seeds.length) return;
     genBtn.disabled = true; genBtn.textContent = 'Genereren…';
     resultEl.innerHTML = `<div class="dpl-loading"><span class="dpl-spin"></span> Even geduld…</div>`;
+
+    const trackCount  = document.getElementById('dpl-track-count')?.value || 50;
+    const diversity   = (parseInt(document.getElementById('dpl-diversity')?.value || 50) / 100).toFixed(2);
+    const inclSeeds   = document.getElementById('dpl-include-seeds')?.checked !== false;
+
     try {
-      const data = await apiFetch(`/api/playlists/generate/custom?force=true&seeds=${encodeURIComponent(_seeds.join(','))}`);
+      const url = `/api/playlists/generate/custom_builder?force=true` +
+        `&seeds=${encodeURIComponent(_seeds.join(','))}` +
+        `&trackCount=${trackCount}&diversity=${diversity}&includeSeeds=${inclSeeds}`;
+      const data   = await apiFetch(url);
       const tracks = data.tracks || [];
       if (!tracks.length) {
         resultEl.innerHTML = `<p class="dpl-empty">Geen tracks gevonden.</p>`;
@@ -347,7 +453,11 @@ function bindCustomBuilder() {
           <button class="dpl-btn dpl-primary" id="dpl-open-custom">Bekijk →</button>
         </div>`;
         document.getElementById('dpl-open-custom')?.addEventListener('click', () => {
-          openModal({ type: 'custom', name: `Mix: ${_seeds.slice(0,2).join(', ')}`, params: { seeds: _seeds } }, tracks);
+          openModal({
+            type: 'custom_builder',
+            name: `Builder Mix: ${_seeds.slice(0,2).join(', ')}`,
+            params: { seeds: _seeds, trackCount, diversityFactor: diversity, includeSeeds: inclSeeds },
+          }, tracks);
         });
       }
     } catch (e) { resultEl.innerHTML = `<p class="dpl-err">Fout: ${esc(e.message)}</p>`; }
@@ -362,7 +472,7 @@ async function renderDiscovery(data) {
   _season  = data.current_season;
 
   const hero     = _catalog.filter(d => ['discovery_weekly', 'release_radar'].includes(d.type));
-  const main     = _catalog.filter(d => ['daily_mix', 'forgotten_favorites', 'hidden_gems'].includes(d.type));
+  const main     = _catalog.filter(d => ['daily_mix', 'forgotten_favorites', 'hidden_gems', 'popular_picks', 'discovery_shuffle', 'familiar_favorites'].includes(d.type));
   const seasonal = _catalog.filter(d => d.type === 'seasonal');
   const decades  = _catalog.filter(d => d.type === 'decade');
   const activeSeason = seasonal.find(s => s.params?.season === _season);
@@ -479,8 +589,24 @@ async function renderDiscovery(data) {
       ${plexSection}
 
       <section class="dpl-section dpl-custom-wrap">
-        <h2 class="dpl-stitle">✨ Aangepaste Playlist</h2>
-        <p class="dpl-custom-hint">Vul 1–5 artiesten in als startpunt voor een persoonlijke mix.</p>
+        <h2 class="dpl-stitle">🎧 Omdat je luistert naar…</h2>
+        <p class="dpl-custom-hint">Vul 1–5 artiesten in — wij vinden vergelijkbare artiesten die al in je Plex-bibliotheek staan.</p>
+        <div class="dpl-custom-form">
+          <div class="dpl-seeds" id="dpl-bylt-seeds"></div>
+          <div class="dpl-input-row">
+            <input type="text" id="dpl-bylt-input" class="dpl-input"
+              placeholder="Artiestnaam…" autocomplete="off" list="dpl-artists-dl2">
+            <datalist id="dpl-artists-dl2"></datalist>
+            <button class="dpl-btn" id="dpl-bylt-add">+</button>
+          </div>
+          <button class="dpl-btn dpl-primary" id="dpl-bylt-gen" disabled>Genereer</button>
+        </div>
+        <div id="dpl-bylt-result"></div>
+      </section>
+
+      <section class="dpl-section dpl-custom-wrap">
+        <h2 class="dpl-stitle">🛠️ Geavanceerde Playlist Builder</h2>
+        <p class="dpl-custom-hint">Bouw een volledig gepersonaliseerde mix met controle over diversiteit en aantal tracks.</p>
         <div class="dpl-custom-form">
           <div class="dpl-seeds" id="dpl-seeds"></div>
           <div class="dpl-input-row">
@@ -488,6 +614,17 @@ async function renderDiscovery(data) {
               placeholder="Artiestnaam…" autocomplete="off" list="dpl-artists-dl">
             <datalist id="dpl-artists-dl"></datalist>
             <button class="dpl-btn" id="dpl-seed-add">+</button>
+          </div>
+          <div class="dpl-builder-opts">
+            <label class="dpl-opt-label">Tracks: <span id="dpl-tc-val">50</span>
+              <input type="range" id="dpl-track-count" min="30" max="100" value="50" step="5" class="dpl-range">
+            </label>
+            <label class="dpl-opt-label">Diversiteit: <span id="dpl-div-val">50%</span>
+              <input type="range" id="dpl-diversity" min="0" max="100" value="50" class="dpl-range">
+            </label>
+            <label class="dpl-opt-label dpl-opt-check">
+              <input type="checkbox" id="dpl-include-seeds" checked> Seed-artiesten zelf opnemen
+            </label>
           </div>
           <button class="dpl-btn dpl-primary" id="dpl-custom-gen" disabled>Genereer Mix</button>
         </div>
@@ -548,6 +685,7 @@ async function renderDiscovery(data) {
     });
   });
 
+  bindBecauseYouListenTo();
   bindCustomBuilder();
 }
 
@@ -913,6 +1051,10 @@ function styles() {
 .dpl-input-row{display:flex;gap:.45rem}
 .dpl-input{flex:1;padding:.45rem .65rem;border-radius:6px;border:1px solid var(--color-border,#333);background:var(--color-bg,#141414);color:var(--color-text);font-size:.85rem}
 .dpl-input:focus{outline:none;border-color:var(--color-accent,#6c63ff)}
+.dpl-builder-opts{display:flex;flex-direction:column;gap:.65rem;padding:.65rem;background:var(--color-surface,#1e1e1e);border-radius:8px}
+.dpl-opt-label{display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;color:var(--color-secondary)}
+.dpl-opt-check{flex-direction:row;align-items:center;gap:.4rem;cursor:pointer}
+.dpl-range{width:100%;accent-color:var(--color-accent,#6c63ff);cursor:pointer}
 .dpl-cres{display:flex;align-items:center;gap:.75rem;margin-top:.4rem;font-size:.85rem}
 .dpl-loading,.dpl-empty{padding:.75rem;text-align:center;color:var(--color-secondary);font-size:.85rem;display:flex;gap:.5rem;align-items:center;justify-content:center}
 .dpl-err{color:#e05555;padding:.5rem 0;font-size:.85rem}
