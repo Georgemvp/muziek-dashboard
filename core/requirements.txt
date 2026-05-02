@@ -2,10 +2,14 @@ flask==3.1.1
 gunicorn==23.0.0
 requests==2.32.3
 
+# ── Discovery module ───────────────────────────────────────────────────────────
+plexapi==4.15.10             # Plex library sync (plex_client.py)
+
 # ── Enrichment workers ─────────────────────────────────────────────────────────
-musicbrainzngs==0.7.1        # MusicBrainz worker
-pylast==5.3.0                # Last.fm worker
+musicbrainzngs==0.7.1        # MusicBrainz worker + musicbrainz_client.py
+pylast==5.3.0                # Last.fm worker + lastfm_client.py
 spotipy==2.24.0              # Spotify worker
 # discogs: geen aparte library — DiscogsWorker gebruikt requests direct
 lyricsgenius==3.0.1          # Genius worker
 # requests is al aanwezig — gebruikt door Deezer, iTunes, AudioDB, Tidal, Qobuz workers
+#   én door deezer_client.py en musicbrainz_client.py (HTTP search API)
