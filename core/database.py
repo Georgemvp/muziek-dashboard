@@ -8,6 +8,9 @@ Tabellen (zelfde schema als db.js):
   cache              – generieke key/value cache (TTL in ms)
   discover_sections  – vooraf gebouwde discover-pagina-blokken
   enrichment_data    – verrijkte metadata per entiteit + bron
+  enrichment_queue   – wachtrij voor enrichment workers
+  genre_whitelist    – toegestane genres voor filtering
+  settings           – algemene instellingen (categorie + sleutel)
 """
 
 import json
@@ -233,3 +236,165 @@ def set_discover_section(section: str, data: Any, ttl_ms: int) -> None:
             (section, data_str, now_ms, now_ms + ttl_ms),
         )
         conn.commit()
+
+
+# ── Enrichment queue ───────────────────────────────────────────────────────────
+# Schema (db.js):
+#   enrichment_queue(
+#     id            INTEGER PK AUTOINCREMENT,
+#     entity_type   TEXT NOT NULL,
+#     entity_name   TEXT NOT NULL,
+#     entity_id     TEXT,
+#     source        TEXT NOT NULL,
+#     status        TEXT DEFAULT 'pending',
+#     attempts      INTEGER DEFAULT 0,
+#     last_attempt  INTEGER,
+#     error_message TEXT,
+#     created_at    INTEGER DEFAULT (strftime('%s','now'))
+#   )
+
+def enqueue_enrichment(
+    entity_type: str,
+    entity_name: str,
+    source: str,
+    entity_id: Optional[str] = None,
+) -> bool:
+    """
+    Voeg een item toe aan de enrichment queue (INSERT OR IGNORE).
+
+    Returns True als het item nieuw was, False als het al bestond.
+    Identiek aan enqueueEnrichment() in db.js.
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO enrichment_queue
+                (entity_type, entity_name, entity_id, source, status)
+            VALUES (?, ?, ?, ?, 'pending')
+            """,
+            (entity_type, entity_name, entity_id, source),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_pending_enrichment_items(source: str, limit: int = 10) -> list[dict]:
+    """
+    Haal pending items op voor een bron, gesorteerd op created_at.
+
+    Identiek aan getPendingEnrichmentItems() in db.js.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM enrichment_queue
+            WHERE source = ? AND status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT ?
+            """,
+            (source, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def update_enrichment_item(
+    item_id: int,
+    status: str,
+    error_message: Optional[str] = None,
+) -> None:
+    """
+    Update status (en optioneel foutmelding + pogingen) van een queue-item.
+
+    Identiek aan updateEnrichmentItem() in db.js.
+    """
+    now_epoch = int(time.time())
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE enrichment_queue
+            SET status        = ?,
+                error_message = ?,
+                attempts      = attempts + 1,
+                last_attempt  = ?
+            WHERE id = ?
+            """,
+            (status, error_message, now_epoch, item_id),
+        )
+        conn.commit()
+
+
+def reset_stuck_enrichment_items(source: str) -> None:
+    """
+    Zet 'processing' items terug naar 'pending' bij opstart.
+
+    Identiek aan resetStuckEnrichmentItems() in db.js.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE enrichment_queue SET status='pending' WHERE source=? AND status='processing'",
+            (source,),
+        )
+        conn.commit()
+
+
+def get_enrichment_queue_stats() -> dict[str, dict[str, int]]:
+    """
+    Geef per-source statistieken van de queue terug.
+
+    Returns { source: { pending, processing, done, error, skipped } }
+    Identiek aan getEnrichmentQueueStats() in db.js.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT source, status, COUNT(*) as cnt
+            FROM enrichment_queue
+            GROUP BY source, status
+            """
+        ).fetchall()
+
+    result: dict[str, dict[str, int]] = {}
+    for row in rows:
+        src = row["source"]
+        if src not in result:
+            result[src] = {"pending": 0, "processing": 0, "done": 0, "error": 0, "skipped": 0}
+        result[src][row["status"]] = row["cnt"]
+    return result
+
+
+# ── Genre whitelist ────────────────────────────────────────────────────────────
+
+def get_genre_whitelist() -> list[dict]:
+    """
+    Haal alle genres op uit de whitelist.
+
+    Returns list van { genre: str, enabled: bool }
+    Identiek aan getGenreWhitelist() in db.js.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT genre, enabled FROM genre_whitelist ORDER BY genre"
+        ).fetchall()
+        return [{"genre": row["genre"], "enabled": bool(row["enabled"])} for row in rows]
+
+
+# ── Settings ───────────────────────────────────────────────────────────────────
+
+def get_setting(category: str, key: str) -> Optional[Any]:
+    """
+    Lees één instelling uit de settings tabel.
+
+    Returns de waarde (gedeserialiseerd als JSON), of None als niet gevonden.
+    Identiek aan getSetting() in db.js.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE category=? AND key=?",
+            (category, key),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            return json.loads(row["value"])
+        except (json.JSONDecodeError, TypeError):
+            return row["value"]
