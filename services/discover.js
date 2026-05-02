@@ -6,7 +6,7 @@
 const logger = require('../logger');
 const { lfm }                                       = require('./lastfm');
 const { getSimilarArtists, getDeezerArtistTopTracks } = require('./deezer');
-const { getMBZAlbums, mbzGet }                      = require('./musicbrainz');
+const { getMBZArtist, getMBZAlbums, mbzGet }         = require('./musicbrainz');
 const {
   artistInPlex, albumInPlex,
   getPlexArtistNames, getPlexStatus,
@@ -186,7 +186,12 @@ async function buildUndiscoveredAlbums() {
 
     for (const { name, playcount } of topArtists) {
       const enrichData = getEnrichedArtist(name);
-      const mbid = enrichData.musicbrainz?.mbid;
+      let mbid = enrichData.musicbrainz?.mbid;
+      if (!mbid) {
+        // Fallback: enrichment nog niet beschikbaar bij eerste boot — vraag MBZ direct op
+        const mbzData = await getMBZArtist(name).catch(() => null);
+        mbid = mbzData?.mbid || null;
+      }
       if (!mbid) continue;
 
       const albums = await getMBZAlbums(mbid).catch(() => []);
@@ -222,7 +227,8 @@ const SKIP_SECONDARY = new Set(['compilation', 'live', 'soundtrack', 'interview'
 async function buildNewInGenres() {
   logger.info('Discover: new in genres bouwen');
   try {
-    const artistNames = getPlexArtistNames() || [];
+    const plexMap = getPlexArtistNames();
+    const artistNames = plexMap ? [...plexMap.values()] : [];
     const genreFreq   = new Map();
 
     for (const name of artistNames) {
@@ -292,7 +298,8 @@ async function buildNewInGenres() {
 async function buildFromYourLabels() {
   logger.info('Discover: from your labels bouwen');
   try {
-    const artistNames = getPlexArtistNames() || [];
+    const plexMap = getPlexArtistNames();
+    const artistNames = plexMap ? [...plexMap.values()] : [];
     const labelFreq   = new Map();
 
     for (const name of artistNames) {
@@ -356,7 +363,8 @@ async function buildFromYourLabels() {
 async function buildDeepCuts() {
   logger.info('Discover: deep cuts bouwen');
   try {
-    const artistNames = getPlexArtistNames() || [];
+    const plexMap = getPlexArtistNames();
+    const artistNames = plexMap ? [...plexMap.values()] : [];
     const candidates  = [];
 
     for (const name of artistNames) {
