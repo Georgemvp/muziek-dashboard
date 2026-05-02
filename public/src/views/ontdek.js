@@ -355,99 +355,478 @@ async function renderReleasesTab() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// DISCOVER TAB
+// DISCOVER TAB v2 — multi-sectie scrollbare pagina
 // ────────────────────────────────────────────────────────────────────────────
+
+const DISC_TYPE_ICONS = {
+  discovery_weekly: '🔭', release_radar: '📡', daily_mix: '🎧',
+  forgotten_favorites: '💫', hidden_gems: '💎', popular_picks: '🔥',
+  discovery_shuffle: '🎲', familiar_favorites: '❤️',
+  seasonal: '🌸', decade: '📅', genre: '🎸',
+};
+
+function _dscSectionHdr(emoji, title, refreshKey, id = '') {
+  const metaSpan = id ? `<span class="dsc-section-meta" id="dsc-meta-${id}"></span>` : `<span class="dsc-section-meta"></span>`;
+  return `<div class="vk-section-header">
+    <span class="vk-section-emoji">${emoji}</span>
+    <span class="vk-section-title">${esc(title)}</span>
+    ${metaSpan}
+    <button class="vk-section-refresh tool-btn" data-dsc-refresh="${esc(refreshKey)}" title="Vernieuwen">↻</button>
+  </div>`;
+}
+
+function _dscBuildingBadge() {
+  return `<div class="dsc-building-badge"><div class="dsc-spin"></div> Wordt opgebouwd…</div>`;
+}
+
+function _dscSkelRow(n = 6) {
+  const c = `<div class="vk-album-card" style="min-width:140px"><div class="vk-cover skeleton"></div>
+    <div class="vk-card-body"><div class="skeleton" style="height:12px;width:80%;border-radius:2px;margin-bottom:4px"></div>
+    <div class="skeleton" style="height:10px;width:55%;border-radius:2px"></div></div></div>`;
+  return `<div class="vk-scroll-row">${c.repeat(n)}</div>`;
+}
+
+function _dscSkelGrid(n = 8) {
+  const c = `<div class="vk-album-card"><div class="vk-cover skeleton"></div>
+    <div class="vk-card-body"><div class="skeleton" style="height:12px;width:80%;border-radius:2px;margin-bottom:4px"></div>
+    <div class="skeleton" style="height:10px;width:55%;border-radius:2px"></div></div></div>`;
+  return `<div class="vk-grid">${c.repeat(n)}</div>`;
+}
+
+function _dscSkelArtists(n = 6) {
+  const c = `<div class="dsc-similar-card">
+    <div class="dsc-similar-ph skeleton" style="width:52px;height:52px;border-radius:50%;flex-shrink:0"></div>
+    <div style="flex:1"><div class="skeleton" style="height:14px;width:65%;border-radius:2px;margin-bottom:6px"></div>
+    <div class="skeleton" style="height:11px;width:45%;border-radius:2px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:3px;width:100%;border-radius:2px"></div></div></div>`;
+  return `<div class="dsc-similar-grid">${c.repeat(n)}</div>`;
+}
+
+// ── S1: Hero — Muziek DNA ────────────────────────────────────────────────────
+function _dscFillHero(container, data) {
+  if (!data || data.status === 'building') {
+    container.innerHTML = `<div class="vk-empty">${esc(data?.message || 'Genre-data wordt opgebouwd…')}</div>`;
+    return;
+  }
+  const genres = (data.genres || []).slice(0, 8);
+  if (!genres.length) { container.innerHTML = `<div class="vk-empty">Nog geen genre-data beschikbaar.</div>`; return; }
+
+  let html = `<div class="dsc-genre-pills">`;
+  genres.forEach(g => {
+    const color  = g.color || 'var(--accent)';
+    const sample = (g.topArtists || []).slice(0, 2).map(a => esc(a.name)).join(', ');
+    html += `<button class="dsc-genre-pill" data-genre="${esc(g.genre)}" style="--pill-bg:${esc(color)}">
+      <span class="dsc-genre-name">${esc(g.genre)}</span>
+      <span class="dsc-genre-count">${g.count} artiesten</span>
+      ${sample ? `<span class="dsc-genre-sample">${sample}</span>` : ''}
+    </button>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+
+  container.addEventListener('click', e => {
+    const pill = e.target.closest('.dsc-genre-pill');
+    if (!pill) return;
+    openGenreModal(pill.dataset.genre, genres.map(g => ({
+      genre: g.genre, artistCount: g.count,
+      sampleArtists: (g.topArtists || []).map(a => a.name),
+    })));
+  });
+}
+
+// ── S2: Undiscovered Albums ──────────────────────────────────────────────────
+function _dscFillUndiscovered(container, items, isBuilding) {
+  if (!items.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Geen ontbrekende albums gevonden. Verken artiesten om de MusicBrainz-cache te vullen.</div>`;
+    return;
+  }
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  html += `<div class="vk-scroll-row">`;
+  items.forEach(a => { html += verkennerAlbumCard(a, true); });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// ── S3: New In Your Genres ───────────────────────────────────────────────────
+function _dscFillNewInGenres(container, items, isBuilding) {
+  if (!items.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Nog geen releases. Bezoek artiestpagina's om de genre-cache te vullen.</div>`;
+    return;
+  }
+  const byGenre = new Map();
+  items.forEach(r => {
+    if (!byGenre.has(r.genre)) byGenre.set(r.genre, []);
+    byGenre.get(r.genre).push(r);
+  });
+
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  byGenre.forEach((releases, genre) => {
+    html += `<div class="dsc-genre-group">
+      <div class="dsc-genre-group-label">${esc(genre)}</div>
+      <div class="vk-scroll-row">`;
+    releases.forEach(r => {
+      html += verkennerAlbumCard({
+        title: r.title, artist: r.artist,
+        year: relativeDate(r.releaseDate) || (r.releaseDate || '').slice(0, 4),
+        coverUrl: r.coverUrl, genre: r.primaryType || null,
+      }, true);
+    });
+    html += `</div></div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ── S4: Similar Artists (verbeterd met popularity bar) ──────────────────────
+function _dscFillSimilar(container, artists, basedOn, isBuilding) {
+  if (!artists.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Geen aanbevelingen beschikbaar.</div>`;
+    return;
+  }
+  const metaEl = document.getElementById('dsc-meta-similar');
+  if (metaEl && basedOn?.length) {
+    metaEl.textContent = `Op basis van: ${basedOn.slice(0, 3).join(', ')}`;
+  }
+
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  html += `<div class="dsc-similar-grid">`;
+  artists.slice(0, 24).forEach(a => {
+    const pct   = Math.round(a.match * 100);
+    const img   = proxyImg(a.image, 120) || a.image;
+    const photo = img
+      ? `<img class="dsc-similar-photo" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy" decoding="async"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="dsc-similar-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
+      : `<div class="dsc-similar-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
+    html += `<div class="dsc-similar-card artist-link" data-artist="${esc(a.name)}">
+      ${photo}
+      <div class="dsc-similar-info">
+        <div class="dsc-similar-name">${esc(a.name)}${plexBadge(a.inPlex)}</div>
+        <div class="dsc-similar-reason">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div>
+        ${tagsHtml(a.tags, 3)}
+        <div class="dsc-pop-bar" title="${pct}% match">
+          <div class="dsc-pop-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <span class="dsc-similar-match">${pct}%</span>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// ── S5: From Your Labels ─────────────────────────────────────────────────────
+function _dscFillFromLabels(container, items, isBuilding) {
+  if (!items.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Geen label-data gevonden. Zorg dat artiesten Discogs-tags hebben.</div>`;
+    return;
+  }
+  const byLabel = new Map();
+  items.forEach(r => {
+    const lbl = r.label || 'Overig';
+    if (!byLabel.has(lbl)) byLabel.set(lbl, []);
+    byLabel.get(lbl).push(r);
+  });
+
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  byLabel.forEach((releases, label) => {
+    html += `<div class="dsc-label-group">
+      <div class="dsc-label-name"># ${esc(label)} <span>${releases.length} release${releases.length !== 1 ? 's' : ''}</span></div>
+      <div class="vk-scroll-row">`;
+    releases.forEach(r => {
+      html += verkennerAlbumCard({
+        title: r.title, artist: r.artist,
+        year: (r.releaseDate || '').slice(0, 4), coverUrl: r.coverUrl,
+      }, true);
+    });
+    html += `</div></div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ── S6: Deep Cuts ────────────────────────────────────────────────────────────
+function _dscFillDeepCuts(container, items, isBuilding) {
+  if (!items.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Geen deep cuts gevonden. Verken meer artiesten.</div>`;
+    return;
+  }
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  html += `<div class="dsc-deepcuts-list">`;
+  items.slice(0, 15).forEach(a => {
+    const img   = proxyImg(a.image, 80) || a.image;
+    const photo = img
+      ? `<img class="dsc-deepcuts-photo" src="${esc(img)}" alt="${esc(a.artist)}" loading="lazy" decoding="async"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="dsc-deepcuts-ph" style="display:none;background:${gradientFor(a.artist)}">${initials(a.artist)}</div>`
+      : `<div class="dsc-deepcuts-ph" style="background:${gradientFor(a.artist)}">${initials(a.artist)}</div>`;
+    const popLabel = a.popularity != null ? `Pop. ${a.popularity}/100` : 'Laag bereik';
+    html += `<div class="dsc-deepcuts-artist">
+      <div class="dsc-deepcuts-header">
+        ${photo}
+        <span class="dsc-deepcuts-name artist-link" data-artist="${esc(a.artist)}">${esc(a.artist)}</span>
+        ${tagsHtml(a.tags, 2)}
+        <span class="dsc-pop-label">🔭 ${esc(popLabel)}</span>
+      </div>
+      ${(a.tracks || []).length ? `<div class="dsc-tracks-mini">${(a.tracks).map(t =>
+        `<div class="dsc-track-mini-row"><span style="opacity:.5">♫</span><span>${esc(t.title || '')}</span></div>`
+      ).join('')}</div>` : ''}
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// ── S7: Hidden Gems ──────────────────────────────────────────────────────────
+function _dscFillHiddenGems(container, items, isBuilding) {
+  if (!items.length) {
+    container.innerHTML = (isBuilding ? _dscBuildingBadge() : '') +
+      `<div class="vk-empty">Geen vergeten favorieten gevonden.</div>`;
+    return;
+  }
+  let html = isBuilding ? _dscBuildingBadge() : '';
+  html += `<div class="dsc-hiddengems-grid">`;
+  items.forEach(a => {
+    const img   = proxyImg(a.image, 120) || a.image;
+    const photo = img
+      ? `<img class="dsc-hidden-photo" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy" decoding="async"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="dsc-hidden-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
+      : `<div class="dsc-hidden-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
+    html += `<div class="dsc-hidden-card artist-link" data-artist="${esc(a.name)}">
+      ${photo}
+      <div class="dsc-hidden-name">${esc(a.name)}</div>
+      ${tagsHtml(a.tags, 2)}
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// ── S8: Playlists ────────────────────────────────────────────────────────────
+function _dscFillPlaylists(container, data) {
+  if (!data?.catalog?.length) {
+    container.innerHTML = `<div class="vk-empty">Geen playlists. Ga naar de Playlists-tab om te genereren.</div>`;
+    return;
+  }
+  const show = data.catalog.filter(d =>
+    ['discovery_weekly','release_radar','daily_mix','forgotten_favorites','hidden_gems','popular_picks'].includes(d.type)
+  );
+  if (!show.length) { container.innerHTML = `<div class="vk-empty">Geen playlist-types geconfigureerd.</div>`; return; }
+
+  let html = `<div class="dsc-playlist-grid">`;
+  show.forEach(def => {
+    const icon   = DISC_TYPE_ICONS[def.type] || '🎵';
+    const covers = (def.tracks || []).filter(t => t.image).slice(0, 4);
+    const mosaic = covers.length >= 2
+      ? `<div class="dsc-playlist-mosaic">${covers.map(t =>
+          `<img src="${esc(proxyImg(t.image, 100) || t.image)}" alt="" loading="lazy" decoding="async">`
+        ).join('')}</div>`
+      : `<div class="dsc-playlist-mosaic-single">${icon}</div>`;
+    const age = def.generated_at ? relativeDate(new Date(def.generated_at * 1000).toISOString()) : '';
+    html += `<div class="dsc-playlist-card" data-playlist-type="${esc(def.type)}">
+      ${mosaic}
+      <div class="dsc-playlist-body">
+        <div class="dsc-playlist-name">${esc(def.name)}</div>
+        <div class="dsc-playlist-meta">${def.cached ? `${def.track_count} tracks${age ? ` · ${age}` : ''}` : 'Nog niet gegenereerd'}</div>
+        <button class="dsc-playlist-btn">${def.cached ? '▶ Bekijk' : '⚡ Genereer'}</button>
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+
+  container.addEventListener('click', () => { location.hash = '#/playlists'; });
+}
+
+// ── S9: ListenBrainz ─────────────────────────────────────────────────────────
+function _dscFillListenBrainz(container, section, data) {
+  if (!data?.enabled) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  const artists = data.artists || [];
+  if (!artists.length) {
+    container.innerHTML = `<div class="vk-empty">Geen aanbevelingen van ListenBrainz voor ${esc(data.username || '')}.</div>`;
+    return;
+  }
+  let html = `<div class="dsc-lb-grid">`;
+  artists.slice(0, 24).forEach(a => {
+    const img   = proxyImg(a.image, 80) || a.image;
+    const photo = img
+      ? `<img class="dsc-lb-photo" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy" decoding="async"
+           onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="dsc-lb-ph" style="display:none;background:${gradientFor(a.name)}">${initials(a.name)}</div>`
+      : `<div class="dsc-lb-ph" style="background:${gradientFor(a.name)}">${initials(a.name)}</div>`;
+    html += `<div class="dsc-lb-card artist-link" data-artist="${esc(a.name)}">
+      ${photo}
+      <div class="dsc-lb-info">
+        <div class="dsc-lb-name">${esc(a.name)}</div>
+        <div class="dsc-lb-meta">${a.inPlex ? '▶ In Plex' : '✦ Nieuw'}${a.genres?.length ? ` · ${esc(a.genres[0])}` : ''}</div>
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// ── Discover tab hoofdrenderer ────────────────────────────────────────────────
 async function renderDiscoverTab() {
-  setContent(skeletonGrid(4, 2));
-  try {
-    if (!discoverData) {
-      let d = getCached('discover', 5 * 60 * 1000);
-      if (!d) {
-        d = await apiFetch('/api/discover');
-        if (d.status === 'building') {
-          setContent(`<div class="loading"><div class="spinner"></div><div>${esc(d.message)}</div>
-            <div class="build-hint">Pagina ververst automatisch over 20 seconden</div></div>`);
-          setTimeout(() => { if (state.activeView === 'ontdek') renderDiscoverTab(); }, 20000);
-          return;
-        }
-        setCache('discover', d);
-      }
-      discoverData = d;
-      if (d.plexConnected) state.plexOk = true;
-    }
+  const skelList = Array(5).fill(`<div class="vk-track-row">
+    <div class="vk-track-thumb skeleton"></div>
+    <div style="flex:1"><div class="skeleton" style="height:13px;width:60%;border-radius:2px;margin-bottom:4px"></div>
+    <div class="skeleton" style="height:11px;width:40%;border-radius:2px"></div></div></div>`).join('');
 
-    const { artists, basedOn } = discoverData;
-    let filtered = artists;
-    if (discFilter === 'new') filtered = artists.filter(a => !a.inPlex);
-    if (discFilter === 'partial') filtered = artists.filter(a => a.inPlex && a.missingCount > 0);
-    if (!filtered.length) { setContent('<div class="empty">Geen artiesten voor dit filter.</div>'); return; }
+  const pageHtml = `<div class="vk-page" id="dsc-page">
 
-    const totalMissing = filtered.reduce((s, a) => s + a.missingCount, 0);
-    let html = `<div class="section-title">Gebaseerd op: ${(basedOn||[]).slice(0,3).join(', ')}
-      &nbsp;·&nbsp; <span style="color:var(--new)">${totalMissing} albums te ontdekken</span></div><div class="discover-grid">`;
+    <div class="vk-section vk-section--hero">
+      ${_dscSectionHdr('🧬', 'Jouw Muziek DNA', 'genres')}
+      <p class="vk-section-desc">Jouw top-genres op basis van Plex-bibliotheek. Klik op een genre om artiesten te verkennen.</p>
+      <div class="vk-section-body" id="dsc-body-hero">
+        <div class="dsc-genre-pills">${Array(6).fill('<div class="dsc-genre-pill skeleton" style="min-width:140px;height:76px"></div>').join('')}</div>
+      </div>
+    </div>
 
-    filtered.forEach((a, i) => {
-      const pct = Math.round(a.match * 100);
-      const meta = [countryFlag(a.country), a.country, a.startYear ? `Actief vanaf ${a.startYear}` : null,
-        a.totalAlbums ? `${a.totalAlbums} studio-albums` : null].filter(Boolean).join(' · ');
-      const img = proxyImg(a.image, 120) || a.image;
-      const photo = img
-        ? `<img class="discover-photo" src="${esc(img)}" alt="${esc(a.name)}" loading="lazy" decoding="async"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <div class="discover-photo-ph" style="display:none;background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`
-        : `<div class="discover-photo-ph" style="background:${gradientFor(a.name, true)}">${initials(a.name)}</div>`;
-      const albCount = a.albums?.length || 0;
-      const albLabel = `${albCount} album${albCount !== 1 ? 's' : ''}`;
-      html += `<div class="discover-section collapsed" id="disc-${i}">
-        <div class="discover-card discover-card-toggle">
-          <div class="discover-card-top">${photo}<div class="discover-card-info">
-            <div class="discover-card-name"><span class="artist-link" data-artist="${esc(a.name)}">${esc(a.name)}</span>${plexBadge(a.inPlex)}</div>
-            <div class="discover-card-sub">Vergelijkbaar met <strong>${esc(a.reason)}</strong></div></div>
-            <span class="discover-match">${pct}%</span>${bookmarkBtn('artist', a.name, '', a.image || '')}</div>
-          ${meta ? `<div class="discover-meta">${esc(meta)}</div>` : ''}${tagsHtml(a.tags, 3)}
-          ${a.missingCount > 0 ? `<div class="discover-missing">✦ ${a.missingCount} ${a.missingCount === 1 ? 'album' : 'albums'} te ontdekken</div>`
-          : `<div style="font-size:11px;color:var(--plex);margin-top:4px">▶ Volledig in Plex</div>`}
-          <button class="disc-toggle-btn collapsed" data-disc-id="disc-${i}" data-album-count="${albCount}"
-            title="Toon/verberg albums" aria-label="Albums tonen/verbergen">Toon ${albLabel}</button>
-          ${a.albums?.length ? `<div class="discover-preview-row">${a.albums.slice(0, 5).map(alb => {
-            const bg = gradientFor(alb.title || '');
-            return alb.coverUrl
-              ? `<img class="discover-preview-thumb" src="${esc(alb.coverUrl)}" alt="${esc(alb.title)}" loading="lazy" decoding="async"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-               <div class="discover-preview-ph" style="display:none;background:${bg}">${initials(alb.title || '?')}</div>`
-              : `<div class="discover-preview-ph" style="background:${bg}">${initials(alb.title || '?')}</div>`;
-          }).join('')}${a.albums.length > 5 ? `<div class="discover-preview-more">+${a.albums.length - 5}</div>` : ''}</div>` : ''}</div>
-        <div class="discover-albums-wrap">`;
-      if (a.albums?.length) {
-        html += `<div class="album-grid">`;
-        a.albums.forEach(alb => { html += albumCard(alb, true, a.name); });
-        html += `</div>`;
-      } else {
-        html += `<div style="font-size:13px;color:var(--muted2);padding:8px 0">Albums nog niet beschikbaar.</div>`;
-      }
-      html += `</div></div>`;
+    <div class="vk-section">
+      ${_dscSectionHdr('📀', 'Ontbrekende Albums', 'discover')}
+      <p class="vk-section-desc">Albums van jouw top-artiesten die in MusicBrainz staan maar niet in je Plex-bibliotheek.</p>
+      <div class="vk-section-body" id="dsc-body-undiscovered">${_dscSkelRow()}</div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('🎸', 'Nieuw in jouw genres', 'discover')}
+      <p class="vk-section-desc">Recente releases die passen bij jouw top-genres.</p>
+      <div class="vk-section-body" id="dsc-body-new-genres">${_dscSkelRow()}</div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('🔭', 'Ontdek Nieuwe Artiesten', 'discover', 'similar')}
+      <p class="vk-section-desc">Vergelijkbare artiesten op basis van jouw luistergedrag.</p>
+      <div class="vk-section-body" id="dsc-body-similar">${_dscSkelArtists()}</div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('🏷️', 'Van jouw labels', 'discover')}
+      <p class="vk-section-desc">Recente releases van labels die jouw favoriete artiesten uitbrengen.</p>
+      <div class="vk-section-body" id="dsc-body-labels">${_dscSkelRow()}</div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('🎵', 'Deep Cuts', 'discover')}
+      <p class="vk-section-desc">Artiesten in je bibliotheek met een laag bereik — muziek dat je waarschijnlijk nog niet kent.</p>
+      <div class="vk-section-body" id="dsc-body-deepcuts"><div class="vk-track-list">${skelList}</div></div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('💎', 'Vergeten Favorieten', 'discover')}
+      <p class="vk-section-desc">Je luisterde vroeger veel naar deze artiesten, maar al een tijdje niet meer.</p>
+      <div class="vk-section-body" id="dsc-body-hiddengems">${_dscSkelGrid(6)}</div>
+    </div>
+
+    <div class="vk-section">
+      ${_dscSectionHdr('🎧', 'Discovery Playlists', 'playlists')}
+      <p class="vk-section-desc">Automatisch gegenereerde playlists op basis van jouw luisterdata.</p>
+      <div class="vk-section-body" id="dsc-body-playlists">${_dscSkelRow(4)}</div>
+    </div>
+
+    <div class="vk-section" id="dsc-lb-section" style="display:none">
+      ${_dscSectionHdr('📻', 'ListenBrainz Aanbevelingen', 'lb')}
+      <p class="vk-section-desc">Aanbevolen artiesten op basis van jouw ListenBrainz-profiel.</p>
+      <div class="vk-section-body" id="dsc-body-lb">${_dscSkelArtists(4)}</div>
+    </div>
+
+  </div>`;
+
+  setContent(pageHtml);
+
+  // Alle endpoints parallel ophalen
+  const [discRes, genresRes, plRes, lbRes] = await Promise.allSettled([
+    apiFetch('/api/discover'),
+    apiFetch('/api/genres'),
+    apiFetch('/api/playlists'),
+    apiFetch('/api/listenbrainz/recommendations'),
+  ]);
+
+  const g = id => document.getElementById(`dsc-body-${id}`);
+
+  // Genres hero
+  _dscFillHero(g('hero'), genresRes.status === 'fulfilled' ? genresRes.value : null);
+
+  // Playlists
+  _dscFillPlaylists(g('playlists'), plRes.status === 'fulfilled' ? plRes.value : null);
+
+  // ListenBrainz
+  const lbSection = document.getElementById('dsc-lb-section');
+  if (lbSection) _dscFillListenBrainz(g('lb'), lbSection, lbRes.status === 'fulfilled' ? lbRes.value : null);
+
+  // Discover (6 secties uit één call)
+  if (discRes.status !== 'fulfilled') {
+    const errHtml = `<div class="vk-empty">Discover-data kon niet worden geladen.</div>`;
+    ['undiscovered','new-genres','similar','labels','deepcuts','hiddengems'].forEach(id => {
+      const el = g(id); if (el) el.innerHTML = errHtml;
     });
+    return;
+  }
 
-    setContent(html + '</div>');
-
-    // Setup discover toggle delegation
-    contentEl.addEventListener('click', e => {
-      const toggleBtn = e.target.closest('.disc-toggle-btn');
-      if (!toggleBtn) return;
-      e.stopPropagation();
-      const section = toggleBtn.closest('.discover-section');
-      if (!section) return;
-      const id = section.id;
-      const isCollapsed = section.classList.contains('collapsed');
-      section.classList.toggle('collapsed');
-      toggleBtn.classList.toggle('collapsed', !isCollapsed);
-      toggleBtn.classList.toggle('expanded', isCollapsed);
-      const count = toggleBtn.dataset.albumCount;
-      toggleBtn.textContent = isCollapsed
-        ? `Verberg ${count} album${count != 1 ? 's' : ''}`
-        : `Toon ${count} album${count != 1 ? 's' : ''}`;
+  const disc = discRes.value;
+  if (disc.status === 'building') {
+    const buildHtml = `<div class="vk-building">
+      <div class="spinner" style="margin-bottom:10px"></div>
+      <div class="vk-building-title">Muziekontdekkingen worden geanalyseerd</div>
+      <div class="vk-building-sub">${esc(disc.message || '')}<br>Pagina ververst over 20 seconden.</div>
+    </div>`;
+    ['undiscovered','new-genres','similar','labels','deepcuts','hiddengems'].forEach(id => {
+      const el = g(id); if (el) el.innerHTML = buildHtml;
     });
-  } catch (e) { if (e.name !== 'AbortError') showError(e.message); }
+    setTimeout(() => {
+      if (state.activeView === 'ontdek' && ontdekCurrentTab === 'discover') renderDiscoverTab();
+    }, 20000);
+    return;
+  }
+
+  if (disc.plexConnected) state.plexOk = true;
+  discoverData = disc;
+
+  const b = disc.building || {};
+  _dscFillUndiscovered(g('undiscovered'), disc.undiscoveredAlbums || [], b.undiscovered);
+  _dscFillNewInGenres(g('new-genres'),    disc.newInGenres        || [], b.newInGenres);
+  _dscFillSimilar(g('similar'),           disc.similarArtists     || [], disc.basedOn || [], b.similar);
+  _dscFillFromLabels(g('labels'),         disc.fromYourLabels     || [], b.fromLabels);
+  _dscFillDeepCuts(g('deepcuts'),         disc.deepCuts           || [], b.deepCuts);
+  _dscFillHiddenGems(g('hiddengems'),     disc.hiddenGems         || [], b.hiddenGems);
+
+  // Sectie-niveau refresh (delegeert op contentEl, loopt onschadelijk af op andere tabs)
+  contentEl.addEventListener('click', async e => {
+    if (ontdekCurrentTab !== 'discover') return;
+    const btn = e.target.closest('.vk-section-refresh[data-dsc-refresh]');
+    if (!btn) return;
+    const type = btn.dataset.dscRefresh;
+    const bodyId = btn.closest('.vk-section')?.querySelector('.vk-section-body')?.id;
+    if (!bodyId) return;
+    const container = document.getElementById(bodyId);
+    if (!container) return;
+
+    btn.disabled = true;
+    btn.textContent = '⏳';
+    try {
+      if (type === 'genres') {
+        await p('/api/genres/refresh', { method: 'POST' }).catch(() => {});
+        _dscFillHero(container, await apiFetch('/api/genres'));
+      } else if (type === 'playlists') {
+        _dscFillPlaylists(container, await apiFetch('/api/playlists'));
+      } else if (type === 'discover') {
+        // Volledige discover refresh — herlaad de hele tab
+        await p('/api/discover/refresh', { method: 'POST' }).catch(() => {});
+        discoverData = null;
+        invalidate('discover');
+        renderDiscoverTab();
+        return;
+      }
+    } catch {}
+    btn.disabled = false;
+    btn.textContent = '↻';
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -919,7 +1298,15 @@ export async function loadOntdek() {
     if (e.target.id === 'ontdek-refresh') {
       if (ontdekCurrentTab === 'recs') { invalidate('recs'); recsData = null; renderRecsTab(); }
       else if (ontdekCurrentTab === 'releases') { invalidate('releases'); releasesData = null; try { await p('/api/releases/refresh', { method: 'POST' }); } catch (e) {} renderReleasesTab(); }
-      else if (ontdekCurrentTab === 'discover') { invalidate('discover'); discoverData = null; try { await p('/api/discover/refresh', { method: 'POST' }); } catch (e) {} renderDiscoverTab(); }
+      else if (ontdekCurrentTab === 'discover') {
+        invalidate('discover');
+        discoverData = null;
+        try { await Promise.allSettled([
+          p('/api/discover/refresh', { method: 'POST' }),
+          p('/api/genres/refresh',   { method: 'POST' }),
+        ]); } catch {}
+        renderDiscoverTab();
+      }
       else if (ontdekCurrentTab === 'verkenner') { try { await apiFetch('/api/discover/cache-refresh', { method: 'POST' }); } catch (e) {} renderVerkennerTab(); }
     }
   });
