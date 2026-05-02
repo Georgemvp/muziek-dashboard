@@ -35,6 +35,12 @@ _last_sync: float = 0.0
 _sync_ok: bool = False
 _sync_interval: float = 3600.0                     # 1 uur, zelfde als plex.js
 
+# Track cache (lazy geladen bij eerste aanvraag)
+_tracks: list[dict] = []
+_tracks_by_artist: dict[str, list[dict]] = {}      # lowercase artiest → tracks
+_tracks_synced: bool = False
+_tracks_sync_lock = threading.Lock()
+
 
 def _normalize(s: str) -> str:
     """
@@ -191,11 +197,124 @@ def get_artist_map() -> dict[str, str]:
         return dict(_artist_map)
 
 
+def sync_tracks(force: bool = False) -> None:
+    """
+    Laad alle tracks uit de Plex muziekbibliotheek naar in-memory state.
+
+    Dit is een aparte, lazy operatie (niet onderdeel van sync()) zodat de
+    zware track-query alleen uitgevoerd wordt als een playlist generator er
+    om vraagt.  Resultaat wordt gecached in _tracks en _tracks_by_artist.
+    """
+    global _tracks_synced
+
+    if not force and _tracks_synced:
+        return
+
+    if not config.PLEX_URL or not config.PLEX_TOKEN:
+        log.warning("Plex tracks: PLEX_URL of PLEX_TOKEN niet geconfigureerd")
+        return
+
+    if not PLEXAPI_AVAILABLE:
+        log.error("Plex tracks: plexapi library niet beschikbaar")
+        return
+
+    with _tracks_sync_lock:
+        # Dubbel-check na lock
+        if not force and _tracks_synced:
+            return
+
+        try:
+            server = PlexServer(config.PLEX_URL, config.PLEX_TOKEN, timeout=30)
+
+            music_section = None
+            for section in server.library.sections():
+                if section.type == "artist":
+                    music_section = section
+                    break
+
+            if not music_section:
+                log.warning("Plex tracks: geen muziekbibliotheek gevonden")
+                return
+
+            raw_tracks = music_section.searchTracks()
+
+            new_tracks: list[dict] = []
+            new_by_artist: dict[str, list[dict]] = {}
+
+            for t in raw_tracks:
+                artist = t.grandparentTitle or ""
+                album  = t.parentTitle or ""
+                title  = t.title or ""
+                year   = getattr(t, "parentYear", None) or getattr(t, "year", None)
+                thumb  = getattr(t, "thumb", None) or getattr(t, "parentThumb", None)
+
+                cover_url = None
+                if thumb:
+                    cover_url = (
+                        thumb if thumb.startswith("http")
+                        else f"/api/plex/thumb?path={thumb}"
+                    )
+
+                track_obj = {
+                    "artist":    artist,
+                    "title":     title,
+                    "album":     album,
+                    "year":      int(year) if year else None,
+                    "duration":  getattr(t, "duration", None),
+                    "plex_key":  str(t.ratingKey) if t.ratingKey else None,
+                    "cover_url": cover_url,
+                }
+
+                new_tracks.append(track_obj)
+
+                key = artist.lower()
+                if key not in new_by_artist:
+                    new_by_artist[key] = []
+                new_by_artist[key].append(track_obj)
+
+            with _lock:
+                _tracks.clear()
+                _tracks.extend(new_tracks)
+                _tracks_by_artist.clear()
+                _tracks_by_artist.update(new_by_artist)
+                _tracks_synced = True
+
+            log.info("Plex tracks: %d tracks gesynchroniseerd", len(_tracks))
+
+        except Exception as exc:
+            log.warning("Plex track sync mislukt: %s", exc)
+
+
+def get_all_track_objects(auto_sync: bool = True) -> list[dict]:
+    """
+    Geef alle Plex tracks terug als dict-objecten.
+
+    Triggert automatisch sync_tracks() als de cache nog leeg is.
+    """
+    if auto_sync and not _tracks_synced:
+        sync_tracks()
+    with _lock:
+        return list(_tracks)
+
+
+def get_tracks_for_artist(artist_name: str, auto_sync: bool = True) -> list[dict]:
+    """
+    Geef alle Plex tracks voor een specifieke artiest (case-insensitive).
+    """
+    if auto_sync and not _tracks_synced:
+        sync_tracks()
+    key = (artist_name or "").lower()
+    with _lock:
+        return list(_tracks_by_artist.get(key, []))
+
+
 def status() -> dict:
     """Geeft de huidige sync-status terug (ok, aantallen, timestamp)."""
     return {
         "ok":           _sync_ok,
         "artist_count": len(_artists),
         "album_count":  len(_albums),
+        "track_count":  len(_tracks),
+        "tracks_synced": _tracks_synced,
         "last_sync":    _last_sync,
     }

@@ -398,3 +398,137 @@ def get_setting(category: str, key: str) -> Optional[Any]:
             return json.loads(row["value"])
         except (json.JSONDecodeError, TypeError):
             return row["value"]
+
+
+# ── Playlists ──────────────────────────────────────────────────────────────────
+# Schema (db.js):
+#   playlists(
+#     id           INTEGER PK AUTOINCREMENT,
+#     type         TEXT NOT NULL,
+#     name         TEXT NOT NULL,
+#     params       TEXT,
+#     tracks       TEXT NOT NULL,
+#     track_count  INTEGER DEFAULT 0,
+#     generated_at INTEGER DEFAULT (strftime('%s','now')),
+#     expires_at   INTEGER
+#   )
+
+# TTLs per type in seconden — identiek aan PLAYLIST_TTL in db.js
+PLAYLIST_TTL: dict[str, int] = {
+    "discovery_weekly":    7 * 24 * 3600,
+    "release_radar":       24 * 3600,
+    "daily_mix":           24 * 3600,
+    "seasonal":            30 * 24 * 3600,
+    "decade":              14 * 24 * 3600,
+    "genre":               14 * 24 * 3600,
+    "forgotten_favorites": 24 * 3600,
+    "hidden_gems":         7 * 24 * 3600,
+    "custom":              24 * 3600,
+}
+
+
+def save_playlist(
+    playlist_type: str,
+    name: str,
+    tracks: list,
+    params: Optional[dict] = None,
+) -> None:
+    """
+    Sla een gegenereerde playlist op in de database.
+
+    Verwijdert eerst de vorige versie van dit type+params (INSERT OR REPLACE werkt
+    niet goed met de composite-key op type+params), dan insert de nieuwe versie.
+    Identiek aan savePlaylist() in db.js.
+    """
+    ttl = PLAYLIST_TTL.get(playlist_type, 24 * 3600)
+    now = int(time.time())
+    expires = now + ttl
+    params_str = json.dumps(params, ensure_ascii=False) if params is not None else None
+    tracks_str = json.dumps(tracks, ensure_ascii=False)
+
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM playlists WHERE type = ? AND "
+            "(params = ? OR (params IS NULL AND ? IS NULL))",
+            (playlist_type, params_str, params_str),
+        )
+        conn.execute(
+            "INSERT INTO playlists "
+            "(type, name, params, tracks, track_count, generated_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (playlist_type, name, params_str, tracks_str, len(tracks), now, expires),
+        )
+        conn.commit()
+
+
+def get_playlist(
+    playlist_type: str,
+    params: Optional[dict] = None,
+) -> Optional[dict]:
+    """
+    Haal een gecachede playlist op.
+
+    Geeft None terug als niet gevonden of verlopen.
+    Identiek aan getPlaylist() in db.js.
+    """
+    params_str = json.dumps(params, ensure_ascii=False) if params is not None else None
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM playlists "
+            "WHERE type = ? AND (params = ? OR (params IS NULL AND ? IS NULL)) "
+            "ORDER BY generated_at DESC LIMIT 1",
+            (playlist_type, params_str, params_str),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        now = int(time.time())
+        if row["expires_at"] and row["expires_at"] < now:
+            return None
+
+        try:
+            return {
+                **dict(row),
+                "tracks": json.loads(row["tracks"]),
+                "params": json.loads(row["params"]) if row["params"] else None,
+            }
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+
+def get_all_playlists() -> list[dict]:
+    """
+    Haal metadata van alle niet-verlopen playlists op (zonder tracks).
+
+    Identiek aan getAllSavedPlaylists() in db.js.
+    """
+    now = int(time.time())
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, type, name, params, track_count, generated_at, expires_at "
+            "FROM playlists ORDER BY generated_at DESC"
+        ).fetchall()
+        return [
+            {
+                **dict(row),
+                "params": json.loads(row["params"]) if row["params"] else None,
+                "is_expired": False,
+            }
+            for row in rows
+            if not row["expires_at"] or row["expires_at"] > now
+        ]
+
+
+def get_enrichment_artists() -> list[str]:
+    """
+    Geeft alle unieke artiestennamen terug die enrichment data hebben.
+
+    Handig voor playlist generators die over alle verrijkte artiesten itereren.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT entity_name FROM enrichment_data WHERE entity_type = 'artist'"
+        ).fetchall()
+        return [row["entity_name"] for row in rows]
