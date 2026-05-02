@@ -16,8 +16,14 @@ const {
   getPlexLibrary,
   getAlbumTracks,
   getPlexArtistsByGenre,
+  plexGet, plexPost, getPlexPlaylists, searchPlexLibrary, getPlexArtistNames,
+  PLEX_URL, PLEX_TOKEN,
 } = require('./plex');
-const { getCache, setCache, getSetting } = require('../db');
+const { getCache, setCache, getSetting, getEnrichmentDataBySource } = require('../db');
+const { getDeezerArtist, getDeezerArtistTopTracks, getDeezerRelatedArtists } = require('./deezer');
+const { getReleases }  = require('./releases');
+const { getDiscover }  = require('./discover');
+const { getGenreMap }  = require('./genres');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1173,6 +1179,448 @@ async function generateCustomPlaylist(seedArtists) {
   return shuffle(resultTracks).slice(0, 50);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── SoulSync-stijl Playlist Engine ────────────────────────────────────────────
+// 6 persoonlijke playlisttypen met Deezer-tracks, SQLite-cache en Plex-sync.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Cache helpers ──────────────────────────────────────────────────────────────
+
+const SS_TTL = {
+  discovery_weekly:    7 * 24 * 60 * 60 * 1000,
+  release_radar:           24 * 60 * 60 * 1000,
+  forgotten_favorites: 7 * 24 * 60 * 60 * 1000,
+  deep_cuts:           7 * 24 * 60 * 60 * 1000,
+  decade:              7 * 24 * 60 * 60 * 1000,
+  genre_mix:           7 * 24 * 60 * 60 * 1000,
+};
+
+// In-progress guards
+const _ssBuilding = {};
+
+function _ssCacheKey(type, params) {
+  return params ? `ss_playlist:v1:${type}:${JSON.stringify(params)}` : `ss_playlist:v1:${type}`;
+}
+
+function _ssSave(type, name, tracks, params = null) {
+  const ttl = SS_TTL[type] || 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  setCache(_ssCacheKey(type, params), { type, name, tracks, params, builtAt: now, expiresAt: now + ttl });
+}
+
+function _ssRead(type, params = null) {
+  const data = getCache(_ssCacheKey(type, params), Infinity);
+  if (!data) return null;
+  if (data.expiresAt && data.expiresAt < Date.now()) return null;
+  return data;
+}
+
+// ── Deezer helper ──────────────────────────────────────────────────────────────
+
+async function _deezerTracks(artistName, limit = 2) {
+  try {
+    const artist = await getDeezerArtist(artistName);
+    if (!artist?.id) return [];
+    const tracks = await getDeezerArtistTopTracks(artist.id);
+    return (tracks || []).slice(0, limit).map(t => ({
+      title: t.title, artist: artistName,
+      album: t.album?.title || '', source: 'deezer', deezerTrackId: t.id,
+    }));
+  } catch { return []; }
+}
+
+// Verwerkt items met beperkte gelijktijdigheid; fn(item) → Array van tracks
+async function _withLimit(items, fn, concurrency = 3) {
+  const out = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const settled = await Promise.allSettled(items.slice(i, i + concurrency).map(fn));
+    for (const r of settled) {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) out.push(...r.value);
+    }
+  }
+  return out;
+}
+
+// ── Plex-playlist sync ─────────────────────────────────────────────────────────
+
+let _ssMachineId = null;
+
+async function _ssMachineIdGet() {
+  if (_ssMachineId) return _ssMachineId;
+  try {
+    const data = await plexGet('/identity');
+    _ssMachineId = data?.MediaContainer?.machineIdentifier || null;
+  } catch (e) { logger.warn({ err: e.message }, 'Playlists: machineId ophalen mislukt'); }
+  return _ssMachineId;
+}
+
+async function _ssPlexDelete(path) {
+  if (!PLEX_TOKEN || !PLEX_URL) return;
+  const sep = path.includes('?') ? '&' : '?';
+  try {
+    await fetch(`${PLEX_URL}${path}${sep}X-Plex-Token=${PLEX_TOKEN}`, {
+      method: 'DELETE', headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (e) { logger.warn({ err: e.message }, 'Playlists: Plex DELETE mislukt'); }
+}
+
+function _ssNorm(s) { return (s || '').toLowerCase().replace(/[^\w\s]/g, '').trim(); }
+
+async function _findPlexTrack(title, artist) {
+  try {
+    const res = await searchPlexLibrary(title, 10);
+    const t = _ssNorm(title);
+    const a0 = _ssNorm(artist).split(' ')[0];
+    return (
+      (res.tracks || []).find(tr => _ssNorm(tr.title) === t && _ssNorm(tr.artist).includes(a0)) ||
+      (res.tracks || []).find(tr => _ssNorm(tr.title) === t)
+    )?.ratingKey || null;
+  } catch { return null; }
+}
+
+async function _ssPlexSync(name, tracks) {
+  if (!PLEX_TOKEN || !PLEX_URL) return { ok: false, reason: 'Plex niet geconfigureerd' };
+  const machineId = await _ssMachineIdGet();
+  if (!machineId) return { ok: false, reason: 'Machine ID niet beschikbaar' };
+
+  const ratingKeys = [];
+  for (const track of tracks) {
+    const rk = await _findPlexTrack(track.title, track.artist);
+    if (rk) ratingKeys.push(rk);
+  }
+  if (!ratingKeys.length) return { ok: false, reason: 'Geen tracks gevonden in Plex' };
+
+  const existing = (await getPlexPlaylists()).find(p => p.title === name);
+  if (existing) await _ssPlexDelete(`/playlists/${existing.ratingKey}`);
+
+  const uri = `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKeys.join(',')}`;
+  const url = `/playlists?type=audio&title=${encodeURIComponent(name)}&smart=0&uri=${encodeURIComponent(uri)}`;
+  const result = await plexPost(url);
+  const created = result?.MediaContainer?.Metadata?.[0];
+  logger.info({ name, found: ratingKeys.length, total: tracks.length }, 'Playlists: Plex sync klaar');
+  return { ok: true, playlistId: created?.ratingKey, tracksAdded: ratingKeys.length, totalTracks: tracks.length };
+}
+
+// ── 1. Discovery Weekly ────────────────────────────────────────────────────────
+
+async function _buildDiscoveryWeekly() {
+  logger.info('Playlists: Discovery Weekly bouwen...');
+  const topRes = await lfm({ method: 'user.getTopArtists', period: '1month', limit: '10' });
+  const topArtists = (topRes?.topartists?.artist || []).map(a => a.name);
+  if (!topArtists.length) return [];
+
+  const plexNames = new Set((await getPlexArtistNames()).map(n => n.toLowerCase()));
+  const seen = new Set(topArtists.map(n => n.toLowerCase()));
+  const candidates = [];
+
+  for (const name of topArtists) {
+    try {
+      const da = await getDeezerArtist(name);
+      if (!da?.id) continue;
+      const related = await getDeezerRelatedArtists(da.id);
+      const eligible = (related || [])
+        .filter(a => !plexNames.has(a.name.toLowerCase()) && !seen.has(a.name.toLowerCase()))
+        .slice(0, 5);
+      for (const sim of eligible) {
+        seen.add(sim.name.toLowerCase());
+        const tracks = await getDeezerArtistTopTracks(sim.id);
+        candidates.push(
+          ...(tracks || []).slice(0, 2).map(t => ({
+            title: t.title, artist: sim.name, album: t.album?.title || '',
+            source: 'deezer', deezerTrackId: t.id,
+          }))
+        );
+      }
+    } catch (e) { logger.warn({ artist: name, err: e.message }, 'Discovery Weekly: artiest overgeslagen'); }
+  }
+
+  // Serendipity: 10 willekeurige artiesten uit top-3 genres die niet in Plex staan
+  const genreData = getGenreMap();
+  if (genreData?.genres?.length) {
+    const pool = [];
+    for (const g of genreData.genres.slice(0, 3)) {
+      for (const a of (g.artists || [])) {
+        if (!plexNames.has(a.name.toLowerCase()) && !seen.has(a.name.toLowerCase())) pool.push(a.name);
+      }
+    }
+    for (const n of shuffle(pool).slice(0, 10)) candidates.push(...await _deezerTracks(n, 1));
+  }
+
+  const result = shuffle(candidates).slice(0, 50);
+  logger.info({ tracks: result.length }, 'Playlists: Discovery Weekly klaar');
+  return result;
+}
+
+// ── 2. Release Radar ───────────────────────────────────────────────────────────
+
+async function _buildReleaseRadar() {
+  logger.info('Playlists: Release Radar bouwen...');
+  const data = getReleases();
+  if (data.status !== 'ok') return [];
+
+  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const recent = (data.releases || []).filter(r => {
+    const d = r.releaseDate ? new Date(r.releaseDate).getTime() : 0;
+    return d >= cutoff;
+  });
+
+  const tracks = [];
+  for (const release of recent.slice(0, 30)) {
+    try {
+      const artist = await getDeezerArtist(release.artist);
+      if (!artist?.id) continue;
+      const topTracks = await getDeezerArtistTopTracks(artist.id);
+      tracks.push(
+        ...(topTracks || []).slice(0, 3).map(t => ({
+          title: t.title, artist: release.artist, album: release.album || '',
+          source: 'deezer', deezerTrackId: t.id,
+          artistPlaycount: release.artistPlaycount || 0,
+        }))
+      );
+    } catch (e) { logger.warn({ artist: release.artist, err: e.message }, 'Release Radar: overgeslagen'); }
+  }
+
+  tracks.sort((a, b) => (b.artistPlaycount || 0) - (a.artistPlaycount || 0));
+  logger.info({ tracks: tracks.length }, 'Playlists: Release Radar klaar');
+  return tracks;
+}
+
+// ── 3. Forgotten Favorites ─────────────────────────────────────────────────────
+
+async function _buildForgottenFavorites() {
+  logger.info('Playlists: Forgotten Favorites bouwen...');
+  const [overallRes, recentRes] = await Promise.all([
+    lfm({ method: 'user.getTopArtists', limit: '100' }),
+    lfm({ method: 'user.getTopArtists', period: '3month', limit: '50' }),
+  ]);
+  const overall = (overallRes?.topartists?.artist || []).map(a => a.name);
+  const recentSet = new Set((recentRes?.topartists?.artist || []).map(a => a.name.toLowerCase()));
+  const forgotten = overall.filter(n => !recentSet.has(n.toLowerCase()));
+
+  const tracks = await _withLimit(forgotten.slice(0, 20), artist => _deezerTracks(artist, 3), 4);
+  const result = shuffle(tracks).slice(0, 40);
+  logger.info({ tracks: result.length }, 'Playlists: Forgotten Favorites klaar');
+  return result;
+}
+
+// ── 4. Decade Playlists ────────────────────────────────────────────────────────
+
+const SS_DECADE_NAMES = {
+  1960: 'Hits van de 60s', 1970: 'Hits van de 70s', 1980: 'Hits van de 80s',
+  1990: 'Hits van de 90s', 2000: 'Hits van de 00s', 2010: 'Hits van de 10s',
+  2020: 'Hits van de 20s',
+};
+
+async function _buildDecadePlaylists() {
+  logger.info('Playlists: Decade Playlists bouwen...');
+  const topRes = await lfm({ method: 'user.getTopArtists', limit: '200' });
+  const playcountMap = new Map(
+    (topRes?.topartists?.artist || []).map(a => [a.name.toLowerCase(), parseInt(a.playcount) || 0])
+  );
+
+  const allArtists = await getPlexArtistNames();
+  const byDecade = new Map();
+
+  for (const name of allArtists) {
+    const mbz = getEnrichmentDataBySource('artist', name, 'musicbrainz');
+    if (!mbz?.begin_date) continue;
+    const year = parseInt(mbz.begin_date.slice(0, 4));
+    if (!year || year < 1960) continue;
+    const decade = Math.floor(year / 10) * 10;
+    if (!SS_DECADE_NAMES[decade]) continue;
+    if (!byDecade.has(decade)) byDecade.set(decade, []);
+    byDecade.get(decade).push({ name, playcount: playcountMap.get(name.toLowerCase()) || 0 });
+  }
+
+  const built = [];
+  for (const [decade, artists] of byDecade) {
+    const top5 = artists.sort((a, b) => b.playcount - a.playcount).slice(0, 5);
+    const tracks = await _withLimit(top5, a => _deezerTracks(a.name, 4), 3);
+    if (!tracks.length) continue;
+    const name = SS_DECADE_NAMES[decade];
+    _ssSave('decade', name, tracks, { decade });
+    built.push({ decade, name, trackCount: tracks.length });
+    logger.info({ decade, tracks: tracks.length }, `Playlists: ${name} klaar`);
+  }
+  return built;
+}
+
+// ── 5. Genre Mixes ─────────────────────────────────────────────────────────────
+
+async function _buildGenreMixes() {
+  logger.info('Playlists: Genre Mixes bouwen...');
+  const genreData = getGenreMap();
+  if (genreData.status !== 'ok' || !genreData.genres?.length) return [];
+
+  const built = [];
+  for (const entry of genreData.genres.slice(0, 5)) {
+    try {
+      const artists = (entry.artists || []).slice(0, 10);
+      const tracks  = shuffle(await _withLimit(artists, a => _deezerTracks(a.name, 3), 4));
+      const name    = `${capitalizeFirst(entry.genre)} Mix`;
+      _ssSave('genre_mix', name, tracks, { genre: entry.genre });
+      built.push({ genre: entry.genre, name, trackCount: tracks.length });
+      logger.info({ genre: entry.genre, tracks: tracks.length }, `Playlists: ${name} klaar`);
+    } catch (e) { logger.warn({ genre: entry.genre, err: e.message }, 'Genre Mix: overgeslagen'); }
+  }
+  return built;
+}
+
+// ── 6. Deep Cuts ───────────────────────────────────────────────────────────────
+
+async function _buildDeepCuts() {
+  logger.info('Playlists: Deep Cuts bouwen...');
+  const discover = getDiscover();
+  const deepCutsArtists = discover?.deepCuts || [];
+  if (!deepCutsArtists.length) return [];
+
+  const tracks = [];
+  for (const item of deepCutsArtists.slice(0, 30)) {
+    try {
+      if (item.track?.title) {
+        tracks.push({ title: item.track.title, artist: item.name, album: '',
+          source: 'deezer', deezerTrackId: item.track.id || null });
+      } else {
+        tracks.push(...await _deezerTracks(item.name, 1));
+      }
+    } catch (e) { logger.warn({ artist: item.name, err: e.message }, 'Deep Cuts: overgeslagen'); }
+  }
+
+  const result = shuffle(tracks).slice(0, 30);
+  logger.info({ tracks: result.length }, 'Playlists: Deep Cuts klaar');
+  return result;
+}
+
+// ── Build orchestratie ─────────────────────────────────────────────────────────
+
+const SS_SIMPLE_DEFS = [
+  { type: 'discovery_weekly',    name: 'Discovery Weekly',    build: _buildDiscoveryWeekly },
+  { type: 'release_radar',       name: 'Release Radar',       build: _buildReleaseRadar },
+  { type: 'forgotten_favorites', name: 'Forgotten Favorites', build: _buildForgottenFavorites },
+  { type: 'deep_cuts',           name: 'Deep Cuts',           build: _buildDeepCuts },
+];
+
+function _ssRunSimple(type, name, buildFn) {
+  const key = _ssCacheKey(type);
+  if (_ssBuilding[key]) return;
+  _ssBuilding[key] = true;
+  buildFn()
+    .then(tracks => { if (tracks.length) _ssSave(type, name, tracks); })
+    .catch(e => logger.error({ type, err: e.message }, 'Playlists: build gefaald'))
+    .finally(() => { delete _ssBuilding[key]; });
+}
+
+function _ssRunDecades() {
+  if (_ssBuilding['decade:all']) return;
+  _ssBuilding['decade:all'] = true;
+  _buildDecadePlaylists()
+    .catch(e => logger.error({ err: e.message }, 'Playlists: decade build gefaald'))
+    .finally(() => { delete _ssBuilding['decade:all']; });
+}
+
+function _ssRunGenreMixes() {
+  if (_ssBuilding['genre_mix:all']) return;
+  _ssBuilding['genre_mix:all'] = true;
+  _buildGenreMixes()
+    .catch(e => logger.error({ err: e.message }, 'Playlists: genre mix build gefaald'))
+    .finally(() => { delete _ssBuilding['genre_mix:all']; });
+}
+
+// ── Publieke SoulSync API ──────────────────────────────────────────────────────
+
+/** Geeft metadata van alle gegenereerde playlists terug (zonder tracks). */
+function getPlaylists() {
+  const result = [];
+
+  for (const def of SS_SIMPLE_DEFS) {
+    const data = _ssRead(def.type);
+    result.push({
+      type: def.type, name: def.name,
+      trackCount: data?.tracks?.length || 0,
+      builtAt: data?.builtAt || null, expiresAt: data?.expiresAt || null,
+      ready: !!data, building: !!_ssBuilding[_ssCacheKey(def.type)],
+    });
+  }
+
+  for (const [decadeStr, name] of Object.entries(SS_DECADE_NAMES)) {
+    const decade = parseInt(decadeStr);
+    const data   = _ssRead('decade', { decade });
+    result.push({
+      type: 'decade', name, params: { decade },
+      trackCount: data?.tracks?.length || 0,
+      builtAt: data?.builtAt || null, expiresAt: data?.expiresAt || null,
+      ready: !!data, building: !!_ssBuilding['decade:all'],
+    });
+  }
+
+  const genreData = getGenreMap();
+  for (const entry of (genreData?.genres || []).slice(0, 5)) {
+    const data = _ssRead('genre_mix', { genre: entry.genre });
+    result.push({
+      type: 'genre_mix', name: `${capitalizeFirst(entry.genre)} Mix`, params: { genre: entry.genre },
+      trackCount: data?.tracks?.length || 0,
+      builtAt: data?.builtAt || null, expiresAt: data?.expiresAt || null,
+      ready: !!data, building: !!_ssBuilding['genre_mix:all'],
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Geeft tracks van een specifieke playlist terug, of null als niet beschikbaar.
+ * @param {string} type
+ * @param {object} [params]  – bijv. { decade: 1980 } of { genre: 'rock' }
+ */
+function getPlaylistTracks(type, params = null) {
+  const data = _ssRead(type, params);
+  return data ? { name: data.name, tracks: data.tracks, builtAt: data.builtAt } : null;
+}
+
+/** Forceert rebuild van de opgegeven playlist. */
+function refreshPlaylist(type, params = null) {
+  const def = SS_SIMPLE_DEFS.find(d => d.type === type);
+  if (def) { _ssRunSimple(def.type, def.name, def.build); return { ok: true, building: true }; }
+  if (type === 'decade') { _ssRunDecades(); return { ok: true, building: true }; }
+  if (type === 'genre_mix') { _ssRunGenreMixes(); return { ok: true, building: true }; }
+  return { ok: false, reason: 'Onbekend playlist type' };
+}
+
+/** Synchroniseert een gegenereerde playlist naar Plex als afspeellijst. */
+async function syncPlaylistToPlex(type, params = null) {
+  const data = _ssRead(type, params);
+  if (!data) return { ok: false, reason: 'Playlist niet beschikbaar – eerst bouwen' };
+  return _ssPlexSync(data.name, data.tracks);
+}
+
+/**
+ * Controleert welke playlists verlopen zijn en start rebuilds in de achtergrond.
+ * Wordt 60 seconden na serverstart aangeroepen via startup.js.
+ */
+function initPlaylists() {
+  setTimeout(async () => {
+    logger.info('Playlists: initialisatie gestart');
+    for (const def of SS_SIMPLE_DEFS) {
+      if (!_ssRead(def.type)) {
+        logger.info({ type: def.type }, 'Playlists: verlopen, bouwen gestart');
+        _ssRunSimple(def.type, def.name, def.build);
+        await new Promise(r => setTimeout(r, 3_000));
+      }
+    }
+    if (Object.keys(SS_DECADE_NAMES).some(d => !_ssRead('decade', { decade: parseInt(d) }))) {
+      logger.info('Playlists: decade playlists verlopen, bouwen gestart');
+      _ssRunDecades();
+    }
+    const genreData = getGenreMap();
+    const anyGenreExpired = (genreData?.genres || []).slice(0, 5).some(g => !_ssRead('genre_mix', { genre: g.genre }));
+    if (anyGenreExpired) {
+      logger.info('Playlists: genre mixes verlopen, bouwen gestart');
+      _ssRunGenreMixes();
+    }
+  }, 60_000);
+}
+
 // ── Publieke API ──────────────────────────────────────────────────────────────
 module.exports = {
   generateReleaseRadar,
@@ -1194,4 +1642,10 @@ module.exports = {
   getAvailableGenres,
   currentSeason,
   SEASON_TAGS,
+  // SoulSync Playlist Engine
+  getPlaylists,
+  getPlaylistTracks,
+  refreshPlaylist,
+  syncPlaylistToPlex,
+  initPlaylists,
 };
