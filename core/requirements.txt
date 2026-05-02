@@ -6,6 +6,6 @@ requests==2.32.3
 musicbrainzngs==0.7.1        # MusicBrainz worker
 pylast==5.3.0                # Last.fm worker
 spotipy==2.24.0              # Spotify worker
-python3-discogs-client==1.3.2  # Discogs worker
+discogs-client==2.8            # Discogs worker
 lyricsgenius==3.0.1          # Genius worker
 # requests is al aanwezig — gebruikt door Deezer, iTunes, AudioDB, Tidal, Qobuz workers
