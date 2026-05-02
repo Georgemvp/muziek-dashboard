@@ -97,6 +97,63 @@ try {
   throw err;
 }
 
+// ── Discover sections tabel ────────────────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS discover_sections (
+      section    TEXT PRIMARY KEY,
+      data_json  TEXT NOT NULL,
+      built_at   INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `);
+  logger.debug('Discover sections table initialized');
+} catch (err) {
+  logger.error({ err }, 'Error initializing discover_sections table');
+  throw err;
+}
+
+const _stmtGetDiscoverSection    = db.prepare('SELECT data_json, built_at, expires_at FROM discover_sections WHERE section = ?');
+const _stmtSetDiscoverSection    = db.prepare('INSERT OR REPLACE INTO discover_sections (section, data_json, built_at, expires_at) VALUES (?, ?, ?, ?)');
+const _stmtGetDiscoverSectionAge = db.prepare('SELECT built_at FROM discover_sections WHERE section = ?');
+
+/** Haal discover-sectie op. Geeft null terug als niet aanwezig of verlopen. */
+function getDiscoverSection(section) {
+  try {
+    const row = _stmtGetDiscoverSection.get(section);
+    if (!row) return null;
+    if (Date.now() > row.expires_at) return null;
+    return JSON.parse(row.data_json);
+  } catch (err) {
+    logger.error({ section, err }, 'Error reading discover section');
+    return null;
+  }
+}
+
+/** Sla discover-sectie op met een TTL in milliseconden. */
+function setDiscoverSection(section, data, ttlMs) {
+  try {
+    const now     = Date.now();
+    const dataStr = JSON.stringify(data);
+    _stmtSetDiscoverSection.run(section, dataStr, now, now + ttlMs);
+    logger.trace({ section, size: dataStr.length }, 'Discover section written');
+  } catch (err) {
+    logger.error({ section, err }, 'Error writing discover section');
+    throw err;
+  }
+}
+
+/** Geeft de leeftijd in ms van een discover-sectie (Infinity als niet aanwezig). */
+function getDiscoverSectionAge(section) {
+  try {
+    const row = _stmtGetDiscoverSectionAge.get(section);
+    return row ? Date.now() - row.built_at : Infinity;
+  } catch (err) {
+    logger.error({ section, err }, 'Error getting discover section age');
+    return Infinity;
+  }
+}
+
 /** Haal een gecachede waarde op. Geeft null terug als niet aanwezig of verlopen. */
 function getCache(key, maxAgeMs = Infinity) {
   try {
@@ -2020,6 +2077,7 @@ function getMirroredPlaylistCounts(playlistId) {
 module.exports = {
   getDb,
   getCache, setCache, clearCache, getCacheAge, pruneCache, queryCacheByPrefix,
+  getDiscoverSection, setDiscoverSection, getDiscoverSectionAge,
   getWishlist, addToWishlist, removeFromWishlist, isInWishlist,
   addDownload, getDownloads, getDownloadKeys, removeDownload, normalizeKey,
   getSettings, getSetting, setSetting, setSettings, getAllSettings,

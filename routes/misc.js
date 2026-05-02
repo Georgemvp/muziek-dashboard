@@ -23,7 +23,7 @@ async function checkService(url, maxMs = 3000) {
 
 module.exports = function(app, deps) {
   const {
-    proxyImage, getDiscover, refreshDiscover, getGaps, refreshGaps, getReleases,
+    proxyImage, getDiscover, refreshDiscover, getDiscoverStatus, getGaps, refreshGaps, getReleases,
     refreshReleases, getWishlist, addToWishlist, removeFromWishlist, getCache, setCache,
     getCacheAge, getPlexStatus, PLEX_URL, PLEX_TOKEN, TIDARR_URL, ORPHEUS_URL
   } = deps;
@@ -33,6 +33,11 @@ module.exports = function(app, deps) {
   app.get('/api/discover', (req, res) => {
     res.set('Cache-Control', 'private, max-age=600');
     res.json(getDiscover());
+  });
+
+  app.get('/api/discover/status', (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(getDiscoverStatus());
   });
 
   app.get('/api/gaps', (req, res) => {
