@@ -77,6 +77,12 @@ function runStartup(server, deps) {
     try { initPlaylists(); } catch (e) { logger.warn({ err: e.message }, '⚠ Playlists init mislukt'); }
   }
 
+  // ListenBrainz service initialiseren
+  try {
+    const { initListenBrainz } = require('../services/listenbrainz');
+    initListenBrainz();
+  } catch (e) { logger.warn({ err: e.message }, '⚠ ListenBrainz init mislukt'); }
+
   // Achtergrond-sync gespiegelde playlists elk uur
   const mirroredService = require('../services/mirroredPlaylists');
   logger.debug('Starting background mirrored playlist sync (every hour)');

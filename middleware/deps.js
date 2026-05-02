@@ -65,6 +65,10 @@ const {
 } = require('../db');
 
 const { SPOTIFY_OK, MOODS, searchArtistId, getRecommendations } = require('../services/spotify');
+const {
+  getListenBrainzRecommendations, getListenBrainzPlaylists,
+  getListenBrainzSimilarUsers, getListenBrainzStatus, LB_OK, LB_USER,
+} = require('../services/listenbrainz');
 const { Scrobbler } = require('../services/scrobbler');
 const { getWikipediaExtract } = require('../services/wikipedia');
 const mirroredPlaylistsService = require('../services/mirroredPlaylists');
@@ -192,6 +196,10 @@ const deps = {
 
   // Spotify
   SPOTIFY_OK, MOODS, searchArtistId, getRecommendations,
+
+  // ListenBrainz
+  getListenBrainzRecommendations, getListenBrainzPlaylists,
+  getListenBrainzSimilarUsers, getListenBrainzStatus, LB_OK, LB_USER,
 
   // Wikipedia
   getWikipediaExtract,
