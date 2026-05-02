@@ -50,13 +50,19 @@ function runStartup(server, deps) {
           '⚠ Plex library initialization failed (will retry on first request)');
       }
 
-          if (failed.length) {
-            logger.warn({ services: failed }, `⚠ ${failed.join(', ')} service(s) initialization failed`);
-          } else {
-            logger.info('✓ All discovery services initialized');
-          }
-          logger.info('✓ All initialization tasks completed - app fully operational');
-        });
+          const failed = [
+        discoverResult.status === 'rejected'  && 'discover',
+        genresResult.status   === 'rejected'  && 'genres',
+        gapsResult.status     === 'rejected'  && 'gaps',
+        releasesResult.status === 'rejected'  && 'releases',
+      ].filter(Boolean);
+
+      if (failed.length) {
+        logger.warn({ services: failed }, `⚠ ${failed.join(', ')} service(s) initialization failed`);
+      } else {
+        logger.info('✓ All discovery services initialized');
+      }
+      logger.info('✓ All initialization tasks completed - app fully operational');
     });
 
   // Achtergrond-sync Plex elke 30 minuten
