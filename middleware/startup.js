@@ -43,6 +43,8 @@ function runStartup(server, deps) {
     .then(([plexResult, discoverResult, genresResult, gapsResult, releasesResult]) => {
       if (plexResult.status === 'fulfilled') {
         logger.info({ status: 'ready' }, '✓ Plex library initialized');
+        const enrichmentManager = require('../services/enrichment/manager');
+        enrichmentManager.queueAll();
       } else {
         logger.warn({ err: plexResult.reason, message: plexResult.reason?.message },
           '⚠ Plex library initialization failed (will retry on first request)');
@@ -68,7 +70,11 @@ function runStartup(server, deps) {
   setInterval(() => {
     logger.debug('🔄 Running background Plex sync...');
     syncPlexLibrary(true)
-      .then(() => logger.debug('✓ Background Plex sync completed'))
+      .then(() => {
+        logger.debug('✓ Background Plex sync completed');
+        const enrichmentManager = require('../services/enrichment/manager');
+        enrichmentManager.queueAll();
+      })
       .catch(e => logger.warn({ err: e, message: e.message }, '⚠ Background Plex sync failed'));
   }, 30 * 60 * 1_000);
 

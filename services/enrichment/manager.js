@@ -373,7 +373,8 @@ class EnrichmentManager {
       return { queued: 0, artists: 0 };
     }
 
-    const names  = this._plexArtistsFn() || [];
+    const artistMap = this._plexArtistsFn();
+    const names = artistMap instanceof Map ? [...artistMap.values()] : (Array.isArray(artistMap) ? artistMap : []);
     let   queued = 0;
 
     for (const name of names) {
