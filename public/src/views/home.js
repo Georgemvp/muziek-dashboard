@@ -678,7 +678,7 @@ async function renderRecommendedArtists(topArtistsRaw) {
     // Probeer eerst discover endpoint
     let recommendedList = [];
     try {
-      const discoverData = await apiFetch('/api/discover');
+      const discoverData = await apiFetch('/api/core/discover');
       if (discoverData?.artists && Array.isArray(discoverData.artists)) {
         recommendedList = discoverData.artists.slice(0, 5);
       }
@@ -1568,7 +1568,7 @@ export async function loadHome() {
     apiFetch('/api/plex/status').catch(() => null),
     apiFetch('/api/plex/stats?period=7day').catch(() => null),
     apiFetch('/api/wishlist').catch(() => null),
-    apiFetch('/api/releases').catch(() => null),
+    apiFetch('/api/core/releases').catch(() => null),
     apiFetch('/api/user').catch(() => null),  // For Last.fm status
     apiFetch('/api/loved').catch(() => null),  // For loved tracks
   ]);

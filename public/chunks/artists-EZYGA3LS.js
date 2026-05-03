@@ -1,4 +1,4 @@
-import{a as v}from"./chunk-O5HY53I4.js";import{d as A,f as $,g as w,h as i,j as E,l as C,n as L,r as f,s as x,t as k,u as B,x as y}from"./chunk-NGNPS5HK.js";import"./chunk-2BMKGNH5.js";var l=null,p="",u="name";function I(){return document.getElementById("content")}function M(){let t=window.innerWidth;return t>=1600?8:t>=1300?7:t>=1050?6:t>=850?5:t>=650?4:t>=480?3:2}function N(){let t=document.getElementById("view-toolbar");if(!t)return;let a=l?l.length:0;t.innerHTML=`
+import{a as v}from"./chunk-FGEE3J4F.js";import{d as A,f as $,g as w,h as i,j as E,l as C,n as L,r as f,s as x,t as k,u as B,x as y}from"./chunk-NGNPS5HK.js";import"./chunk-2BMKGNH5.js";var l=null,p="",u="name";function I(){return document.getElementById("content")}function M(){let t=window.innerWidth;return t>=1600?8:t>=1300?7:t>=1050?6:t>=850?5:t>=650?4:t>=480?3:2}function N(){let t=document.getElementById("view-toolbar");if(!t)return;let a=l?l.length:0;t.innerHTML=`
     <div class="toolbar-group">
       <input type="text" id="artists-search" placeholder="Filter artiesten..." class="toolbar-input" value="${i(p)}">
       <select id="artists-sort" class="toolbar-select">

@@ -1,4 +1,4 @@
-import{a as n}from"./chunk-O4FREAIJ.js";import{a}from"./chunk-O5HY53I4.js";import"./chunk-NGNPS5HK.js";import"./chunk-2BMKGNH5.js";function m(){}async function u(){let e=document.getElementById("content");if(!e)return;let t='<span class="ms-status-loading">Verbinden met MediaSage\u2026</span>';e.innerHTML=i(t),l();try{let r=await n(),o=r?.track_count??r?.tracks??r?.total_tracks??null;typeof o=="number"?t=`
+import{a as n}from"./chunk-O4FREAIJ.js";import{a}from"./chunk-FGEE3J4F.js";import"./chunk-NGNPS5HK.js";import"./chunk-2BMKGNH5.js";function m(){}async function u(){let e=document.getElementById("content");if(!e)return;let t='<span class="ms-status-loading">Verbinden met MediaSage\u2026</span>';e.innerHTML=i(t),l();try{let r=await n(),o=r?.track_count??r?.tracks??r?.total_tracks??null;typeof o=="number"?t=`
         <span class="ms-status-dot ms-status-ok" aria-hidden="true"></span>
         <span class="ms-status-text">${o.toLocaleString("nl-NL")} tracks gesynchroniseerd</span>`:t=`
         <span class="ms-status-dot ms-status-warn" aria-hidden="true"></span>
