@@ -20,7 +20,7 @@ const logger = require('../logger');
  * @param {object}                deps     - Gedeeld dependency-object
  */
 function runStartup(server, deps) {
-  const { syncPlexLibrary, initGenres, automationService, initPlaylists } = deps;
+  const { syncPlexLibrary, initGenres, automationService, initPlaylists, getPlexArtistNames } = deps;
 
   // Automation Engine initialiseren (vóór alles, want het registreert alleen DB + listeners)
   try {
@@ -47,6 +47,15 @@ function runStartup(server, deps) {
     } catch (err) {
       logger.warn({ err: err.message }, '⚠ Genres service initialization failed');
     }
+    // Enrichment manager initialiseren na Plex-sync zodat queueAll() artiesten kan ophalen
+    try {
+      const enrichmentManager = require('../services/enrichment/manager');
+      enrichmentManager.init({ getPlexArtistNames });
+      logger.info('✓ Enrichment manager geïnitialiseerd');
+    } catch (err) {
+      logger.warn({ err: err.message }, '⚠ Enrichment manager initialisatie mislukt');
+    }
+
     logger.info('✓ All initialization tasks completed - app fully operational');
   })();
 
