@@ -752,7 +752,8 @@ module.exports = function(app, deps) {
     try {
       const artist = (req.query.artist || '').trim().toLowerCase();
       const album = (req.query.album || '').trim().toLowerCase();
-      const limitParam = parseInt(req.query.limit) || 100;
+      const raw = parseInt(req.query.limit);
+      const limitParam = isNaN(raw) ? 100 : raw;
       const limit = limitParam === 0 ? 999999 : Math.min(500, Math.max(1, limitParam)); // limit=0 means "all"
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 

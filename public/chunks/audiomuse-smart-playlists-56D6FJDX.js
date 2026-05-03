@@ -59,7 +59,7 @@ import{a as g,f as h,g as f,i as k}from"./chunk-JWPBI32X.js";import{n as o}from"
       <div id="am-spl-body">
         <div class="am-loading-small"><div class="spinner"></div>Playlists laden\u2026</div>
       </div>
-    </div>`,document.getElementById("am-spl-back")?.addEventListener("click",()=>{import("./router-FQEYNXIH.js").then(e=>e.switchView("audiomuse"))});let t=await g(),s=document.getElementById("am-spl-body");if(!s)return;if(!t){s.innerHTML=`
+    </div>`,document.getElementById("am-spl-back")?.addEventListener("click",()=>{import("./router-ZP5ACTXK.js").then(e=>e.switchView("audiomuse"))});let t=await g(),s=document.getElementById("am-spl-body");if(!s)return;if(!t){s.innerHTML=`
       <div class="am-card">
         <div class="am-status-row">
           <span class="am-status-dot am-dot-red"></span>
