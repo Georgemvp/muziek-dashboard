@@ -11,11 +11,29 @@ De Express app proxyt /api/core/* naar dit adres.
 import logging
 import threading
 import time
+from urllib.parse import unquote
 
 from flask import Flask, jsonify, request
 
 from core import config
 from core.database import list_tables
+
+# ── Enrichment manager singleton ───────────────────────────────────────────────
+# Wordt aangemaakt bij de eerste aanroep van _get_enrichment_manager().
+# start_all(blocking=False) wordt gestart vanuit de achtergrond startup-thread.
+_enrichment_manager = None
+_enrichment_manager_lock = threading.Lock()
+
+
+def _get_enrichment_manager():
+    """Geeft de gedeelde EnrichmentManager instantie terug (lazy init)."""
+    global _enrichment_manager
+    if _enrichment_manager is None:
+        with _enrichment_manager_lock:
+            if _enrichment_manager is None:
+                from core.workers.manager import EnrichmentManager
+                _enrichment_manager = EnrichmentManager()
+    return _enrichment_manager
 
 
 def create_app() -> Flask:
@@ -265,13 +283,253 @@ def create_app() -> Flask:
             )
             return jsonify({"status": "error", "error": str(exc)}), 500
 
+    # ── Enrichment endpoints ──────────────────────────────────────────────────
+    # Dezelfde API-surface als routes/enrichment.js, maar dan in Python.
+    # Alle endpoints vallen onder /api/core/enrichment/* zodat ze via de
+    # bestaande Express-proxy automatisch worden doorgestuurd.
+
+    @app.get("/api/core/enrichment/status")
+    def enrichment_status():
+        """
+        Geeft de status terug van alle enrichment workers.
+
+        Response: { source: { label, enabled, paused, queue, stats } }
+        """
+        try:
+            import core.database as db
+            manager = _get_enrichment_manager()
+            return jsonify(manager.get_status()), 200, {"Cache-Control": "private, no-cache"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/enrichment/status mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/enrichment/pause/<source>")
+    def enrichment_pause(source: str):
+        """Pauzeer een specifieke worker (of 'all')."""
+        try:
+            manager = _get_enrichment_manager()
+            if source == "all":
+                manager.pause_all()
+            else:
+                manager.pause(source)
+            return jsonify({"ok": True, "action": "paused", "source": source})
+        except Exception as exc:
+            app.logger.error("POST /api/core/enrichment/pause/%s mislukt: %s", source, exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/enrichment/resume/<source>")
+    def enrichment_resume(source: str):
+        """Hervat een specifieke worker (of 'all')."""
+        try:
+            manager = _get_enrichment_manager()
+            if source == "all":
+                manager.resume_all()
+            else:
+                manager.resume(source)
+            return jsonify({"ok": True, "action": "resumed", "source": source})
+        except Exception as exc:
+            app.logger.error("POST /api/core/enrichment/resume/%s mislukt: %s", source, exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/enrichment/queue/artist/<path:name>")
+    def enrichment_queue_artist(name: str):
+        """Voeg één artiest toe aan de enrichment queue."""
+        try:
+            manager = _get_enrichment_manager()
+            added = manager.queue_artist(unquote(name))
+            return jsonify({"ok": True, "artist": name, "queued": added})
+        except Exception as exc:
+            app.logger.error("POST /api/core/enrichment/queue/artist mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/enrichment/queue/all")
+    def enrichment_queue_all():
+        """Queue alle artiesten uit de Plex-bibliotheek."""
+        try:
+            import core.plex_client as plex
+            manager = _get_enrichment_manager()
+            artist_names = plex.get_artist_names()
+            result = manager.queue_all(artist_names)
+            return jsonify({"ok": True, **result})
+        except Exception as exc:
+            app.logger.error("POST /api/core/enrichment/queue/all mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # Registreer de /primary-route vóór de /<source>-route zodat Flask de
+    # statische component 'primary' verkiest boven de variabele /<source>.
+    @app.get("/api/core/enrichment/data/<entity_type>/<path:entity_and_primary>")
+    def enrichment_data_primary(entity_type: str, entity_and_primary: str):
+        """
+        GET /api/core/enrichment/data/<type>/<name>/primary
+        GET /api/core/enrichment/data/<type>/<name>/<source>
+        GET /api/core/enrichment/data/<type>/<name>  (alle bronnen)
+        """
+        import core.database as db
+        try:
+            parts = entity_and_primary.rsplit("/", 1)
+            if len(parts) == 2:
+                entity_name_raw, last = parts
+                entity_name = unquote(entity_name_raw)
+                last_dec = unquote(last)
+            else:
+                # Geen trailing segment — geef alle bronnen terug
+                entity_name = unquote(entity_and_primary)
+                data = db.get_enrichment_data(entity_type, entity_name)
+                return (
+                    jsonify({"entityType": entity_type, "entityName": entity_name, "sources": data}),
+                    200,
+                    {"Cache-Control": "private, max-age=300"},
+                )
+
+            if last_dec == "primary":
+                primary_source = db.get_setting("enrichment", "primary_source") or "spotify"
+                data = db.get_enrichment_data_by_source(entity_type, entity_name, primary_source)
+                used_source = primary_source
+                if data is None:
+                    all_data = db.get_enrichment_data(entity_type, entity_name)
+                    sources = list(all_data.keys())
+                    if sources:
+                        used_source = sources[0]
+                        data = all_data[used_source]
+                if data is None:
+                    return jsonify({"error": "Geen enrichment data beschikbaar"}), 404
+                return (
+                    jsonify({
+                        "entityType": entity_type,
+                        "entityName": entity_name,
+                        "source": used_source,
+                        "primarySource": primary_source,
+                        "data": data,
+                    }),
+                    200,
+                    {"Cache-Control": "private, max-age=300"},
+                )
+            else:
+                # last_dec is een specifieke source-naam
+                data = db.get_enrichment_data_by_source(entity_type, entity_name, last_dec)
+                if data is None:
+                    return jsonify({"error": "No enrichment data found"}), 404
+                return (
+                    jsonify({
+                        "entityType": entity_type,
+                        "entityName": entity_name,
+                        "source": last_dec,
+                        "data": data,
+                    }),
+                    200,
+                    {"Cache-Control": "private, max-age=300"},
+                )
+        except Exception as exc:
+            app.logger.error("GET /api/core/enrichment/data mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/enrichment/genres")
+    def enrichment_genres_get():
+        """Haal de genre whitelist + filter-status op."""
+        try:
+            import core.database as db
+            genres = db.get_genre_whitelist()
+            enabled = db.get_setting("enrichment", "genre_filter_enabled")
+            return (
+                jsonify({"genres": genres, "filterEnabled": enabled is True or enabled == "true"}),
+                200,
+                {"Cache-Control": "private, max-age=60"},
+            )
+        except Exception as exc:
+            app.logger.error("GET /api/core/enrichment/genres mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.put("/api/core/enrichment/genres")
+    def enrichment_genres_put():
+        """
+        Bulk-update de genre whitelist en/of de filter-instelling.
+        Body: { genres?: [{genre, enabled}], filterEnabled?: bool }
+        """
+        try:
+            import core.database as db
+            body = request.get_json(silent=True) or {}
+            manager = _get_enrichment_manager()
+            if isinstance(body.get("genres"), list):
+                db.set_genre_whitelist(body["genres"])
+                manager.refresh_genre_cache()
+            if isinstance(body.get("filterEnabled"), bool):
+                db.set_setting("enrichment", "genre_filter_enabled", body["filterEnabled"])
+                manager.set_genre_filter_enabled(body["filterEnabled"])
+            return jsonify({"ok": True})
+        except Exception as exc:
+            app.logger.error("PUT /api/core/enrichment/genres mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.patch("/api/core/enrichment/genres/<path:genre>")
+    def enrichment_genre_patch(genre: str):
+        """Zet één genre aan of uit. Body: { enabled: bool }"""
+        try:
+            import core.database as db
+            body = request.get_json(silent=True) or {}
+            enabled = body.get("enabled", True)
+            db.set_genre_enabled(unquote(genre), enabled is not False)
+            _get_enrichment_manager().refresh_genre_cache()
+            return jsonify({"ok": True, "genre": genre, "enabled": enabled})
+        except Exception as exc:
+            app.logger.error("PATCH /api/core/enrichment/genres/%s mislukt: %s", genre, exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/enrichment/settings")
+    def enrichment_settings_get():
+        """Haal enrichment-instellingen op (API keys gemaskeerd als ***)."""
+        try:
+            import core.database as db
+            workers = [
+                "itunes", "discogs", "audiodb", "genius", "tidal",
+                "qobuz", "spotify", "musicbrainz", "lastfm", "deezer",
+            ]
+            settings = {
+                "genius_api_key":      "***" if db.get_setting("enrichment", "genius_api_key") else None,
+                "discogs_token":       "***" if db.get_setting("enrichment", "discogs_token") else None,
+                "discogs_user_agent":  db.get_setting("enrichment", "discogs_user_agent"),
+                "genre_filter_enabled": db.get_setting("enrichment", "genre_filter_enabled") or False,
+                "primary_source":       db.get_setting("enrichment", "primary_source") or "spotify",
+            }
+            for w in workers:
+                val = db.get_setting("enrichment", f"worker_{w}_enabled")
+                settings[f"worker_{w}_enabled"] = val is not False and val != "false"
+            return jsonify(settings), 200, {"Cache-Control": "private, no-cache"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/enrichment/settings mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.put("/api/core/enrichment/settings")
+    def enrichment_settings_put():
+        """Sla enrichment-instellingen op."""
+        try:
+            import core.database as db
+            allowed = [
+                "genius_api_key", "discogs_token", "discogs_user_agent",
+                "genre_filter_enabled",
+                "worker_itunes_enabled", "worker_discogs_enabled", "worker_audiodb_enabled",
+                "worker_genius_enabled", "worker_tidal_enabled", "worker_qobuz_enabled",
+                "worker_spotify_enabled", "worker_musicbrainz_enabled",
+                "worker_lastfm_enabled", "worker_deezer_enabled",
+                "primary_source",
+            ]
+            body = request.get_json(silent=True) or {}
+            for key in allowed:
+                if key in body:
+                    db.set_setting("enrichment", key, body[key])
+            if "genre_filter_enabled" in body:
+                _get_enrichment_manager().set_genre_filter_enabled(body["genre_filter_enabled"])
+            return jsonify({"ok": True})
+        except Exception as exc:
+            app.logger.error("PUT /api/core/enrichment/settings mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     # ── Background thread: Plex sync + discovery init ─────────────────────────
     # Wacht 15 seconden zodat de database-verbinding en enrichment workers
     # eerst kunnen opstarten. Identiek aan initDiscover/initGaps/initReleases.
 
     def _startup_background():
         time.sleep(15)
-        app.logger.info("Core: achtergrond startup — Plex sync + discovery init")
+        app.logger.info("Core: achtergrond startup — Plex sync + discovery init + enrichment workers")
         try:
             import core.plex_client as plex
             plex.sync()
@@ -279,10 +537,14 @@ def create_app() -> Flask:
             app.logger.warning("Core: Plex sync bij startup mislukt: %s", exc)
         try:
             from core.discovery import builder
-            # Plex is al gesyncet hierboven — geen extra vertraging nodig
             builder.init(delay_seconds=0)
         except Exception as exc:
             app.logger.warning("Core: discovery init bij startup mislukt: %s", exc)
+        try:
+            manager = _get_enrichment_manager()
+            manager.start_all(blocking=False)
+        except Exception as exc:
+            app.logger.warning("Core: enrichment workers starten mislukt: %s", exc)
 
     startup_thread = threading.Thread(
         target=_startup_background,

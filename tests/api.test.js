@@ -193,6 +193,120 @@ describe('POST /api/core/playlists/:type/refresh', () => {
   });
 });
 
+// ── Enrichment proxy-tests ──────────────────────────────────────────────────
+// /api/core/enrichment/* wordt geproxied naar de Python Core backend.
+// In CI draait die niet, dus verwachten we 502 of 503.
+
+describe('GET /api/core/enrichment/status', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/enrichment/status');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/enrichment/pause/:source', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/enrichment/pause/all');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/enrichment/resume/:source', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/enrichment/resume/all');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/enrichment/queue/artist/:name', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/enrichment/queue/artist/Radiohead');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/enrichment/queue/all', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/enrichment/queue/all');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/enrichment/data/:type/:name', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/enrichment/data/artist/Radiohead');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/enrichment/data/:type/:name/primary', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/enrichment/data/artist/Radiohead/primary');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/enrichment/genres', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/enrichment/genres');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('PUT /api/core/enrichment/genres', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).put('/api/core/enrichment/genres').send({ genres: [] });
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/enrichment/settings', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/enrichment/settings');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('PUT /api/core/enrichment/settings', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).put('/api/core/enrichment/settings').send({});
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
 // ══════════════════════════════════════════════════════════════════════════
 // Plex
 // ══════════════════════════════════════════════════════════════════════════

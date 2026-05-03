@@ -1574,7 +1574,7 @@ function attachListeners() {
 /** Laad en initialiseer de enrichment settings UI. */
 async function _initEnrichmentSettings() {
   try {
-    const res  = await fetch('/api/enrichment/settings');
+    const res  = await fetch('/api/core/enrichment/settings');
     if (!res.ok) return;
     const cfg  = await res.json();
 
@@ -1633,7 +1633,7 @@ async function _initEnrichmentSettings() {
     });
 
     try {
-      const res = await fetch('/api/enrichment/settings', {
+      const res = await fetch('/api/core/enrichment/settings', {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
@@ -1652,7 +1652,7 @@ async function _initEnrichmentSettings() {
 /** Toon een inline genre whitelist beheerder. */
 async function _openGenreWhitelist() {
   try {
-    const res  = await fetch('/api/enrichment/genres');
+    const res  = await fetch('/api/core/enrichment/genres');
     const data = await res.json();
     const genres = data.genres || [];
 
@@ -1738,7 +1738,7 @@ async function _openGenreWhitelist() {
       });
 
       try {
-        const r = await fetch('/api/enrichment/genres', {
+        const r = await fetch('/api/core/enrichment/genres', {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ genres: updated }),
