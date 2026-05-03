@@ -13,11 +13,11 @@ Logica (zero externe API calls):
 
 Limiet: max 50 items.
 """
+from __future__ import annotations
 
 import json
 import logging
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import core.database as db
 import core.plex_client as plex
@@ -34,7 +34,7 @@ def _parse_date(date_str: str) -> datetime | None:
         return None
     for fmt in ("%Y-%m-%d", "%Y-%m", "%Y"):
         try:
-            return datetime.strptime(date_str[:len(fmt)], fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(date_str[:len(fmt)], fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
@@ -46,7 +46,7 @@ def build() -> list[dict]:
 
     Leest uitsluitend uit enrichment_data (SQLite) — geen externe API calls.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_LOOKBACK_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS)
 
     # ── Laad alle artist enrichment data in één query ──────────────────────
     try:

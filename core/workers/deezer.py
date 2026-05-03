@@ -5,10 +5,11 @@ Gebruikt de gratis Deezer API (geen auth nodig).
 Highlights: BPM voor tracks, label + record_type voor albums.
 Rate limit: conservatief 1 call/sec.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -70,7 +71,7 @@ class DeezerWorker(BaseWorker):
             self.log.warning(f"Deezer worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _process_artist(self, name: str) -> Optional[dict]:
+    def _process_artist(self, name: str) -> dict | None:
         data  = self._get(f"/search/artist?q={requests.utils.quote(name)}&limit=5")
         items = data.get("data", [])
         if not items:
@@ -111,7 +112,7 @@ class DeezerWorker(BaseWorker):
             "fetchedAt":   int(time.time() * 1000),
         }
 
-    def _process_album(self, name: str) -> Optional[dict]:
+    def _process_album(self, name: str) -> dict | None:
         data  = self._get(f"/search/album?q={requests.utils.quote(name)}&limit=5")
         items = data.get("data", [])
         if not items:
@@ -144,7 +145,7 @@ class DeezerWorker(BaseWorker):
             "fetchedAt":    int(time.time() * 1000),
         }
 
-    def _process_track(self, name: str) -> Optional[dict]:
+    def _process_track(self, name: str) -> dict | None:
         data  = self._get(f"/search?q={requests.utils.quote(name)}&limit=5")
         items = data.get("data", [])
         if not items:

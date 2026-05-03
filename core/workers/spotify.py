@@ -5,11 +5,12 @@ Gebruikt spotipy met Client Credentials flow (geen user-auth nodig).
 Vereist SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET.
 Rate limit: conservatief 1 call/sec + respecteer Retry-After bij 429.
 """
+from __future__ import annotations
 
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -29,7 +30,7 @@ class SpotifyWorker(BaseWorker):
         self._last_call   = 0.0
         self._daily_count = 0
         self._daily_date  = ""
-        self._sp: Optional[spotipy.Spotify] = None
+        self._sp: spotipy.Spotify | None = None
         self._init_client()
 
     def _init_client(self) -> None:
@@ -95,7 +96,7 @@ class SpotifyWorker(BaseWorker):
             self.log.warning(f"Spotify worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _process_artist(self, name: str) -> Optional[dict]:
+    def _process_artist(self, name: str) -> dict | None:
         result = self._search(name, "artist")
         items  = (result.get("artists") or {}).get("items", [])
         if not items:
@@ -117,7 +118,7 @@ class SpotifyWorker(BaseWorker):
             "fetchedAt":   int(time.time() * 1000),
         }
 
-    def _process_album(self, name: str) -> Optional[dict]:
+    def _process_album(self, name: str) -> dict | None:
         result = self._search(name, "album")
         items  = (result.get("albums") or {}).get("items", [])
         if not items:
@@ -139,7 +140,7 @@ class SpotifyWorker(BaseWorker):
             "fetchedAt":    int(time.time() * 1000),
         }
 
-    def _process_track(self, name: str) -> Optional[dict]:
+    def _process_track(self, name: str) -> dict | None:
         result = self._search(name, "track")
         items  = (result.get("tracks") or {}).get("items", [])
         if not items:

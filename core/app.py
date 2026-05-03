@@ -262,7 +262,6 @@ def create_app() -> Flask:
             { "status": "ok", "playlist": { ... } }
         """
         try:
-            import json as _json
             params = None
             if request.is_json:
                 body = request.get_json(silent=True) or {}
@@ -300,7 +299,6 @@ def create_app() -> Flask:
         Response: { source: { label, enabled, paused, queue, stats } }
         """
         try:
-            import core.database as db
             manager = _get_enrichment_manager()
             return jsonify(manager.get_status()), 200, {"Cache-Control": "private, no-cache"}
         except Exception as exc:

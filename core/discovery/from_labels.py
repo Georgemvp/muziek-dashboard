@@ -40,7 +40,7 @@ def build() -> dict[str, Any]:
                 label_freq[label] = label_freq.get(label, 0) + 1
 
     top_labels = [
-        l for l, _ in sorted(label_freq.items(), key=lambda x: -x[1])
+        label for label, _ in sorted(label_freq.items(), key=lambda x: -x[1])
     ][:10]
 
     if not top_labels:

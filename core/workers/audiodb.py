@@ -4,10 +4,11 @@ audiodb.py — TheAudioDB enrichment worker.
 Gratis publieke API, geen auth nodig.
 Rate limit: conservatief 1 call per 3 sec.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -52,21 +53,21 @@ class AudioDBWorker(BaseWorker):
             self.log.warning(f"AudioDB worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         if entity_type == "artist":
             return self._search_artist(name)
         if entity_type == "album":
             return self._search_album(name)
         return None
 
-    def _search_artist(self, name: str) -> Optional[dict]:
+    def _search_artist(self, name: str) -> dict | None:
         from urllib.parse import quote
         data    = self._get(f"{AUDIODB_BASE}/search.php?s={quote(name)}")
         artists = data.get("artists") or []
         if not artists:
             return None
 
-        norm  = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         exact = next((a for a in artists if norm(a.get("strArtist", "")) == norm(name)), None)
         a     = exact or artists[0]
 
@@ -103,14 +104,14 @@ class AudioDBWorker(BaseWorker):
             "fetchedAt":     int(time.time() * 1000),
         }
 
-    def _search_album(self, name: str) -> Optional[dict]:
+    def _search_album(self, name: str) -> dict | None:
         from urllib.parse import quote
         data   = self._get(f"{AUDIODB_BASE}/searchalbum.php?s=all&a={quote(name)}")
         albums = data.get("album") or []
         if not albums:
             return None
 
-        norm  = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         exact = next((a for a in albums if norm(a.get("strAlbum", "")) == norm(name)), None)
         al    = exact or albums[0]
 

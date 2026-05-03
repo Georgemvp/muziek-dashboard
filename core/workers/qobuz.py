@@ -4,11 +4,12 @@ qobuz.py — Qobuz enrichment worker via OrpheusDL API proxy.
 Geen directe Qobuz API-calls — gaat via de lokale OrpheusDL instantie.
 Rate limit: conservatief 1 call per 3 sec.
 """
+from __future__ import annotations
 
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -22,7 +23,7 @@ class QobuzWorker(BaseWorker):
     source = "qobuz"
 
     def __init__(self, database, logger: logging.Logger,
-                 orpheus_url: Optional[str] = None):
+                 orpheus_url: str | None = None):
         super().__init__(database, logger)
         self._url       = orpheus_url or os.environ.get("ORPHEUS_URL", "http://localhost:5000")
         self._last_call = 0.0
@@ -39,7 +40,7 @@ class QobuzWorker(BaseWorker):
             time.sleep(wait)
         self._last_call = time.time()
 
-    def _get(self, path: str) -> Optional[dict]:
+    def _get(self, path: str) -> dict | None:
         self._rate_limit()
         resp = self._session.get(f"{self._url}{path}", timeout=REQUEST_TIMEOUT)
         if resp.status_code == 404:
@@ -61,7 +62,7 @@ class QobuzWorker(BaseWorker):
             self.log.warning(f"Qobuz/OrpheusDL worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         from urllib.parse import quote
         try:
             search_type = (
@@ -73,7 +74,7 @@ class QobuzWorker(BaseWorker):
             if not data or not data.get("results"):
                 return None
 
-            norm    = lambda s: (s or "").lower().strip()
+            def norm(s): return (s or "").lower().strip()
             results = data["results"]
             exact   = next(
                 (r for r in results if norm(r.get("name") or r.get("title", "")) == norm(name)),

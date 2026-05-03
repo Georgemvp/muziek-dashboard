@@ -14,6 +14,7 @@ proxy voor populariteit (artiesten met hoge overall playcount die al lang
 niet zijn voorgesteld).
 """
 
+import contextlib
 import json
 import logging
 import random
@@ -96,10 +97,8 @@ def build() -> list[dict]:
     overall = _get_cached_top_artists("overall")
     if not overall:
         log.debug("Forgotten: geen 'overall' cache — API proberen")
-        try:
+        with contextlib.suppress(Exception):
             overall = [a["name"] for a in lastfm.get_top_artists("overall", _OVERALL_LIMIT)]
-        except Exception:
-            pass
 
     if not overall:
         log.debug("Forgotten: API ook leeg — enrichment_data fallback")
@@ -112,10 +111,8 @@ def build() -> list[dict]:
     # ── Haal recente top-artiesten op (3 maanden) ──────────────────────────
     recent = _get_cached_top_artists("3month")
     if not recent:
-        try:
+        with contextlib.suppress(Exception):
             recent = [a["name"] for a in lastfm.get_top_artists("3month", _RECENT_LIMIT)]
-        except Exception:
-            pass
 
     recent_set = {r.lower() for r in recent}
 

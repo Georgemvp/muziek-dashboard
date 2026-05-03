@@ -4,18 +4,20 @@ lastfm.py — Last.fm enrichment worker.
 Gebruikt pylast. Vereist LASTFM_API_KEY omgevingsvariabele.
 Ingebouwde caching via SQLite (7 dagen TTL) om de API te ontlasten.
 """
+from __future__ import annotations
 
+import contextlib
 import html
 import logging
 import os
 import re
 import time
-from typing import Any, Optional
+from typing import Any
 
 import pylast
 
-from core.workers.base import BaseWorker
 import core.database as db
+from core.workers.base import BaseWorker
 
 CACHE_TTL_MS = 7 * 24 * 3600 * 1000  # 7 dagen
 
@@ -82,7 +84,7 @@ class LastfmWorker(BaseWorker):
 
     # ── Artiest ───────────────────────────────────────────────────────────────
 
-    def _process_artist(self, name: str) -> Optional[dict]:
+    def _process_artist(self, name: str) -> dict | None:
         cache_key = f"enrichment:lfm:artist:{name.lower()}"
         cached = self._get_cached(cache_key)
         if cached:
@@ -134,7 +136,7 @@ class LastfmWorker(BaseWorker):
 
     # ── Album ─────────────────────────────────────────────────────────────────
 
-    def _process_album(self, name: str) -> Optional[dict]:
+    def _process_album(self, name: str) -> dict | None:
         cache_key = f"enrichment:lfm:album:{name.lower()}"
         cached = self._get_cached(cache_key)
         if cached:
@@ -147,10 +149,8 @@ class LastfmWorker(BaseWorker):
 
         album = results[0]
         tags  = []
-        try:
+        with contextlib.suppress(Exception):
             tags = [t.item.get_name() for t in (album.get_top_tags(limit=10) or [])]
-        except Exception:
-            pass
 
         try:
             listeners = int(album.get_listener_count() or 0)
@@ -178,7 +178,7 @@ class LastfmWorker(BaseWorker):
 
     # ── Track ─────────────────────────────────────────────────────────────────
 
-    def _process_track(self, name: str) -> Optional[dict]:
+    def _process_track(self, name: str) -> dict | None:
         cache_key = f"enrichment:lfm:track:{name.lower()}"
         cached = self._get_cached(cache_key)
         if cached:
@@ -190,10 +190,8 @@ class LastfmWorker(BaseWorker):
 
         track = results[0]
         tags  = []
-        try:
+        with contextlib.suppress(Exception):
             tags = [t.item.get_name() for t in (track.get_top_tags(limit=10) or [])]
-        except Exception:
-            pass
 
         try:
             listeners = int(track.get_listener_count() or 0)

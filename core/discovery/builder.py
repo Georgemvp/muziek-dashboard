@@ -12,15 +12,15 @@ Wordt aangeroepen vanuit core/app.py:
   - Via GET  /api/core/discover → get_all()
   - Via POST /api/core/discover/refresh → refresh()
 """
+from __future__ import annotations
 
 import logging
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 import core.database as db
 import core.plex_client as plex
-
 from core.discovery import (
     deep_cuts,
     from_labels,
@@ -53,7 +53,7 @@ _BUILDERS: dict[str, Any] = {
 }
 
 # Één actieve Thread per sectie
-_builds: dict[str, Optional[threading.Thread]] = {k: None for k in _BUILDERS}
+_builds: dict[str, threading.Thread | None] = {k: None for k in _BUILDERS}
 _builds_lock = threading.Lock()
 
 

@@ -5,10 +5,10 @@ Gebruikt de gratis Deezer API (geen auth) voor similar artists,
 top tracks en artiestfoto's.
 Rate limit: conservatief 1 call/sec (zelfde als DeezerWorker).
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 import requests
 
@@ -43,7 +43,7 @@ def _get(path: str) -> dict:
     return data
 
 
-def _find_artist_id(name: str) -> Optional[int]:
+def _find_artist_id(name: str) -> int | None:
     """Zoek Deezer artiest-ID op naam. Exact match heeft voorrang."""
     data  = _get(f"/search/artist?q={requests.utils.quote(name)}&limit=5")
     items = data.get("data", [])
@@ -113,7 +113,7 @@ def get_artist_top_tracks(deezer_id: int | str, limit: int = 50) -> list[dict]:
         return []
 
 
-def get_artist_image(artist_name: str) -> Optional[str]:
+def get_artist_image(artist_name: str) -> str | None:
     """
     Geeft de medium-formaat artiestfoto-URL terug van Deezer, of None.
     Identiek aan getDeezerImage() in services/deezer.js.

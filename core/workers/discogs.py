@@ -5,11 +5,12 @@ Gebruikt de Discogs REST API direct via requests (geen client library nodig).
 Rate limit: 25 calls/min zonder token, 60/min met token.
 We gebruiken 1 call per 2.5 sec als veilige marge.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
-from urllib.parse import urlencode, quote
+from typing import Any
+from urllib.parse import urlencode
 
 import requests
 
@@ -24,7 +25,7 @@ class DiscogsWorker(BaseWorker):
     source = "discogs"
 
     def __init__(self, database, logger: logging.Logger,
-                 token: Optional[str] = None,
+                 token: str | None = None,
                  user_agent: str = "LastfmMuziekApp/1.0 +https://github.com/muziek"):
         super().__init__(database, logger)
         self._last_call = 0.0
@@ -61,7 +62,7 @@ class DiscogsWorker(BaseWorker):
             self.log.warning(f"Discogs worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         discogs_type = (
             "artist"  if entity_type == "artist" else
             "master"  if entity_type == "album"  else
@@ -74,7 +75,7 @@ class DiscogsWorker(BaseWorker):
         if not results:
             return None
 
-        norm  = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         exact = next((r for r in results if norm(r.get("title", "")) == norm(name)), None)
         best  = exact or results[0]
 

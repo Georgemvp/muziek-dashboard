@@ -12,7 +12,7 @@ gemockt via pytest monkeypatch / tmpdir zodat CI zonder echte services slaagt.
 """
 
 import os
-import tempfile
+
 import pytest
 
 

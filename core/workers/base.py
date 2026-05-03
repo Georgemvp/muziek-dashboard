@@ -80,7 +80,7 @@ class BaseWorker(ABC):
 
         Returns het beste item, of None als alles onder de threshold valt.
         """
-        norm = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         # Exacte match eerst
         exact = next((i for i in items if norm(name_fn(i)) == norm(query)), None)
         if exact is not None:
