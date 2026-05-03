@@ -307,6 +307,110 @@ describe('PUT /api/core/enrichment/settings', () => {
   });
 });
 
+// ── Genre whitelist proxy-tests ───────────────────────────────────────────────
+
+describe('GET /api/core/genres/whitelist', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/genres/whitelist');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/genres/whitelist', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/genres/whitelist').send({ genre: 'Rock' });
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('DELETE /api/core/genres/whitelist', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).delete('/api/core/genres/whitelist').send({ genre: 'Rock' });
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/genres/whitelist/reset', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/genres/whitelist/reset');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+// ── Stats proxy-tests ─────────────────────────────────────────────────────────
+
+describe('GET /api/core/stats', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/stats/top/artists', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats/top/artists?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/stats/top/albums', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats/top/albums?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/stats/top/tracks', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats/top/tracks?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/stats/genres', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats/genres?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/stats/timeline', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/stats/timeline?range=1month');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503, kreeg: ${res.status}`
+    );
+  });
+});
+
 // ══════════════════════════════════════════════════════════════════════════
 // Plex
 // ══════════════════════════════════════════════════════════════════════════

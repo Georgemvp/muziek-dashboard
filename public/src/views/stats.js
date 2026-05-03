@@ -495,14 +495,14 @@ async function renderStats(period) {
     btn.addEventListener('click', () => { if (btn.dataset.period !== _period) { _period = btn.dataset.period; renderStats(_period); } });
   });
 
-  // ── Parallel data ophalen ─────────────────────────────────────────────
+  // ── Parallel data ophalen (Core backend als primair) ─────────────────
   const [ovRes, tlRes, gnRes, taRes, albRes, trRes, hlRes] = await Promise.allSettled([
-    apiFetch('/api/stats/overview'),
-    apiFetch(`/api/stats/timeline?period=${period}`),
-    apiFetch(`/api/stats/genres?period=${period}`),
-    apiFetch(`/api/stats/top-artists?period=${period}&limit=20`),
-    apiFetch(`/api/stats/top-albums?period=${period}&limit=10`),
-    apiFetch(`/api/stats/top-tracks?period=${period}&limit=10`),
+    apiFetch(`/api/core/stats?range=${period}`),
+    apiFetch(`/api/core/stats/timeline?range=${period}`),
+    apiFetch(`/api/core/stats/genres?range=${period}`),
+    apiFetch(`/api/core/stats/top/artists?range=${period}&limit=20`),
+    apiFetch(`/api/core/stats/top/albums?range=${period}&limit=10`),
+    apiFetch(`/api/core/stats/top/tracks?range=${period}&limit=10`),
     apiFetch('/api/stats/library-health'),
   ]);
 
@@ -514,35 +514,60 @@ async function renderStats(period) {
   const topTracks  = trRes.status  === 'fulfilled' ? trRes.value  : null;
   const health     = hlRes.status  === 'fulfilled' ? hlRes.value  : null;
 
-  // Fallback naar /api/plex/stats als nieuwe endpoints nog niet beschikbaar zijn
+  // Fallback naar Express stats als Core backend niet beschikbaar is
   let fallback = null;
   if (!overview && !topArtists) {
     try {
-      fallback = await apiFetch(`/api/plex/stats?period=${period}`);
-    } catch {}
+      const [fbOv, fbTa, fbTl, fbGn, fbAlb, fbTr] = await Promise.allSettled([
+        apiFetch('/api/stats/overview'),
+        apiFetch(`/api/stats/top-artists?period=${period}&limit=20`),
+        apiFetch(`/api/stats/timeline?period=${period}`),
+        apiFetch(`/api/stats/genres?period=${period}`),
+        apiFetch(`/api/stats/top-albums?period=${period}&limit=10`),
+        apiFetch(`/api/stats/top-tracks?period=${period}&limit=10`),
+      ]);
+      fallback = {
+        overview:   fbOv.status   === 'fulfilled' ? fbOv.value   : null,
+        topArtists: fbTa.status   === 'fulfilled' ? fbTa.value?.artists || [] : [],
+        timeline:   fbTl.status   === 'fulfilled' ? fbTl.value   : null,
+        genres:     fbGn.status   === 'fulfilled' ? fbGn.value   : null,
+        topAlbums:  fbAlb.status  === 'fulfilled' ? fbAlb.value?.albums  || [] : [],
+        topTracks:  fbTr.status   === 'fulfilled' ? fbTr.value?.tracks   || [] : [],
+      };
+    } catch {
+      // Plex stats als laatste optie
+      try { fallback = { _plex: await apiFetch(`/api/plex/stats?period=${period}`) }; } catch {}
+    }
   }
 
   const statsView = content.querySelector('.stats-view');
   if (!statsView) return;
 
-  const overviewData = overview || (fallback ? {
-    totalPlays:    fallback.totalPlays || 0,
-    listeningHours: Math.round(((fallback.totalPlays || 0) * 3.5) / 60),
-    uniqueArtists: 0, plexLibrarySize: 0, plexAlbums: 0, plexArtists: 0,
-  } : null);
+  const plex = fallback?._plex;
+  const overviewData = overview
+    || fallback?.overview
+    || (plex ? {
+        totalPlays:    plex.totalPlays || 0,
+        listeningHours: Math.round(((plex.totalPlays || 0) * 3.5) / 60),
+        uniqueArtists: 0, plexLibrarySize: 0, plexAlbums: 0, plexArtists: 0,
+      } : null);
 
-  const artistsData = topArtists?.artists || fallback?.topArtists || [];
-  const albumsData  = topAlbums?.albums  || [];
-  const tracksData  = topTracks?.tracks  || [];
-  const timelineData = timeline || (fallback?.dailyPlays ? {
-    labels: [...fallback.dailyPlays].sort((a,b)=>a.date.localeCompare(b.date)).map(d => d.date.slice(5)),
-    values: [...fallback.dailyPlays].sort((a,b)=>a.date.localeCompare(b.date)).map(d => d.count),
-    totalPlays: fallback.totalPlays,
-  } : null);
-  const genreData = genres || (fallback?.genres ? {
-    labels: (fallback.genres || []).map(g => g.name),
-    values: (fallback.genres || []).map(g => g.count || 1),
-  } : null);
+  const artistsData  = topArtists?.artists || fallback?.topArtists || [];
+  const albumsData   = topAlbums?.albums   || fallback?.topAlbums  || [];
+  const tracksData   = topTracks?.tracks   || fallback?.topTracks  || [];
+  const timelineData = timeline
+    || fallback?.timeline
+    || (plex?.dailyPlays ? {
+        labels: [...plex.dailyPlays].sort((a,b)=>a.date.localeCompare(b.date)).map(d => d.date.slice(5)),
+        values: [...plex.dailyPlays].sort((a,b)=>a.date.localeCompare(b.date)).map(d => d.count),
+        totalPlays: plex.totalPlays,
+      } : null);
+  const genreData = genres
+    || fallback?.genres
+    || (plex?.genres ? {
+        labels: (plex.genres || []).map(g => g.name),
+        values: (plex.genres || []).map(g => g.count || 1),
+      } : null);
 
   statsView.innerHTML = `
     <!-- Header -->
