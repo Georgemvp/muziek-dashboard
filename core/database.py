@@ -135,6 +135,28 @@ def set_cache(key: str, data: Any) -> None:
 #     UNIQUE(entity_type, entity_name, source)
 #   )
 
+def get_enrichment_data_by_source(
+    entity_type: str, entity_name: str, source: str
+) -> Optional[Any]:
+    """
+    Haal enrichment-data op voor één specifieke bron.
+
+    Returns de gedeserialiseerde data, of None als niet gevonden.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT data_json FROM enrichment_data "
+            "WHERE entity_type = ? AND entity_name = ? AND source = ?",
+            (entity_type, entity_name, source),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            return json.loads(row["data_json"])
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+
 def get_enrichment_data(entity_type: str, entity_name: str) -> dict[str, Any]:
     """
     Haal alle enrichment-data op voor een entiteit, gegroepeerd per bron.
@@ -366,6 +388,36 @@ def get_enrichment_queue_stats() -> dict[str, dict[str, int]]:
 
 # ── Genre whitelist ────────────────────────────────────────────────────────────
 
+def set_genre_whitelist(genres: list[dict]) -> None:
+    """
+    Bulk-update de genre whitelist.
+
+    Elk item in `genres` is een dict met 'genre' (str) en optioneel 'enabled' (bool, default True).
+    Identiek aan setGenreWhitelist() in db.js.
+    """
+    with get_db() as conn:
+        for item in genres:
+            conn.execute(
+                "INSERT OR REPLACE INTO genre_whitelist (genre, enabled) VALUES (?, ?)",
+                (item["genre"], 1 if item.get("enabled", True) else 0),
+            )
+        conn.commit()
+
+
+def set_genre_enabled(genre: str, enabled: bool) -> None:
+    """
+    Zet één genre aan of uit in de whitelist.
+
+    Identiek aan setGenreEnabled() in db.js.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO genre_whitelist (genre, enabled) VALUES (?, ?)",
+            (genre, 1 if enabled else 0),
+        )
+        conn.commit()
+
+
 def get_genre_whitelist() -> list[dict]:
     """
     Haal alle genres op uit de whitelist.
@@ -381,6 +433,21 @@ def get_genre_whitelist() -> list[dict]:
 
 
 # ── Settings ───────────────────────────────────────────────────────────────────
+
+def set_setting(category: str, key: str, value: Any) -> None:
+    """
+    Schrijf één instelling naar de settings tabel.
+
+    Identiek aan setSetting() in db.js.
+    """
+    value_str = json.dumps(value, ensure_ascii=False)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+            (category, key, value_str),
+        )
+        conn.commit()
+
 
 def get_setting(category: str, key: str) -> Optional[Any]:
     """

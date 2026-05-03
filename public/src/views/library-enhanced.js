@@ -915,7 +915,7 @@ function _closePanel() {
 
 async function _enrichArtist(name) {
   try {
-    await apiFetch(`/api/enrichment/queue/artist/${encodeURIComponent(name)}`, { method: 'POST' });
+    await apiFetch(`/api/core/enrichment/queue/artist/${encodeURIComponent(name)}`, { method: 'POST' });
     _showToast(`${name} toegevoegd aan enrichment-queue ✓`);
   } catch (err) {
     _showToast(`Fout: ${err.message}`, 'error');

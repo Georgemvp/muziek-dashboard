@@ -73,6 +73,20 @@ class TestRoutesMounted:
         ("GET",  "/api/core/playlists"),
         ("GET",  "/api/core/playlists/discovery"),
         ("POST", "/api/core/playlists/discovery/refresh"),
+        # Enrichment routes
+        ("GET",  "/api/core/enrichment/status"),
+        ("POST", "/api/core/enrichment/pause/all"),
+        ("POST", "/api/core/enrichment/resume/all"),
+        ("POST", "/api/core/enrichment/queue/artist/test-artist"),
+        ("POST", "/api/core/enrichment/queue/all"),
+        ("GET",  "/api/core/enrichment/data/artist/test-artist"),
+        ("GET",  "/api/core/enrichment/data/artist/test-artist/primary"),
+        ("GET",  "/api/core/enrichment/data/artist/test-artist/spotify"),
+        ("GET",  "/api/core/enrichment/genres"),
+        ("PUT",  "/api/core/enrichment/genres"),
+        ("PATCH", "/api/core/enrichment/genres/rock"),
+        ("GET",  "/api/core/enrichment/settings"),
+        ("PUT",  "/api/core/enrichment/settings"),
     ]
 
     @pytest.mark.parametrize("method,path", EXPECTED_ROUTES)

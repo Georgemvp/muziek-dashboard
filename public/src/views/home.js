@@ -1731,7 +1731,7 @@ export async function loadHome() {
     btn.disabled = true;
     btn.textContent = 'Bezig…';
     try {
-      const r = await fetch('/api/enrichment/queue/all', { method: 'POST' });
+      const r = await fetch('/api/core/enrichment/queue/all', { method: 'POST' });
       const d = await r.json();
       btn.textContent = `${d.queued || 0} items toegevoegd`;
       setTimeout(() => loadEnrichmentWidget().catch(() => {}), 1000);
@@ -2090,7 +2090,7 @@ async function loadEnrichmentWidget() {
   if (!workersEl) return;
 
   try {
-    const status = await apiFetch('/api/enrichment/status');
+    const status = await apiFetch('/api/core/enrichment/status');
     workersEl.innerHTML = renderEnrichmentWorkers(status);
 
     // Event listeners koppelen
@@ -2099,7 +2099,7 @@ async function loadEnrichmentWidget() {
         const { action, source } = btn.dataset;
         btn.disabled = true;
         try {
-          await fetch(`/api/enrichment/${action}/${source}`, { method: 'POST' });
+          await fetch(`/api/core/enrichment/${action}/${source}`, { method: 'POST' });
           await loadEnrichmentWidget(); // Herlaad widget
         } catch {
           btn.disabled = false;
