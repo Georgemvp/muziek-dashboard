@@ -67,7 +67,7 @@ def _load_playcounts() -> dict[str, int]:
         elif isinstance(cached, list):
             artists = cached
 
-        for i, a in enumerate(artists):
+        for _i, a in enumerate(artists):
             name      = a.get("name", "") if isinstance(a, dict) else str(a)
             playcount = int(a.get("playcount", 0) or 0) if isinstance(a, dict) else 0
             if not name:

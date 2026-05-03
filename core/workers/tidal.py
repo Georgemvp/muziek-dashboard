@@ -4,11 +4,12 @@ tidal.py — Tidal enrichment worker via Tidarr API proxy.
 Geen directe Tidal API-calls — gaat via de lokale Tidarr instantie.
 Rate limit: conservatief 1 call per 3 sec (20/min max).
 """
+from __future__ import annotations
 
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -22,8 +23,8 @@ class TidalWorker(BaseWorker):
     source = "tidal"
 
     def __init__(self, database, logger: logging.Logger,
-                 tidarr_url: Optional[str] = None,
-                 tidarr_api_key: Optional[str] = None):
+                 tidarr_url: str | None = None,
+                 tidarr_api_key: str | None = None):
         super().__init__(database, logger)
         self._url       = tidarr_url or os.environ.get("TIDARR_URL", "http://localhost:8484")
         self._api_key   = tidarr_api_key or os.environ.get("TIDARR_API_KEY")
@@ -43,7 +44,7 @@ class TidalWorker(BaseWorker):
             time.sleep(wait)
         self._last_call = time.time()
 
-    def _get(self, path: str) -> Optional[dict]:
+    def _get(self, path: str) -> dict | None:
         self._rate_limit()
         resp = self._session.get(f"{self._url}{path}", timeout=REQUEST_TIMEOUT)
         if resp.status_code == 404:
@@ -63,7 +64,7 @@ class TidalWorker(BaseWorker):
             self.log.warning(f"Tidal/Tidarr worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         from urllib.parse import quote
         try:
             search_type = (
@@ -75,7 +76,7 @@ class TidalWorker(BaseWorker):
             if not data or not data.get("items"):
                 return None
 
-            norm  = lambda s: (s or "").lower().strip()
+            def norm(s): return (s or "").lower().strip()
             items = data["items"]
             exact = next(
                 (i for i in items if norm(i.get("name") or i.get("title") or i.get("artistName", "")) == norm(name)),

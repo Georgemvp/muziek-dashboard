@@ -4,10 +4,11 @@ genius.py — Genius enrichment worker.
 Vereist GENIUS_API_KEY (gratis via genius.com/api-clients).
 Rate limit: conservatief 1 call per 2 sec.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -21,7 +22,7 @@ REQUEST_TIMEOUT = 12
 class GeniusWorker(BaseWorker):
     source = "genius"
 
-    def __init__(self, database, logger: logging.Logger, api_key: Optional[str] = None):
+    def __init__(self, database, logger: logging.Logger, api_key: str | None = None):
         super().__init__(database, logger)
         self._api_key   = api_key or ""
         self._last_call = 0.0
@@ -74,18 +75,18 @@ class GeniusWorker(BaseWorker):
             self.log.warning(f"Genius worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         if entity_type == "artist":
             return self._search_artist(name)
         return self._search_track(name)
 
-    def _search_artist(self, name: str) -> Optional[dict]:
+    def _search_artist(self, name: str) -> dict | None:
         resp = self._get("/search", {"q": name, "per_page": "5"})
         hits = [h for h in (resp.get("hits") or []) if h.get("type") == "song"]
         if not hits:
             return None
 
-        norm  = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         match = next(
             (h for h in hits if norm((h.get("result") or {}).get("primary_artist", {}).get("name", "")) == norm(name)),
             None,
@@ -125,13 +126,13 @@ class GeniusWorker(BaseWorker):
                 "fetchedAt": int(time.time() * 1000),
             }
 
-    def _search_track(self, name: str) -> Optional[dict]:
+    def _search_track(self, name: str) -> dict | None:
         resp = self._get("/search", {"q": name, "per_page": "5"})
         hits = [h for h in (resp.get("hits") or []) if h.get("type") == "song"]
         if not hits:
             return None
 
-        norm  = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         exact = next(
             (h for h in hits if norm((h.get("result") or {}).get("title", "")) == norm(name)),
             None,

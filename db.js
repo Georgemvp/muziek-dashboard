@@ -15,6 +15,7 @@ try {
   const dbPath = path.join(dataDir, 'cache.db');
   db = new Database(dbPath);
   const walResult = db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
   logger.info({ dbPath, walMode: walResult }, 'SQLite database connected');
 } catch (err) {
   logger.fatal({ err }, 'Failed to initialize database');

@@ -21,8 +21,6 @@ const {
 } = require('./plex');
 const { getCache, setCache, getSetting, getEnrichmentDataBySource } = require('../db');
 const { getDeezerArtist, getDeezerArtistTopTracks, getDeezerRelatedArtists } = require('./deezer');
-const { getReleases }  = require('./releases');
-const { getDiscover }  = require('./discover');
 const { getGenreMap }  = require('./genres');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1356,8 +1354,8 @@ async function _buildDiscoveryWeekly() {
 
 async function _buildReleaseRadar() {
   logger.info('Playlists: Release Radar bouwen...');
-  const data = getReleases();
-  if (data.status !== 'ok') return [];
+  const data = null;
+  if (!data || data.status !== 'ok') return [];
 
   const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
   const recent = (data.releases || []).filter(r => {
@@ -1471,8 +1469,7 @@ async function _buildGenreMixes() {
 
 async function _buildDeepCuts() {
   logger.info('Playlists: Deep Cuts bouwen...');
-  const discover = getDiscover();
-  const deepCutsArtists = discover?.deepCuts || [];
+  const deepCutsArtists = [];
   if (!deepCutsArtists.length) return [];
 
   const tracks = [];

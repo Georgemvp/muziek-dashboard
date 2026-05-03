@@ -4,10 +4,10 @@ musicbrainz.py — MusicBrainz enrichment worker.
 Gebruikt de musicbrainzngs bibliotheek (ingebouwde rate limit: 1 req/sec).
 Geen API key nodig. User-Agent verplicht.
 """
+from __future__ import annotations
 
-import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import musicbrainzngs
 
@@ -44,7 +44,7 @@ class MusicBrainzWorker(BaseWorker):
 
     # ── Artiest ───────────────────────────────────────────────────────────────
 
-    def _process_artist(self, name: str) -> Optional[dict]:
+    def _process_artist(self, name: str) -> dict | None:
         result = musicbrainzngs.search_artists(artist=name, limit=5)
         artists = result.get("artist-list", [])
         if not artists:
@@ -78,7 +78,7 @@ class MusicBrainzWorker(BaseWorker):
 
     # ── Album (release-group) ─────────────────────────────────────────────────
 
-    def _process_album(self, name: str) -> Optional[dict]:
+    def _process_album(self, name: str) -> dict | None:
         result = musicbrainzngs.search_release_groups(releasegroup=name, limit=5)
         groups = result.get("release-group-list", [])
         if not groups:
@@ -111,7 +111,7 @@ class MusicBrainzWorker(BaseWorker):
 
     # ── Track (recording) ─────────────────────────────────────────────────────
 
-    def _process_track(self, name: str) -> Optional[dict]:
+    def _process_track(self, name: str) -> dict | None:
         result = musicbrainzngs.search_recordings(recording=name, limit=5)
         recordings = result.get("recording-list", [])
         if not recordings:

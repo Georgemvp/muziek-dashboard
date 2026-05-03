@@ -5,13 +5,13 @@ Elke worker draait in een eigen daemon-thread (threading, geen multiprocessing).
 Polls de enrichment_queue tabel elke 10 seconden per source.
 Max 3 pogingen per item (zelfde als Node.js implementatie).
 """
+from __future__ import annotations
 
 import logging
 import os
 import random
 import threading
 import time
-from typing import Optional
 
 import core.database as db
 
@@ -37,7 +37,7 @@ class EnrichmentManager:
         self._paused_all = False
         self._stop_event = threading.Event()
         self._genre_filter_enabled = False
-        self._genre_set: Optional[set] = None  # None = niet geladen
+        self._genre_set: set | None = None  # None = niet geladen
         self._genre_lock = threading.Lock()
 
     # ── Worker registratie ─────────────────────────────────────────────────────
@@ -67,16 +67,16 @@ class EnrichmentManager:
 
     def _init_workers(self) -> None:
         """Importeer en instantieer alle workers met hun dependencies."""
+        from core.workers.audiodb import AudioDBWorker
+        from core.workers.deezer import DeezerWorker
+        from core.workers.discogs import DiscogsWorker
+        from core.workers.genius import GeniusWorker
+        from core.workers.itunes import ITunesWorker
+        from core.workers.lastfm import LastfmWorker
         from core.workers.musicbrainz import MusicBrainzWorker
-        from core.workers.lastfm      import LastfmWorker
-        from core.workers.spotify     import SpotifyWorker
-        from core.workers.deezer      import DeezerWorker
-        from core.workers.discogs     import DiscogsWorker
-        from core.workers.itunes      import ITunesWorker
-        from core.workers.audiodb     import AudioDBWorker
-        from core.workers.genius      import GeniusWorker
-        from core.workers.tidal       import TidalWorker
-        from core.workers.qobuz       import QobuzWorker
+        from core.workers.qobuz import QobuzWorker
+        from core.workers.spotify import SpotifyWorker
+        from core.workers.tidal import TidalWorker
 
         log = logging.getLogger("enrichment")
 
@@ -185,7 +185,7 @@ class EnrichmentManager:
                 self._genre_set = {r["genre"].lower() for r in rows if r["enabled"]}
 
         genre_set = self._genre_set
-        is_valid  = lambda g: (g or "").lower().strip() in genre_set
+        def is_valid(g): return (g or "").lower().strip() in genre_set
 
         filtered = dict(data)
         for field in ("genres", "genre", "style"):
@@ -263,15 +263,14 @@ class EnrichmentManager:
     def resume_all(self) -> None:
         self._paused_all = False
 
-    def queue_artist(self, name: str, entity_id: Optional[str] = None) -> int:
+    def queue_artist(self, name: str, entity_id: str | None = None) -> int:
         """Voeg een artiest toe aan de queue voor alle ingeschakelde bronnen."""
         if not name:
             return 0
         added = 0
         for source, entry in self._workers.items():
-            if entry["enabled"]:
-                if db.enqueue_enrichment("artist", name, source, entity_id):
-                    added += 1
+            if entry["enabled"] and db.enqueue_enrichment("artist", name, source, entity_id):
+                added += 1
         return added
 
     def queue_all(self, plex_artist_names: list[str]) -> dict:

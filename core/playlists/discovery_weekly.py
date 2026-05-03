@@ -12,10 +12,8 @@ Logica (zero externe API calls):
   5. Shuffle en retourneer max 50 items.
 """
 
-import json
 import logging
 import random
-from typing import Any
 
 import core.database as db
 import core.lastfm_client as lastfm

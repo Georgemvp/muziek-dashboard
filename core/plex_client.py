@@ -11,7 +11,6 @@ import re
 import threading
 import time
 import unicodedata
-from typing import Optional
 
 from core import config
 
@@ -19,7 +18,6 @@ log = logging.getLogger(__name__)
 
 try:
     from plexapi.server import PlexServer
-    from plexapi.exceptions import Unauthorized, NotFound
     PLEXAPI_AVAILABLE = True
 except ImportError:
     PLEXAPI_AVAILABLE = False

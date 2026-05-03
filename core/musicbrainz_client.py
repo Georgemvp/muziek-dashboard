@@ -5,11 +5,10 @@ Gebruikt musicbrainzngs (rate-limited 1 req/sec) voor artiest-MBID lookups
 en album-ophalen, en de MBZ HTTP Search API voor release-group queries.
 MBID-resultaten worden permanent gecached in SQLite.
 """
+from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta
-from typing import Optional
 
 import musicbrainzngs
 import requests as _requests
@@ -33,7 +32,7 @@ SKIP_SECONDARY = frozenset(
 
 # ── MBID lookup ────────────────────────────────────────────────────────────────
 
-def get_artist_mbid(name: str) -> Optional[str]:
+def get_artist_mbid(name: str) -> str | None:
     """
     Geeft de MusicBrainz artiest-MBID terug voor een naam.
     Gecached permanent in SQLite (key: mbid:<lowercase naam>).

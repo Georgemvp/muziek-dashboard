@@ -61,6 +61,12 @@ jobs:
           pip install -r core/requirements.txt
           pip install pytest
 
+      - name: Ruff linter installeren
+        run: pip install ruff
+
+      - name: Python Core linting (ruff)
+        run: ruff check core/
+
       - name: Python Core smoke tests draaien
         run: python -m pytest core/tests/ -v
         env:

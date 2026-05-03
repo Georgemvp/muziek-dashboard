@@ -18,10 +18,10 @@ Track-formaat (elke generator geeft dit terug):
     "cover_url": str | None,
   }
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
 
 import core.database as db
 
@@ -53,9 +53,9 @@ class PlaylistEngine:
     def generate(
         self,
         playlist_type: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         force: bool = False,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Genereer een playlist.
 
@@ -212,7 +212,7 @@ class PlaylistEngine:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _make_name(playlist_type: str, params: Optional[dict]) -> str:
+    def _make_name(playlist_type: str, params: dict | None) -> str:
         if playlist_type == "decade" and params:
             return f"{params['decade']}s"
         if playlist_type == "genre" and params:
@@ -258,7 +258,7 @@ class PlaylistEngine:
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
-_engine: Optional[PlaylistEngine] = None
+_engine: PlaylistEngine | None = None
 
 
 def get_engine() -> PlaylistEngine:

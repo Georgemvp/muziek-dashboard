@@ -4,10 +4,10 @@ lastfm_client.py — Last.fm API client voor de discovery module.
 Dunne wrapper om pylast voor de calls die discovery nodig heeft:
 top artists, loved tracks, recent tracks.
 """
+from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 import pylast
 
@@ -15,7 +15,7 @@ from core import config
 
 log = logging.getLogger(__name__)
 
-_network: Optional[pylast.LastFMNetwork] = None
+_network: pylast.LastFMNetwork | None = None
 
 
 def _get_network() -> pylast.LastFMNetwork:

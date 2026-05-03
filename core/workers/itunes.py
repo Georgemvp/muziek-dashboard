@@ -4,10 +4,11 @@ itunes.py — iTunes/Apple Music enrichment worker.
 Gebruikt de gratis iTunes Search API (geen auth nodig).
 Rate limit: max ~20 calls/min → 1 call per 4 sec.
 """
+from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -43,7 +44,7 @@ class ITunesWorker(BaseWorker):
             self.log.warning(f"iTunes worker mislukt voor '{item.get('entity_name')}': {exc}")
             return {"ok": False, "error": str(exc)}
 
-    def _search(self, name: str, entity_type: str = "artist") -> Optional[dict]:
+    def _search(self, name: str, entity_type: str = "artist") -> dict | None:
         self._rate_limit()
 
         itunes_entity = (
@@ -64,7 +65,7 @@ class ITunesWorker(BaseWorker):
             return None
 
         # Exacte match op naam-veld
-        norm   = lambda s: (s or "").lower().strip()
+        def norm(s): return (s or "").lower().strip()
         fields = ["artistName", "collectionName", "trackName"]
         exact  = next(
             (r for r in results

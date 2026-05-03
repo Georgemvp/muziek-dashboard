@@ -12,16 +12,18 @@ Tabellen (zelfde schema als db.js):
   genre_whitelist    – toegestane genres voor filtering
   settings           – algemene instellingen (categorie + sleutel)
 """
+from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sqlite3
-import time
 import threading
+import time
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 
-from core.config import DB_PATH, CACHE_MAX_ROWS, CACHE_MAX_AGE_MS
+from core.config import DB_PATH
 
 # ── Thread-local verbindingen ──────────────────────────────────────────────────
 # SQLite-verbindingen zijn NIET thread-safe; elke thread krijgt zijn eigen
@@ -71,7 +73,7 @@ def list_tables() -> list[str]:
 # Schema (db.js):
 #   cache(key TEXT PK, data TEXT NOT NULL, updated_at INTEGER NOT NULL)
 
-def get_cache(key: str, max_age_ms: float = float("inf")) -> Optional[Any]:
+def get_cache(key: str, max_age_ms: float = float("inf")) -> Any | None:
     """
     Haal een gecachede waarde op.
 
@@ -137,7 +139,7 @@ def set_cache(key: str, data: Any) -> None:
 
 def get_enrichment_data_by_source(
     entity_type: str, entity_name: str, source: str
-) -> Optional[Any]:
+) -> Any | None:
     """
     Haal enrichment-data op voor één specifieke bron.
 
@@ -174,10 +176,8 @@ def get_enrichment_data(entity_type: str, entity_name: str) -> dict[str, Any]:
 
         result: dict[str, Any] = {}
         for row in rows:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 result[row["source"]] = json.loads(row["data_json"])
-            except (json.JSONDecodeError, TypeError):
-                pass
         return result
 
 
@@ -217,7 +217,7 @@ def save_enrichment_data(
 #     expires_at INTEGER NOT NULL
 #   )
 
-def get_discover_section(section: str) -> Optional[Any]:
+def get_discover_section(section: str) -> Any | None:
     """
     Haal een discover-sectie op.
 
@@ -281,7 +281,7 @@ def enqueue_enrichment(
     entity_type: str,
     entity_name: str,
     source: str,
-    entity_id: Optional[str] = None,
+    entity_id: str | None = None,
 ) -> bool:
     """
     Voeg een item toe aan de enrichment queue (INSERT OR IGNORE).
@@ -324,7 +324,7 @@ def get_pending_enrichment_items(source: str, limit: int = 10) -> list[dict]:
 def update_enrichment_item(
     item_id: int,
     status: str,
-    error_message: Optional[str] = None,
+    error_message: str | None = None,
 ) -> None:
     """
     Update status (en optioneel foutmelding + pogingen) van een queue-item.
@@ -449,7 +449,7 @@ def set_setting(category: str, key: str, value: Any) -> None:
         conn.commit()
 
 
-def get_setting(category: str, key: str) -> Optional[Any]:
+def get_setting(category: str, key: str) -> Any | None:
     """
     Lees één instelling uit de settings tabel.
 
@@ -500,7 +500,7 @@ def save_playlist(
     playlist_type: str,
     name: str,
     tracks: list,
-    params: Optional[dict] = None,
+    params: dict | None = None,
 ) -> None:
     """
     Sla een gegenereerde playlist op in de database.
@@ -532,8 +532,8 @@ def save_playlist(
 
 def get_playlist(
     playlist_type: str,
-    params: Optional[dict] = None,
-) -> Optional[dict]:
+    params: dict | None = None,
+) -> dict | None:
     """
     Haal een gecachede playlist op.
 
