@@ -7,6 +7,7 @@ on:
     branches: [ main, master ]
 
 jobs:
+  # ── Node.js integration tests ───────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
 
@@ -37,3 +38,34 @@ jobs:
           # Dummy-waarden zodat de startup-validatie in server.js slaagt
           LASTFM_API_KEY: ci-test-key
           LASTFM_USER: ci-test-user
+
+  # ── Python Core backend smoke tests ────────────────────────────────────────
+  test-python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Python 3.11 instellen
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: core/requirements.txt
+
+      - name: Core dependencies installeren
+        run: |
+          pip install -r core/requirements.txt
+          pip install pytest
+
+      - name: Python Core smoke tests draaien
+        run: python -m pytest core/tests/ -v
+        env:
+          DATA_DIR: /tmp/lastfm-core-ci
+          LASTFM_API_KEY: ci-test-key
+          LASTFM_USER: ci-test-user
+          PLEX_URL: http://localhost:32400
+          PLEX_TOKEN: ci-test-token

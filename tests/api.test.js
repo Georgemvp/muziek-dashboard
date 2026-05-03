@@ -98,9 +98,94 @@ describe('GET /api/topartists', () => {
 // Discover
 // ══════════════════════════════════════════════════════════════════════════
 
+// Alle /api/core/* endpoints worden geproxied naar de Python Core backend
+// (localhost:5001). In CI draait die backend niet, dus verwachten we 502/503.
+// Dit test-blok dekt ALLE core-endpoints zodat een nieuwe migratie naar
+// Core niet stilzwijgend coverage verliest.
+
 describe('GET /api/core/discover', () => {
   it('geeft 502 of 503 als de Python Core backend niet draait (CI-omgeving)', async () => {
     const res = await request(app).get('/api/core/discover');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/health', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/health');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/discover/status', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/discover/status');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/discover/refresh', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/discover/refresh');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/gaps', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/gaps');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/releases', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/releases');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/playlists', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/playlists');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('GET /api/core/playlists/:type', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/playlists/discovery');
+    assert.ok(
+      res.status === 502 || res.status === 503,
+      `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`
+    );
+  });
+});
+
+describe('POST /api/core/playlists/:type/refresh', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).post('/api/core/playlists/discovery/refresh');
     assert.ok(
       res.status === 502 || res.status === 503,
       `verwacht 502 of 503 (Core niet actief in CI), kreeg: ${res.status}`

@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ Verplichte regels — ALTIJD naleven
+
+### Test-sync bij wijzigingen
+**Bij ELKE wijziging aan `db.js`, routes, of API-endpoints MOET je ook de tests updaten:**
+- `tests/setup.js` — voeg stub-functies toe voor elke nieuwe `db.js` export
+- `tests/api.test.js` — voeg een test toe voor elk nieuw/gewijzigd endpoint
+- Voor nieuwe `/api/core/*` endpoints: voeg ook een `describe`-blok toe in `api.test.js` (502/503 check als CI proxy-test pattern) én een `test_route_is_not_404` entry in `core/tests/test_app.py`
+
+Vergeet je dit, breekt CI bij de volgende commit. Dit is de meest voorkomende oorzaak van CI-failures in dit project.
+
+### .claude/ nooit committen
+`.claude/worktrees/` en de hele `.claude/` map bevatten lokale Claude Code state (worktrees, sessie-kopieën van de repo). Deze mogen **NOOIT** gecommit worden — ze bevatten complete repo-kopieën en blazen de git history op. Controleer dat `.claude/` in `.gitignore` staat vóór elke commit.
+
+
 ## Commands
 
 ```bash
