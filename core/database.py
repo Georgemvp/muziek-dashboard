@@ -14,6 +14,7 @@ Tabellen (zelfde schema als db.js):
 """
 
 import json
+import os
 import sqlite3
 import time
 import threading
@@ -31,6 +32,7 @@ _local = threading.local()
 def _get_connection() -> sqlite3.Connection:
     """Geeft de thread-lokale SQLite-verbinding terug (maakt hem aan indien nodig)."""
     if not hasattr(_local, "conn") or _local.conn is None:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
 

@@ -97,8 +97,7 @@ class PlaylistEngine:
 
         builder = generators.get(playlist_type)
         if builder is None:
-            log.warning("Onbekend playlist type: %s", playlist_type)
-            return None
+            raise ValueError(f"Onbekend playlist type: {playlist_type}")
 
         log.info("Playlist '%s' (params=%s) bouwen...", playlist_type, params)
         start = time.time()

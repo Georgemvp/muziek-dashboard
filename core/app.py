@@ -222,10 +222,12 @@ def create_app() -> Flask:
             if playlist is None:
                 return jsonify({
                     "status": "error",
-                    "error":  f"Onbekend playlist type of generatie mislukt: {playlist_type}",
-                }), 404
+                    "error":  f"Generatie mislukt: {playlist_type}",
+                }), 500
 
             return jsonify({"status": "ok", "playlist": playlist})
+        except ValueError as exc:
+            return jsonify({"status": "error", "error": str(exc)}), 400
         except Exception as exc:
             app.logger.error("GET /api/core/playlists/%s mislukt: %s", playlist_type, exc)
             return jsonify({"status": "error", "error": str(exc)}), 500
@@ -255,10 +257,12 @@ def create_app() -> Flask:
             if playlist is None:
                 return jsonify({
                     "status": "error",
-                    "error":  f"Onbekend playlist type: {playlist_type}",
-                }), 404
+                    "error":  f"Generatie mislukt: {playlist_type}",
+                }), 500
 
             return jsonify({"status": "ok", "playlist": playlist})
+        except ValueError as exc:
+            return jsonify({"status": "error", "error": str(exc)}), 400
         except Exception as exc:
             app.logger.error(
                 "POST /api/core/playlists/%s/refresh mislukt: %s", playlist_type, exc,

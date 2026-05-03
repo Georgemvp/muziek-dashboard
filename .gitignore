@@ -30,3 +30,9 @@ mediasage/.git/
 .commit-message
 COMMIT_MESSAGE.txt
 .claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
