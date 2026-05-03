@@ -527,6 +527,199 @@ def create_app() -> Flask:
             app.logger.error("PUT /api/core/enrichment/settings mislukt: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    # ── Genre whitelist endpoints ─────────────────────────────────────────────
+    # Beheer van de genre-whitelist die junk-genres filtert uit enrichment data.
+    # Gescheiden van /api/core/enrichment/genres zodat deze whitelist ook door
+    # andere modules (playlists, stats) kan worden gebruikt.
+
+    @app.get("/api/core/genres/whitelist")
+    def genres_whitelist_get():
+        """
+        Geeft de huidige genre-whitelist terug.
+
+        Response: { genres: [{ genre: str, enabled: bool }], total: int }
+        """
+        try:
+            import core.database as db
+            from core.genre_filter import seed_default_genres
+            seed_default_genres()
+            genres = db.get_genre_whitelist()
+            return jsonify({"genres": genres, "total": len(genres)}), 200, {
+                "Cache-Control": "private, max-age=60"
+            }
+        except Exception as exc:
+            app.logger.error("GET /api/core/genres/whitelist mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/genres/whitelist")
+    def genres_whitelist_post():
+        """
+        Voeg een genre toe aan de whitelist.
+
+        Body: { "genre": "Rock" }
+        Response: { ok: true, genre: str }
+        """
+        try:
+            import core.database as db
+            body  = request.get_json(silent=True) or {}
+            genre = (body.get("genre") or "").strip()
+            if not genre:
+                return jsonify({"error": "genre vereist"}), 400
+            db.set_genre_enabled(genre, True)
+            _get_enrichment_manager().refresh_genre_cache()
+            return jsonify({"ok": True, "genre": genre})
+        except Exception as exc:
+            app.logger.error("POST /api/core/genres/whitelist mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.delete("/api/core/genres/whitelist")
+    def genres_whitelist_delete():
+        """
+        Verwijder een genre uit de whitelist (zet enabled=False).
+
+        Body: { "genre": "Rock" }
+        Response: { ok: true, genre: str }
+        """
+        try:
+            import core.database as db
+            body  = request.get_json(silent=True) or {}
+            genre = (body.get("genre") or "").strip()
+            if not genre:
+                return jsonify({"error": "genre vereist"}), 400
+            db.set_genre_enabled(genre, False)
+            _get_enrichment_manager().refresh_genre_cache()
+            return jsonify({"ok": True, "genre": genre})
+        except Exception as exc:
+            app.logger.error("DELETE /api/core/genres/whitelist mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.post("/api/core/genres/whitelist/reset")
+    def genres_whitelist_reset():
+        """
+        Reset de genre-whitelist naar de standaard (~270 genres).
+
+        Response: { ok: true, total: int }
+        """
+        try:
+            import core.database as db
+            from core.genre_filter import DEFAULT_GENRES
+            db.set_genre_whitelist([{"genre": g, "enabled": True} for g in DEFAULT_GENRES])
+            _get_enrichment_manager().refresh_genre_cache()
+            return jsonify({"ok": True, "total": len(DEFAULT_GENRES)})
+        except Exception as exc:
+            app.logger.error("POST /api/core/genres/whitelist/reset mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Stats endpoints ────────────────────────────────────────────────────────
+    # Luisterstatistieken op basis van de Last.fm API, gecached in SQLite.
+    # Periode-parameter: 7day | 1month | 3month | 12month | overall
+
+    @app.get("/api/core/stats")
+    def stats_overview():
+        """
+        Overzicht van luisterstatistieken.
+
+        Query: ?range=7day|1month|3month|12month|overall (default: 1month)
+        Response: { totalPlays, listeningHours, uniqueArtists, plexArtists,
+                    plexLibrarySize, plexAlbums }
+        """
+        try:
+            from core.stats.listening_stats import get_overview
+            period = request.args.get("range") or "1month"
+            result = get_overview(period)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/stats/top/artists")
+    def stats_top_artists():
+        """
+        Top artiesten voor de opgegeven periode.
+
+        Query: ?range=... &limit=20
+        Response: { artists: [{ name, playcount, image, thumb, url }] }
+        """
+        try:
+            from core.stats.listening_stats import get_top_artists
+            period = request.args.get("range") or "1month"
+            limit  = min(int(request.args.get("limit") or 20), 100)
+            result = get_top_artists(period, limit)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=3600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats/top/artists mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/stats/top/albums")
+    def stats_top_albums():
+        """
+        Top albums voor de opgegeven periode.
+
+        Query: ?range=... &limit=10
+        Response: { albums: [{ name, artist, playcount, image }] }
+        """
+        try:
+            from core.stats.listening_stats import get_top_albums
+            period = request.args.get("range") or "1month"
+            limit  = min(int(request.args.get("limit") or 10), 50)
+            result = get_top_albums(period, limit)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=3600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats/top/albums mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/stats/top/tracks")
+    def stats_top_tracks():
+        """
+        Top tracks voor de opgegeven periode.
+
+        Query: ?range=... &limit=10
+        Response: { tracks: [{ name, artist, playcount }] }
+        """
+        try:
+            from core.stats.listening_stats import get_top_tracks
+            period = request.args.get("range") or "1month"
+            limit  = min(int(request.args.get("limit") or 10), 50)
+            result = get_top_tracks(period, limit)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=3600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats/top/tracks mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/stats/genres")
+    def stats_genres():
+        """
+        Genre-breakdown op basis van enrichment-data van top-artiesten.
+
+        Query: ?range=...
+        Response: { labels: [...], values: [...] }
+        """
+        try:
+            from core.stats.listening_stats import get_genres
+            period = request.args.get("range") or "1month"
+            result = get_genres(period)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=3600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats/genres mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.get("/api/core/stats/timeline")
+    def stats_timeline():
+        """
+        Plays-per-tijdseenheid (dag/week/maand afhankelijk van periode).
+
+        Query: ?range=...
+        Response: { labels: [...], values: [...], totalPlays: int }
+        """
+        try:
+            from core.stats.listening_stats import get_timeline
+            period = request.args.get("range") or "1month"
+            result = get_timeline(period)
+            return jsonify(result), 200, {"Cache-Control": "private, max-age=3600"}
+        except Exception as exc:
+            app.logger.error("GET /api/core/stats/timeline mislukt: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     # ── Background thread: Plex sync + discovery init ─────────────────────────
     # Wacht 15 seconden zodat de database-verbinding en enrichment workers
     # eerst kunnen opstarten. Identiek aan initDiscover/initGaps/initReleases.
@@ -534,6 +727,11 @@ def create_app() -> Flask:
     def _startup_background():
         time.sleep(15)
         app.logger.info("Core: achtergrond startup — Plex sync + discovery init + enrichment workers")
+        try:
+            from core.genre_filter import seed_default_genres
+            seed_default_genres()
+        except Exception as exc:
+            app.logger.warning("Core: genre whitelist seeding mislukt: %s", exc)
         try:
             import core.plex_client as plex
             plex.sync()

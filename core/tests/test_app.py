@@ -87,6 +87,18 @@ class TestRoutesMounted:
         ("PATCH", "/api/core/enrichment/genres/rock"),
         ("GET",  "/api/core/enrichment/settings"),
         ("PUT",  "/api/core/enrichment/settings"),
+        # Genre whitelist routes
+        ("GET",    "/api/core/genres/whitelist"),
+        ("POST",   "/api/core/genres/whitelist"),
+        ("DELETE", "/api/core/genres/whitelist"),
+        ("POST",   "/api/core/genres/whitelist/reset"),
+        # Stats routes
+        ("GET", "/api/core/stats"),
+        ("GET", "/api/core/stats/top/artists"),
+        ("GET", "/api/core/stats/top/albums"),
+        ("GET", "/api/core/stats/top/tracks"),
+        ("GET", "/api/core/stats/genres"),
+        ("GET", "/api/core/stats/timeline"),
     ]
 
     @pytest.mark.parametrize("method,path", EXPECTED_ROUTES)
