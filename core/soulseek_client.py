@@ -15,6 +15,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
+from typing import Optional
 
 import requests
 
@@ -36,10 +37,10 @@ class SearchResult:
     username: str
     filename: str
     size: int
-    bitrate: int | None = None
-    sample_rate: int | None = None
-    bit_depth: int | None = None
-    length: int | None = None
+    bitrate: Optional[int] = None
+    sample_rate: Optional[int] = None
+    bit_depth: Optional[int] = None
+    length: Optional[int] = None
     upload_speed: int = 0
     queue_length: int = 0
     free_slot: bool = False

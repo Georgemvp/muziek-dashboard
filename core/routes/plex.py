@@ -44,7 +44,8 @@ def plex_thumb():
         ct = upstream.headers.get("content-type", "image/jpeg")
 
         def _gen():
-            yield from upstream.iter_content(8192)
+            for chunk in upstream.iter_content(8192):
+                yield chunk
 
         return Response(
             stream_with_context(_gen()),
@@ -788,7 +789,8 @@ def plex_stream_audio(rating_key: str):
                 resp_headers[h] = v
 
         def _gen():
-            yield from upstream.iter_content(8192)
+            for chunk in upstream.iter_content(8192):
+                yield chunk
 
         status = 206 if upstream.status_code == 206 else 200
         return Response(stream_with_context(_gen()), status=status, headers=resp_headers)

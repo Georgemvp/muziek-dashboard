@@ -13,3 +13,7 @@ spotipy==2.24.0              # Spotify worker
 lyricsgenius==3.0.1          # Genius worker
 # requests is al aanwezig — gebruikt door Deezer, iTunes, AudioDB, Tidal, Qobuz workers
 #   én door deezer_client.py en musicbrainz_client.py (HTTP search API)
+
+# ── Native download clients ────────────────────────────────────────────────────
+pycryptodome==3.21.0         # Blowfish + AES decryptie voor deezer_download_client.py
+yt-dlp>=2024.12.13           # YouTube audio downloader voor youtube_client.py

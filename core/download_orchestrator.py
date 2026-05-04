@@ -9,6 +9,8 @@ Bronnen:
   tidarr        — Tidarr (Tidal)
   soulseek      — Soulseek via slskd REST API
   hifi          — HiFi publieke API instances (lossless, geen account)
+  deezer        — Native Deezer client (ARL-token, Blowfish-decryptie)
+  youtube       — Native YouTube client (yt-dlp, MP3 320 kbps)
   orpheus_*     — OrpheusDL platforms (tidal, qobuz, deezer, spotify, ...)
 
 Priority volgorde is configureerbaar via:
@@ -24,10 +26,12 @@ import os
 import time
 
 import core.database as db
+import core.deezer_download_client as deezer_dl
 import core.hifi_client as hifi_client
 import core.orpheus_client as orpheus
 import core.soulseek_client as soulseek
 import core.tidarr_client as tidarr
+import core.youtube_client as youtube_dl
 from core.plex_service import _fuzzy_score
 
 log = logging.getLogger(__name__)
@@ -57,13 +61,20 @@ _QUALITY_MAP: dict[str, dict[str, str]] = {
                          "lossless": "lossless", "high": "high",    "low": "low"},
     "orpheus_youtube":  {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
                          "lossless": "lossless", "high": "high",    "low": "low"},
+    # Native clients
+    "deezer":           {"flac": "flac",     "mp3_320": "mp3_320",  "mp3_128": "mp3_128",
+                         "lossless": "flac", "high": "mp3_320",     "low": "mp3_128"},
+    "youtube":          {"flac": "mp3_320",  "mp3_320": "mp3_320",  "mp3_128": "mp3_128",
+                         "lossless": "mp3_320", "high": "mp3_320",  "low": "mp3_128"},
 }
 
 # Ingebouwde standaard volgorde — overschrijfbaar via DOWNLOAD_SOURCES env var of DB-instelling
+# deezer en youtube staan vóór de orpheus_* varianten (native = betrouwbaarder + sneller)
 DEFAULT_SOURCE_PRIORITY = [
     "tidarr",
     "soulseek",
     "hifi",
+    "deezer",
     "orpheus_qobuz",
     "orpheus_tidal",
     "orpheus_deezer",
@@ -72,6 +83,7 @@ DEFAULT_SOURCE_PRIORITY = [
     "orpheus_applemusic",
     "orpheus_beatport",
     "orpheus_beatsource",
+    "youtube",
     "orpheus_youtube",
 ]
 
@@ -87,6 +99,15 @@ _PLATFORM_LABELS = {
     "tidal": "Tidal", "qobuz": "Qobuz", "deezer": "Deezer",
     "spotify": "Spotify", "soundcloud": "SoundCloud", "applemusic": "Apple Music",
     "beatport": "Beatport", "beatsource": "Beatsource", "youtube": "YouTube",
+}
+
+# Labels voor native (niet-OrpheusDL) bronnen
+_NATIVE_SOURCE_LABELS = {
+    "tidarr":   "Tidal (Tidarr)",
+    "soulseek": "Soulseek (slskd)",
+    "hifi":     "HiFi",
+    "deezer":   "Deezer (native)",
+    "youtube":  "YouTube (yt-dlp)",
 }
 
 # In-memory fout-trackers (herstart = reset)
@@ -199,6 +220,95 @@ def _download_via_hifi(artist: str, album: str, track: str,
     }
 
 
+# ── Deezer native download ────────────────────────────────────────────────────
+
+def _download_via_deezer(artist: str, album: str, track: str,
+                          item_type: str, quality: str) -> dict:
+    """Download via de native Deezer Blowfish-client (ARL-token vereist)."""
+    client  = deezer_dl.get_client()
+    q       = _map_quality("deezer", quality)
+    outdir  = db.get_setting("download", "downloadPath") or "/data/downloads/deezer"
+    query   = f"{artist} {track}".strip() if item_type == "track" else f"{artist} {album}".strip()
+
+    if item_type == "album":
+        # Zoek album-ID via publieke API
+        import requests as _req
+        resp = _req.get(
+            "https://api.deezer.com/search/album",
+            params={"q": query, "limit": 5},
+            timeout=12,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("data", [])
+        if not results:
+            raise RuntimeError(f"Deezer: geen album gevonden voor '{query}'")
+        best   = results[0]
+        paths  = client.download_album(str(best["id"]), q, outdir)
+        return {
+            "source": "deezer",
+            "title":  best.get("title", album),
+            "artist": best.get("artist", {}).get("name", artist),
+            "url":    paths[0] if paths else "",
+            "files":  paths,
+        }
+    else:
+        # Zoek track
+        tracks = client.search(query, limit=5)
+        if not tracks:
+            raise RuntimeError(f"Deezer: geen track gevonden voor '{query}'")
+        # Kies beste match op score
+        from core.plex_service import _fuzzy_score
+        best = sorted(
+            tracks,
+            key=lambda t: -(
+                _fuzzy_score(artist, t.artist) + _fuzzy_score(track or album, t.title)
+            ) / 2,
+        )[0]
+        path = client.download_track(best.id, q, outdir)
+        return {
+            "source": "deezer",
+            "title":  best.title,
+            "artist": best.artist,
+            "url":    path,
+        }
+
+
+# ── YouTube native download ───────────────────────────────────────────────────
+
+def _download_via_youtube(artist: str, album: str, track: str,
+                           item_type: str, quality: str) -> dict:
+    """Download audio via yt-dlp (YouTube / YouTube Music)."""
+    client  = youtube_dl.get_client()
+    q       = _map_quality("youtube", quality)
+    outdir  = db.get_setting("download", "downloadPath") or "/data/downloads/youtube"
+    query   = f"{artist} {track}".strip() if item_type == "track" else f"{artist} {album}".strip()
+
+    # Zoek beste resultaat
+    results = client.search(f"{query} official audio", max_results=5)
+    if not results:
+        results = client.search(query, max_results=5)
+    if not results:
+        raise RuntimeError(f"YouTube: geen resultaten voor '{query}'")
+
+    from core.plex_service import _fuzzy_score
+    want = track if item_type == "track" else album
+    best = sorted(
+        results,
+        key=lambda v: -(
+            _fuzzy_score(artist, v.uploader) + _fuzzy_score(want, v.title)
+        ) / 2,
+    )[0]
+
+    path = client.download(best.url, outdir, q)
+    return {
+        "source": "youtube",
+        "title":  best.title,
+        "artist": best.uploader,
+        "url":    best.url,
+        "file":   path,
+    }
+
+
 # ── OrpheusDL download ────────────────────────────────────────────────────────
 
 def _download_via_orpheus(artist: str, album: str, track: str,
@@ -287,6 +397,10 @@ def download(artist: str, album: str = "", track: str = "",
                 result = _download_via_soulseek(artist, album, track, item_type, quality)
             elif src == "hifi":
                 result = _download_via_hifi(artist, album, track, item_type, quality)
+            elif src == "deezer":
+                result = _download_via_deezer(artist, album, track, item_type, quality)
+            elif src == "youtube":
+                result = _download_via_youtube(artist, album, track, item_type, quality)
             elif src.startswith("orpheus_"):
                 platform = src[len("orpheus_"):]
                 result   = _download_via_orpheus(artist, album, track, item_type, quality, platform)
@@ -367,6 +481,34 @@ def search_all(query: str, search_type: str = "album") -> dict:
                         "format":     t.format,
                         "trackId":    t.track_id,
                     })
+            elif src == "deezer":
+                client  = deezer_dl.get_client()
+                tracks  = client.search(q, limit=15)
+                for t in tracks:
+                    all_results.append({
+                        "source":     "deezer",
+                        "sourceName": "Deezer (native)",
+                        "title":      t.title,
+                        "artist":     t.artist,
+                        "album":      t.album,
+                        "duration":   t.duration,
+                        "trackId":    t.id,
+                        "isrc":       t.isrc,
+                    })
+            elif src == "youtube":
+                client  = youtube_dl.get_client()
+                videos  = client.search(q, max_results=10)
+                for v in videos:
+                    all_results.append({
+                        "source":     "youtube",
+                        "sourceName": "YouTube (yt-dlp)",
+                        "title":      v.title,
+                        "artist":     v.uploader,
+                        "duration":   v.duration,
+                        "url":        v.url,
+                        "viewCount":  v.view_count,
+                        "thumbnail":  v.thumbnail,
+                    })
             elif src.startswith("orpheus_"):
                 platform = src[len("orpheus_"):]
                 data = orpheus.search(q, platform, search_type)
@@ -399,20 +541,22 @@ def get_source_status() -> dict:
                 elif src == "hifi":
                     s = hifi_client.get_status()
                     available = s.get("connected")
+                elif src == "deezer":
+                    s = deezer_dl.get_client().get_status()
+                    available = s.get("connected")
+                elif src == "youtube":
+                    s = youtube_dl.get_client().get_status()
+                    available = s.get("connected")
                 elif src.startswith("orpheus_"):
                     s = orpheus.get_status()
                     available = s.get("connected")
             except Exception:
                 available = False
 
-        if src == "tidarr":
-            label = "Tidal (Tidarr)"
-        elif src == "soulseek":
-            label = "Soulseek (slskd)"
-        elif src == "hifi":
-            label = "HiFi"
-        else:
-            label = _platform_label(src[len("orpheus_"):])
+        label = _NATIVE_SOURCE_LABELS.get(
+            src,
+            _platform_label(src[len("orpheus_"):]) if src.startswith("orpheus_") else src,
+        )
 
         sources.append({
             "name":       src,

@@ -3,10 +3,11 @@ Unit tests voor core/hifi_client.py — HTTP responses worden gemockt met unitte
 """
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 
 def _make_response(json_data=None, status_code=200, content=b""):
@@ -30,9 +31,9 @@ class TestGetStatus(unittest.TestCase):
 
     def test_disconnected_all_instances(self):
         import core.hifi_client as hifi
-        with patch.object(hifi, "INSTANCES", ["http://hifi1.test", "http://hifi2.test"]), \
-             patch("requests.get", side_effect=ConnectionError("refused")):
-            result = hifi.get_status()
+        with patch.object(hifi, "INSTANCES", ["http://hifi1.test", "http://hifi2.test"]):
+            with patch("requests.get", side_effect=ConnectionError("refused")):
+                result = hifi.get_status()
         self.assertFalse(result["connected"])
 
     def test_no_instances_configured(self):
@@ -93,9 +94,9 @@ class TestSearch(unittest.TestCase):
 
     def test_search_returns_empty_on_all_failures(self):
         import core.hifi_client as hifi
-        with patch.object(hifi, "INSTANCES", ["http://hifi.test"]), \
-             patch("requests.get", side_effect=ConnectionError("refused")):
-            tracks = hifi.search("query")
+        with patch.object(hifi, "INSTANCES", ["http://hifi.test"]):
+            with patch("requests.get", side_effect=ConnectionError("refused")):
+                tracks = hifi.search("query")
         self.assertEqual(tracks, [])
 
     def test_search_handles_list_response(self):
@@ -120,15 +121,16 @@ class TestGetStreamUrl(unittest.TestCase):
 
     def test_falls_back_to_constructed_url(self):
         import core.hifi_client as hifi
-        with patch.object(hifi, "INSTANCES", ["http://hifi.test"]), \
-             patch("requests.get", side_effect=ConnectionError()):
-            url = hifi.get_stream_url("xyz", instance="http://hifi.test")
+        with patch.object(hifi, "INSTANCES", ["http://hifi.test"]):
+            with patch("requests.get", side_effect=ConnectionError()):
+                url = hifi.get_stream_url("xyz", instance="http://hifi.test")
         self.assertEqual(url, "http://hifi.test/api/stream/xyz")
 
     def test_no_instances_raises(self):
         import core.hifi_client as hifi
-        with patch.object(hifi, "INSTANCES", []), self.assertRaises(RuntimeError):
-            hifi.get_stream_url("abc")
+        with patch.object(hifi, "INSTANCES", []):
+            with self.assertRaises(RuntimeError):
+                hifi.get_stream_url("abc")
 
 
 class TestDownload(unittest.TestCase):
@@ -157,14 +159,15 @@ class TestDownload(unittest.TestCase):
         from core.hifi_client import Track
         track = Track(track_id="1", title="T", artist="A", instance="http://hifi.test")
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(hifi, "INSTANCES", ["http://hifi.test"]):
-            meta_resp  = _make_response({"stream_url": "http://hifi.test/stream/1"})
-            error_resp = _make_response(status_code=404)
-            error_resp.raise_for_status.side_effect = Exception("404")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(hifi, "INSTANCES", ["http://hifi.test"]):
+                meta_resp  = _make_response({"stream_url": "http://hifi.test/stream/1"})
+                error_resp = _make_response(status_code=404)
+                error_resp.raise_for_status.side_effect = Exception("404")
 
-            with patch("requests.get", side_effect=[meta_resp, error_resp]), \
-                 self.assertRaises(RuntimeError):
-                hifi.download(track, tmpdir)
+                with patch("requests.get", side_effect=[meta_resp, error_resp]):
+                    with self.assertRaises(RuntimeError):
+                        hifi.download(track, tmpdir)
 
     def test_download_filename_sanitized(self):
         import core.hifi_client as hifi

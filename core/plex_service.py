@@ -214,20 +214,13 @@ def sync_library(force: bool = False) -> None:
         now_ms = int(time.time() * 1000)
 
         with _lock:
-            _artists.clear()
-            _artists.update(new_artists)
-            _artist_map.clear()
-            _artist_map.update(new_artist_map)
-            _artist_genres.clear()
-            _artist_genres.update(new_artist_genres)
-            _albums.clear()
-            _albums.update(new_albums)
-            _albums_norm.clear()
-            _albums_norm.update(new_albums_norm)
-            _albums_by_artist.clear()
-            _albums_by_artist.update(new_albums_by_artist)
-            _library.clear()
-            _library.extend(new_library)
+            _artists.clear();         _artists.update(new_artists)
+            _artist_map.clear();      _artist_map.update(new_artist_map)
+            _artist_genres.clear();   _artist_genres.update(new_artist_genres)
+            _albums.clear();          _albums.update(new_albums)
+            _albums_norm.clear();     _albums_norm.update(new_albums_norm)
+            _albums_by_artist.clear();_albums_by_artist.update(new_albums_by_artist)
+            _library.clear();         _library.extend(new_library)
             _track_count = new_track_count
             _last_sync   = now_ms
             _sync_ok     = True
