@@ -16,7 +16,6 @@ import os
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import requests
 
@@ -76,7 +75,7 @@ def get_status() -> dict:
         return {"connected": False, "reason": str(exc)}
 
 
-def search(query: str, artist: Optional[str] = None) -> list[Track]:
+def search(query: str, artist: str | None = None) -> list[Track]:
     """
     Zoek tracks via geconfigureerde HiFi API instances.
 
@@ -90,10 +89,7 @@ def search(query: str, artist: Optional[str] = None) -> list[Track]:
     try:
         r, base = _try_instances("get", path, timeout=_TIMEOUT_SEARCH)
         body = r.json()
-        if isinstance(body, list):
-            items = body
-        else:
-            items = body.get("results") or []
+        items = body if isinstance(body, list) else body.get("results") or []
         tracks = []
         for item in items:
             tracks.append(Track(
@@ -138,7 +134,8 @@ def download(track: Track, output_dir: str) -> str:
     """
     stream_url = get_stream_url(track.track_id, track.instance)
 
-    safe = lambda s, n: "".join(c for c in s if c.isalnum() or c in " -_")[:n]
+    def safe(s, n):
+        return "".join(c for c in s if c.isalnum() or c in " -_")[:n]
     filename = f"{safe(track.artist, 50)} - {safe(track.title, 80)}.flac".strip(" -")
     if not filename or filename == ".flac":
         filename = f"hifi_{track.track_id}.flac"

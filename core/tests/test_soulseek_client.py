@@ -3,8 +3,6 @@ Unit tests voor core/soulseek_client.py — HTTP responses worden gemockt met un
 """
 from __future__ import annotations
 
-import sys
-import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -172,9 +170,8 @@ class TestDownload(unittest.TestCase):
                             size=1000, score=1000.0)
         resp = _make_response({}, status_code=401)
         resp.raise_for_status.side_effect = Exception("401 Unauthorized")
-        with patch("requests.post", return_value=resp):
-            with self.assertRaises(Exception):
-                slsk.download(file)
+        with patch("requests.post", return_value=resp), self.assertRaises(RuntimeError):
+            slsk.download(file)
 
 
 class TestGetDownloadStatus(unittest.TestCase):

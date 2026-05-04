@@ -49,10 +49,10 @@ def create_app() -> Flask:
     app.logger.setLevel(log_level)
 
     # ── Blueprints ────────────────────────────────────────────────────────────
-    from core.routes.lastfm    import lastfm_bp
-    from core.routes.spotify   import spotify_bp
-    from core.routes.plex      import plex_bp
     from core.routes.downloads import downloads_bp
+    from core.routes.lastfm import lastfm_bp
+    from core.routes.plex import plex_bp
+    from core.routes.spotify import spotify_bp
     app.register_blueprint(lastfm_bp)
     app.register_blueprint(spotify_bp)
     app.register_blueprint(plex_bp)
