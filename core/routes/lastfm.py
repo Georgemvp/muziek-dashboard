@@ -19,6 +19,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 from urllib.parse import unquote
 
@@ -225,10 +226,8 @@ def _fetch_artist_info(name: str) -> dict:
     start_year = None
     begin_date = mbz_data.get("begin_date") or ""
     if begin_date and len(begin_date) >= 4:
-        try:
+        with contextlib.suppress(ValueError):
             start_year = int(begin_date[:4])
-        except ValueError:
-            pass
 
     result = {
         "image":     image,
