@@ -266,7 +266,7 @@ async function loadData() {
     // Load Last.fm top albums for enrichment
     let lastfmMap = {};
     try {
-      const lastfmRes = await apiFetch('/api/top/albums?period=overall');
+      const lastfmRes = await apiFetch('/api/core/top/albums?period=overall');
       if (lastfmRes?.topalbums?.album) {
         lastfmRes.topalbums.album.forEach(a => {
           const key = `${(a.artist || '').toLowerCase()}|${(a.name || '').toLowerCase()}`;

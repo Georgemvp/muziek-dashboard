@@ -13,7 +13,7 @@ export async function doSearch(q) {
   const results = document.getElementById('search-results');
   if (q.length < 2) { results.classList.remove('open'); return; }
   try {
-    const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const data = await apiFetch(`/api/core/artist/search?q=${encodeURIComponent(q)}`);
     if (!data.results?.length) {
       results.innerHTML =
         `<div style="padding:12px 14px;color:var(--muted2);font-size:13px">Geen resultaten</div>`;

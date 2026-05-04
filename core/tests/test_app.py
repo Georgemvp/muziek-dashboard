@@ -99,6 +99,21 @@ class TestRoutesMounted:
         ("GET", "/api/core/stats/top/tracks"),
         ("GET", "/api/core/stats/genres"),
         ("GET", "/api/core/stats/timeline"),
+        # Last.fm routes (gemigreerd vanuit routes/lastfm.js)
+        ("GET", "/api/core/user"),
+        ("GET", "/api/core/recent"),
+        ("GET", "/api/core/top/artists"),
+        ("GET", "/api/core/top/tracks"),
+        ("GET", "/api/core/top/albums"),
+        ("GET", "/api/core/loved"),
+        ("GET", "/api/core/artist/search"),
+        ("GET", "/api/core/artist/test-artist"),
+        ("GET", "/api/core/artist/test-artist/info"),
+        ("GET", "/api/core/artist/test-artist/similar"),
+        ("GET", "/api/core/genre/rock"),
+        # Spotify routes (gemigreerd vanuit routes/spotify.js)
+        ("GET", "/api/core/spotify/status"),
+        ("GET", "/api/core/spotify/recs"),
     ]
 
     @pytest.mark.parametrize("method,path", EXPECTED_ROUTES)

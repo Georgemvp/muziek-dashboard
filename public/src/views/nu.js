@@ -148,7 +148,7 @@ export async function dw_nuLuisteren() {
 
     const [plexRes, lfmRes] = await Promise.allSettled([
       fetch('/api/plex/nowplaying', { signal }).then(r => r.json()),
-      lfmIsCached ? Promise.resolve(lfmData) : fetchOnce('/api/recent'),
+      lfmIsCached ? Promise.resolve(lfmData) : fetchOnce('/api/core/recent'),
     ]);
     if (signal?.aborted) return;
 
@@ -226,7 +226,7 @@ async function dw_recenteNummers() {
     let data = getCached('recent', 60 * 1000);
     if (!data) {
       // Gebruik fetchOnce voor deduplicatie (andere widgets kunnen dit ook ophalen)
-      data = await fetchOnce('/api/recent');
+      data = await fetchOnce('/api/core/recent');
       if (signal?.aborted) return;
       setCache('recent', data);
     }
@@ -317,7 +317,7 @@ async function dw_vandaagCijfers() {
     let data = getCached('recent', 60 * 1000);
     if (!data) {
       // Gebruik fetchOnce voor deduplicatie (andere widgets kunnen dit ook ophalen)
-      data = await fetchOnce('/api/recent');
+      data = await fetchOnce('/api/core/recent');
       if (signal?.aborted) return;
       setCache('recent', data);
     }
@@ -380,7 +380,7 @@ async function dw_aanbeveling() {
     let info = null;
     try {
       const infoRes = await Promise.race([
-        apiFetch(`/api/artist/${encodeURIComponent(pick.name)}/info`, { signal }),
+        apiFetch(`/api/core/artist/${encodeURIComponent(pick.name)}/info`, { signal }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
       ]);
       info = infoRes;
@@ -447,7 +447,7 @@ export async function loadRecent() {
     // Haal /api/recent uit cache (TTL: 60 seconden)
     let data = getCached('recent', 60 * 1000);
     if (!data) {
-      data = await apiFetch('/api/recent', { signal });
+      data = await apiFetch('/api/core/recent', { signal });
       if (signal?.aborted) return;
       setCache('recent', data);
     }

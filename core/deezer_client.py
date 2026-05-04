@@ -132,3 +132,82 @@ def get_artist_image(artist_name: str) -> str | None:
     except Exception as exc:
         log.debug("Deezer get_artist_image mislukt voor '%s': %s", artist_name, exc)
         return None
+
+
+def get_artist_full(artist_name: str) -> dict | None:
+    """
+    Haalt het volledige Deezer artiest-object op (id, image, image_xl).
+    Identiek aan getDeezerArtist() in services/deezer.js.
+
+    Returns { id, name, image, imageXl } of None.
+    """
+    try:
+        data  = _get(f"/search/artist?q={requests.utils.quote(artist_name)}&limit=5")
+        items = data.get("data", [])
+        if not items:
+            return None
+        name_lower = artist_name.lower()
+        best = next(
+            (a for a in items if a.get("name", "").lower() == name_lower),
+            items[0],
+        )
+        img = best.get("picture_medium") or best.get("picture") or None
+        if img and "/artist//" in img:
+            img = None
+        return {
+            "id":      best.get("id"),
+            "name":    best.get("name"),
+            "image":   img,
+            "imageXl": best.get("picture_xl") or img,
+        }
+    except Exception as exc:
+        log.debug("Deezer get_artist_full mislukt voor '%s': %s", artist_name, exc)
+        return None
+
+
+def get_artist_albums(deezer_id: int | str, limit: int = 50) -> list[dict]:
+    """
+    Haalt albums op voor een Deezer artiest-ID.
+    Identiek aan getDeezerArtistAlbums() in services/deezer.js.
+
+    Returns list van { title, cover_medium, record_type }.
+    """
+    try:
+        data   = _get(f"/artist/{deezer_id}/albums?limit={limit}")
+        albums = data.get("data", [])
+        return [
+            {
+                "title":        a.get("title"),
+                "cover_medium": a.get("cover_medium"),
+                "record_type":  a.get("record_type"),
+            }
+            for a in albums
+            if a.get("title")
+        ]
+    except Exception as exc:
+        log.debug("Deezer get_artist_albums mislukt voor artiest %s: %s", deezer_id, exc)
+        return []
+
+
+def search_artists(query: str, limit: int = 10) -> list[dict]:
+    """
+    Zoek artiesten op naam via Deezer.
+    Identiek aan searchDeezerArtist() in services/deezer.js.
+
+    Returns list van { name, nb_fan, picture_medium }.
+    """
+    try:
+        data  = _get(f"/search/artist?q={requests.utils.quote(query)}&limit={limit}")
+        items = data.get("data", [])
+        return [
+            {
+                "name":           a.get("name"),
+                "nb_fan":         a.get("nb_fan", 0),
+                "picture_medium": a.get("picture_medium"),
+            }
+            for a in items
+            if a.get("name")
+        ]
+    except Exception as exc:
+        log.debug("Deezer search_artists mislukt voor '%s': %s", query, exc)
+        return []

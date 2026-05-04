@@ -48,6 +48,12 @@ def create_app() -> Flask:
     )
     app.logger.setLevel(log_level)
 
+    # ── Blueprints: Last.fm & Spotify routes ─────────────────────────────────
+    from core.routes.lastfm import lastfm_bp
+    from core.routes.spotify import spotify_bp
+    app.register_blueprint(lastfm_bp)
+    app.register_blueprint(spotify_bp)
+
     # ── Health endpoint ────────────────────────────────────────────────────────
     @app.get("/api/core/health")
     def health():

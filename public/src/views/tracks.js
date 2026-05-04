@@ -492,7 +492,7 @@ async function loadTracksData() {
       apiFetch(`/api/plex/tracks?limit=${BATCH_SIZE}&offset=0`, {
         signal: state.tabAbort.signal
       }),
-      apiFetch('/api/top/tracks?period=overall', {
+      apiFetch('/api/core/top/tracks?period=overall', {
         signal: state.tabAbort.signal
       })
     ]);

@@ -1,9 +1,17 @@
 // ── Last.fm API Routes ────────────────────────────────────────────────────────
+//
+// De meeste endpoints zijn gemigreerd naar de Python Core backend
+// (core/routes/lastfm.py).  De stubs hieronder sturen bestaande
+// bookmarks/links door naar /api/core/* voor backwards-compatibiliteit.
+//
+// Niet gemigreerd (complexe logica met Plex/Deezer/MBZ):
+//   /api/recs, /api/stats, /api/activity
+//
+// De frontend gebruikt nu direct /api/core/* (bijgewerkt in de JS-views).
 
 const logger = require('../logger');
 const { GENRE_STOPWORDS } = require('../services/constants');
 
-// Last.fm bereikbaarheidsstatus
 let lastFmDown = false;
 let lastFmDownSince = null;
 
@@ -15,10 +23,6 @@ function markLastFmUp() {
   lastFmDown = false; lastFmDownSince = null;
 }
 
-/**
- * Geeft stale gecachede data terug als Last.fm onbereikbaar is,
- * met een _stale: true vlag zodat de frontend dit kan tonen.
- */
 function staleOrError(cacheKey, err, res, { getCache }) {
   const stale = getCache(cacheKey, Infinity);
   if (stale) {
@@ -32,181 +36,29 @@ function staleOrError(cacheKey, err, res, { getCache }) {
 module.exports = function(app, deps) {
   const { lfm, getSimilarArtists, getCache, setCache, getMBZArtist, getDeezerArtist, getDeezerArtistAlbums, getDeezerArtistTopTracks, searchDeezerArtist } = deps;
 
-  // ── /api/user ──────────────────────────────────────────────────────────────
-  app.get('/api/user', async (req, res) => {
-    try {
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.getinfo' },
-        { cacheKey: 'api:user', cacheTTL: 300_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=600');
-      res.json(data);
-    } catch (e) { staleOrError('api:user', e, res, deps); }
-  });
-
-  // ── /api/recent ────────────────────────────────────────────────────────────
-  app.get('/api/recent', async (req, res) => {
-    try {
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.getrecenttracks', limit: 20 },
-        { cacheKey: 'api:recent', cacheTTL: 120_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=30');
-      res.json(data);
-    } catch (e) { staleOrError('api:recent', e, res, deps); }
-  });
-
-  // ── /api/topartists ────────────────────────────────────────────────────────
-  app.get('/api/topartists', async (req, res) => {
-    try {
-      const period = req.query.period || '7day';
-      const cacheKey = `api:topartists:${period}`;
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.gettopartists', period, limit: 20 },
-        { cacheKey, cacheTTL: 300_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(data);
-    } catch (e) { staleOrError(`api:topartists:${req.query.period || '7day'}`, e, res, deps); }
-  });
-
-  // ── /api/top/artists — artiesten + topTag voor genre donut ───────────────
-  // Tags worden nu opgehaald via MusicBrainz (vervangt Last.fm artist.gettoptags)
-  app.get('/api/top/artists', async (req, res) => {
-    try {
-      const period   = req.query.period || '7day';
-      const cacheKey = `api:top:artists:${period}`;
-
-      // Korte aggregate-cache (5 min)
-      const cached = getCache(cacheKey, 300_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=300');
-        return res.json(cached);
-      }
-
-      // Haal top-artiesten op (gedeelde cache met /api/topartists)
-      const artistData = await lfm(
-        { method: 'user.gettopartists', period, limit: 20 },
-        { cacheKey: `api:topartists:${period}`, cacheTTL: 300_000 }
-      );
-      markLastFmUp();
-
-      const stopwords = GENRE_STOPWORDS;
-
-      const artists = (artistData.topartists?.artist || []).slice(0, 20);
-
-      // Haal tags parallel op via MusicBrainz — 7-daags cache per artiest
-      // MusicBrainz is vrij van rate-limiting en geeft genre-tags terug
-      const tagResults = await Promise.allSettled(
-        artists.map(a => getMBZArtist(a.name))
-      );
-
-      const enriched = artists.map((a, i) => {
-        let topTag = null;
-        if (tagResults[i].status === 'fulfilled') {
-          const tags = tagResults[i].value?.tags || [];
-          for (const tag of tags) {
-            const tagName = (tag.name || '').toLowerCase().trim();
-            if (tagName.length > 2 && !stopwords.has(tagName) && !/^\d+$/.test(tagName)) {
-              topTag = tag.name;
-              break;
-            }
-          }
-        }
-        return { ...a, topTag };
-      });
-
-      const result = {
-        ...artistData,
-        topartists: { ...artistData.topartists, artist: enriched },
-      };
-
-      setCache(cacheKey, result);
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(result);
-    } catch (e) { staleOrError(`api:top:artists:${req.query.period || '7day'}`, e, res, deps); }
-  });
-
-  // ── /api/toptracks en /api/top/tracks (gedeelde handler) ─────────────────
-  async function handleTopTracks(req, res) {
-    try {
-      const period = req.query.period || '7day';
-      const cacheKey = `api:toptracks:${period}`;
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.gettoptracks', period, limit: 20 },
-        { cacheKey, cacheTTL: 300_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(data);
-    } catch (e) { staleOrError(`api:toptracks:${req.query.period || '7day'}`, e, res, deps); }
+  // ── Gemigreerde endpoints — redirect naar /api/core/* ─────────────────────
+  function redir(path) {
+    return (req, res) => res.redirect(302, `${path}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`);
   }
 
-  app.get('/api/toptracks',  handleTopTracks);
-  app.get('/api/top/tracks', handleTopTracks);
+  app.get('/api/user',        (req, res) => res.redirect(302, '/api/core/user'));
+  app.get('/api/recent',      (req, res) => res.redirect(302, '/api/core/recent'));
+  app.get('/api/topartists',  (req, res) => res.redirect(302, `/api/core/top/artists${req.url.slice('/api/topartists'.length)}`));
+  app.get('/api/toptracks',   (req, res) => res.redirect(302, `/api/core/top/tracks${req.url.slice('/api/toptracks'.length)}`));
+  app.get('/api/top/artists', (req, res) => res.redirect(302, `/api/core/top/artists${req.url.slice('/api/top/artists'.length)}`));
+  app.get('/api/top/tracks',  (req, res) => res.redirect(302, `/api/core/top/tracks${req.url.slice('/api/top/tracks'.length)}`));
+  app.get('/api/top/albums',  (req, res) => res.redirect(302, `/api/core/top/albums${req.url.slice('/api/top/albums'.length)}`));
+  app.get('/api/loved',       (req, res) => res.redirect(302, '/api/core/loved'));
+  app.get('/api/search',      (req, res) => res.redirect(302, `/api/core/artist/search${req.url.slice('/api/search'.length)}`));
 
-  // ── /api/top/albums ────────────────────────────────────────────────────────
-  app.get('/api/top/albums', async (req, res) => {
-    try {
-      const period = req.query.period || 'overall';
-      const cacheKey = `api:top:albums:${period}`;
-      const cached = getCache(cacheKey, 600_000);
-      if (cached) {
-        res.set('Cache-Control', 'private, max-age=600');
-        return res.json(cached);
-      }
-
-      const data = await lfm(
-        { method: 'user.gettopalbums', period, limit: 50 },
-        { cacheKey, cacheTTL: 600_000 }
-      );
-      markLastFmUp();
-
-      // Transform to simpler format
-      const albums = (data.topalbums?.album || []).map(a => ({
-        name: a.name,
-        artist: a.artist?.name || a.artist || '',
-        playcount: parseInt(a.playcount, 10) || 0,
-        url: a.url,
-        image: a.image
-      }));
-
-      const result = { topalbums: { album: albums } };
-      setCache(cacheKey, result);
-      res.set('Cache-Control', 'private, max-age=600');
-      res.json(result);
-    } catch (e) { staleOrError(`api:top:albums:${req.query.period || 'overall'}`, e, res, deps); }
-  });
-
-  // ── /api/loved ─────────────────────────────────────────────────────────────
-  app.get('/api/loved', async (req, res) => {
-    try {
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
-      const data = await lfm(
-        { method: 'user.getlovedtracks', limit: 50 },
-        { cacheKey: 'api:loved', cacheTTL: 600_000 }
-      );
-      markLastFmUp();
-      res.set('Cache-Control', 'private, max-age=600');
-      res.json(data);
-    } catch (e) { staleOrError('api:loved', e, res, deps); }
-  });
-
-  // ── /api/recs ──────────────────────────────────────────────────────────────
+  // ── /api/recs ─────────────────────────────────────────────────────────────
+  // Niet gemigreerd: complexe logica met Plex, Deezer en MusicBrainz.
   app.get('/api/recs', async (req, res) => {
     const t0 = Date.now();
     try {
-      // Cache key rotates every 2 hours to ensure fresh seed rotation
       const cacheKeyRotation = Math.floor(Date.now() / 7_200_000);
       const cacheKey = `api:recs:${cacheKeyRotation}`;
-      const cached = getCache(cacheKey, 900_000); // 15 min TTL per key
+      const cached = getCache(cacheKey, 900_000);
       if (cached) {
         res.set('Cache-Control', 'private, max-age=300');
         return res.json(cached);
@@ -215,7 +67,6 @@ module.exports = function(app, deps) {
       const { syncPlexLibrary, artistInPlex, albumInPlex } = deps;
       await syncPlexLibrary();
 
-      // Probeer seeds uit Plex play history
       let topArtists = [];
       try {
         const { getPlayHistory, aggregateTopArtists } = deps;
@@ -227,7 +78,6 @@ module.exports = function(app, deps) {
         logger.warn({ err: e }, 'Plex history voor recs seeds mislukt, fallback naar Last.fm');
       }
 
-      // Fallback naar Last.fm als Plex seeds onvoldoende
       if (topArtists.length < 5) {
         const top = await lfm(
           { method: 'user.gettopartists', period: '3month', limit: 30 },
@@ -236,7 +86,6 @@ module.exports = function(app, deps) {
         topArtists = (top.topartists?.artist || []).map(a => a.name);
       }
 
-      // ── 1. SEED-DIVERSITEIT: Top-5 + 5 random uit posities 10-30 ──────────
       const seedArtists = [];
       seedArtists.push(...topArtists.slice(0, 5));
       const candidateRange = topArtists.slice(10, 30);
@@ -248,12 +97,9 @@ module.exports = function(app, deps) {
         randomIndices.forEach(idx => seedArtists.push(candidateRange[idx]));
       }
 
-      // ── Genre tracking voor genre-spreiding ──────────────────────────────
       const genreCount = {};
       const stopwords = GENRE_STOPWORDS;
 
-      // Helper: haal top-3 tags op via MusicBrainz (vervangt Last.fm artist.gettoptags)
-      // MusicBrainz heeft 7-daagse cache in getMBZArtist
       async function getArtistTags(artist) {
         try {
           const mbz = await getMBZArtist(artist);
@@ -263,7 +109,6 @@ module.exports = function(app, deps) {
         }
       }
 
-      // Verzamel genres van seed artiesten (parallel)
       const seedGenreResults = await Promise.allSettled(
         seedArtists.map(artist => getArtistTags(artist))
       );
@@ -278,7 +123,6 @@ module.exports = function(app, deps) {
         }
       }
 
-      // ── Artiest-aanbevelingen via Deezer related artists ──────────────────
       const simResults = await Promise.all(
         seedArtists.map(async artist => {
           try {
@@ -288,7 +132,6 @@ module.exports = function(app, deps) {
         })
       );
 
-      // Verzamel unieke kandidaten (deduplicatie vóór tag-calls)
       const candidates = [];
       const seenNames  = new Set();
       for (const { artist, similar } of simResults) {
@@ -300,12 +143,10 @@ module.exports = function(app, deps) {
         }
       }
 
-      // ── 2. BATCH genre-tags via MusicBrainz: max 5 concurrent ────────────
       const { limitConcurrency } = deps;
       const tagTasks   = candidates.map(c => () => getArtistTags(c.name));
       const tagResults = await limitConcurrency(tagTasks, 5);
 
-      // Bereken adjustedMatch met genre-penalisatie
       const recs = candidates.map((c, i) => {
         const inPlex = artistInPlex(c.name);
         let adjustedMatch = c.match * (inPlex ? 0.9 : 1.4);
@@ -328,7 +169,6 @@ module.exports = function(app, deps) {
             }
           }
 
-          // Als alle genres al 3+ keer voorkomen, penaliseer met 50%
           if (hasOnlyCommonGenres && commonGenreCount > 0) {
             adjustedMatch *= 0.5;
           }
@@ -341,9 +181,6 @@ module.exports = function(app, deps) {
       const topRecs = recs.slice(0, 30);
       const top8    = topRecs.slice(0, 8);
 
-      // ── 3. Album- én track-aanbevelingen PARALLEL via Deezer ─────────────
-      // Één getDeezerArtist()-lookup per artiest, resultaat hergebruikt voor
-      // zowel albums als tracks — voorkomt dubbele Deezer API-calls.
       const deezerArtistResults = await Promise.allSettled(
         top8.map(rec => getDeezerArtist(rec.name))
       );
@@ -406,19 +243,18 @@ module.exports = function(app, deps) {
         albumRecs,
         trackRecs,
         basedOn:          topArtists,
-        seedArtists,      // Transparantie: laat zien welke seeds gebruikt zijn
+        seedArtists,
         plexConnected:    ok,
         plexArtistCount:  artistCount
       };
       markLastFmUp();
-      setCache(cacheKey, result); // Cache per 2-uur rotatie
+      setCache(cacheKey, result);
       logger.info({ ms: Date.now() - t0 }, '/api/recs voltooid');
       res.set('Cache-Control', 'private, max-age=300');
       res.json(result);
     } catch (e) {
       markLastFmDown();
       logger.error({ err: e, ms: Date.now() - t0 }, '/api/recs fout');
-      // Probeer huidige rotatie-sleutel (stale), daarna vorige rotatie
       const currentKey  = `api:recs:${Math.floor(Date.now() / 7_200_000)}`;
       const previousKey = `api:recs:${Math.floor(Date.now() / 7_200_000) - 1}`;
       const stale = getCache(currentKey, Infinity) || getCache(previousKey, Infinity);
@@ -431,49 +267,21 @@ module.exports = function(app, deps) {
     }
   });
 
-  // ── /api/search ────────────────────────────────────────────────────────────
-  // Gebruikt Deezer als primaire zoekbron (vervangt Last.fm artist.search)
-  app.get('/api/search', async (req, res) => {
-    const q = (req.query.q || '').trim();
-    if (q.length < 2) {
-      res.set('Cache-Control', 'private, max-age=300');
-      return res.json({ results: [] });
-    }
-    try {
-      // Gebruik alleen Deezer voor zoeken — sneller, geen API-key, geen throttle
-      const deezerArtists = await searchDeezerArtist(q);
-
-      const results = deezerArtists.map(a => ({
-        name:      a.name,
-        listeners: a.nb_fan || 0,   // Deezer nb_fan als vervanger van Last.fm listeners
-        image:     a.picture_medium || null
-      }));
-
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json({ results });
-    } catch (e) {
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json({ results: [], error: e.message });
-    }
-  });
-
   // ── /api/stats ─────────────────────────────────────────────────────────────
-  // Genre-verdeling via MusicBrainz tags (vervangt Last.fm artist.gettoptags)
+  // Niet gemigreerd: retourneert ander formaat dan /api/core/stats.
   app.get('/api/stats', async (req, res) => {
     try {
-      // Cache-check gebeurt nu in lfm() zelf (voor throttle)
       const [recentR, topR] = await Promise.allSettled([
         lfm(
           { method: 'user.getrecenttracks', limit: 200 },
-          { cacheKey: 'stats:recent', cacheTTL: 1_800_000 } // 30 min
+          { cacheKey: 'stats:recent', cacheTTL: 1_800_000 }
         ),
         lfm(
           { method: 'user.gettopartists', period: '1month', limit: 15 },
-          { cacheKey: 'stats:top', cacheTTL: 1_800_000 } // 30 min
+          { cacheKey: 'stats:top', cacheTTL: 1_800_000 }
         )
       ]);
 
-      // Dagelijkse scrobbles
       const tracks = recentR.status === 'fulfilled'
         ? (recentR.value.recenttracks?.track || []).filter(t => t.date?.uts)
         : [];
@@ -489,14 +297,12 @@ module.exports = function(app, deps) {
       }
       const dailyScrobbles = Object.entries(days).map(([date, count]) => ({ date, count }));
 
-      // Top artiesten deze maand
       const topArtists = topR.status === 'fulfilled'
         ? (topR.value.topartists?.artist || []).slice(0, 10).map(a => ({
             name: a.name, playcount: parseInt(a.playcount) || 0
           }))
         : [];
 
-      // Genre-verdeling via MusicBrainz tags (vervangt Last.fm artist.gettoptags)
       const stopwords = GENRE_STOPWORDS;
       const tagCounts = {};
       const tagResults = await Promise.allSettled(
@@ -521,41 +327,32 @@ module.exports = function(app, deps) {
     } catch (e) { staleOrError('stats', e, res, deps); }
   });
 
-  // ── /api/activity – Plex + Last.fm combined ────────────────────────────────
+  // ── /api/activity ──────────────────────────────────────────────────────────
+  // Niet gemigreerd: combineert Plex en Last.fm data.
   app.get('/api/activity', async (req, res) => {
     try {
       const period = req.query.period || '7day';
       const cacheKey = `api:activity:${period}`;
-
-      // Check cache (10 minuten TTL)
       const cached = getCache(cacheKey, 600_000);
       if (cached) {
         res.set('Cache-Control', 'private, max-age=600');
         return res.json(cached);
       }
 
-      // Probeer eerst Plex data
       let result = null;
       try {
         const { getPlayHistory, aggregateDailyPlays } = deps;
         if (getPlayHistory) {
           const history = await getPlayHistory(period);
           if (history && history.length > 0) {
-            // Plex data beschikbaar
             const dailyData = aggregateDailyPlays(history, 28);
-            const totalPlays = history.length;
-
             result = {
               dailyPlays: dailyData,
               recentTracks: history.slice(0, 20).map(t => ({
-                title: t.title,
-                artist: t.artist,
-                album: t.album,
-                viewedAt: t.viewedAt,
-                thumb: t.thumb,
-                ratingKey: t.ratingKey
+                title: t.title, artist: t.artist, album: t.album,
+                viewedAt: t.viewedAt, thumb: t.thumb, ratingKey: t.ratingKey
               })),
-              totalPlays,
+              totalPlays: history.length,
               source: 'plex'
             };
             markLastFmUp();
@@ -568,7 +365,6 @@ module.exports = function(app, deps) {
         logger.warn({ err: e }, 'Plex play history mislukt, fallback naar Last.fm');
       }
 
-      // Fallback: Last.fm
       try {
         const { periodToTimestamp } = deps;
         const sinceTimestamp = periodToTimestamp(period);
@@ -580,25 +376,18 @@ module.exports = function(app, deps) {
         );
 
         const tracks = (data.recenttracks?.track || []).filter(t => t.date?.uts);
-
-        // Groepeer per dag en tel minuten (3.5 minuten per track)
         const dailyMap = new Map();
         for (const track of tracks) {
           if (!track.date?.uts) continue;
           const date = new Date(parseInt(track.date.uts) * 1000);
           const dateStr = date.toISOString().split('T')[0];
-
-          if (!dailyMap.has(dateStr)) {
-            dailyMap.set(dateStr, { date: dateStr, count: 0, minutes: 0 });
-          }
+          if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, { date: dateStr, count: 0, minutes: 0 });
           const entry = dailyMap.get(dateStr);
           entry.count += 1;
-          entry.minutes += 3.5; // ~3.5 minuten per track
+          entry.minutes += 3.5;
         }
 
-        const dailyPlays = [...dailyMap.values()]
-          .sort((a, b) => new Date(b.date) - new Date(a.date));
-
+        const dailyPlays = [...dailyMap.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
         const recentTracks = tracks.slice(0, 20).map(t => ({
           title: t.name || '',
           artist: t.artist?.name || (typeof t.artist === 'string' ? t.artist : ''),
@@ -608,13 +397,7 @@ module.exports = function(app, deps) {
           ratingKey: null
         }));
 
-        result = {
-          dailyPlays,
-          recentTracks,
-          totalPlays: tracks.length,
-          source: 'lastfm'
-        };
-
+        result = { dailyPlays, recentTracks, totalPlays: tracks.length, source: 'lastfm' };
         markLastFmUp();
         setCache(cacheKey, result);
         res.set('Cache-Control', 'private, max-age=600');
@@ -623,16 +406,11 @@ module.exports = function(app, deps) {
         logger.warn({ err: e }, 'Last.fm activity mislukt');
       }
 
-      // Graceful fallback: lege data als beide mislukt
       markLastFmDown();
-      result = {
-        dailyPlays: [],
-        recentTracks: [],
-        totalPlays: 0,
-        source: null,
+      res.status(503).json({
+        dailyPlays: [], recentTracks: [], totalPlays: 0, source: null,
         error: 'Zowel Plex als Last.fm zijn onbereikbaar'
-      };
-      res.status(503).json(result);
+      });
     } catch (e) {
       logger.error({ err: e }, '/api/activity onverwachte fout');
       markLastFmDown();
@@ -640,6 +418,5 @@ module.exports = function(app, deps) {
     }
   });
 
-  // Export status functions for server.js to use
   return { markLastFmDown, markLastFmUp, lastFmDown: () => lastFmDown, lastFmDownSince: () => lastFmDownSince };
 };
