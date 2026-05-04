@@ -596,6 +596,118 @@ def get_all_playlists() -> list[dict]:
         ]
 
 
+# ── Download jobs ──────────────────────────────────────────────────────────────
+# Zelfde schema als download_jobs in db.js — gedeelde SQLite DB.
+
+def _ensure_download_jobs_table() -> None:
+    with get_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS download_jobs (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                artist           TEXT,
+                album            TEXT,
+                track            TEXT,
+                type             TEXT DEFAULT 'album',
+                quality          TEXT DEFAULT 'flac',
+                source_requested TEXT DEFAULT 'auto',
+                source_used      TEXT,
+                status           TEXT DEFAULT 'pending',
+                attempts         INTEGER DEFAULT 0,
+                error_log        TEXT,
+                file_path        TEXT,
+                created_at       INTEGER DEFAULT (strftime('%s','now')),
+                completed_at     INTEGER
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_djobs_status   ON download_jobs(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_djobs_created  ON download_jobs(created_at)")
+        conn.commit()
+
+
+def create_download_job(artist: str, album: str = "", track: str = "",
+                        job_type: str = "album", quality: str = "flac",
+                        source_requested: str = "auto") -> int:
+    _ensure_download_jobs_table()
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO download_jobs (artist, album, track, type, quality, source_requested, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+            (artist, album, track, job_type, quality, source_requested),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def update_download_job(job_id: int, status: str, source_used: str | None = None,
+                        attempts: int | None = None, error_log: str | None = None,
+                        file_path: str | None = None) -> None:
+    _ensure_download_jobs_table()
+    now = int(time.time())
+    parts = ["status = ?"]
+    vals: list = [status]
+    if source_used  is not None: parts.append("source_used = ?");  vals.append(source_used)
+    if attempts     is not None: parts.append("attempts = ?");     vals.append(attempts)
+    if error_log    is not None: parts.append("error_log = ?");    vals.append(error_log)
+    if file_path    is not None: parts.append("file_path = ?");    vals.append(file_path)
+    if status in ("completed", "failed"):
+        parts.append("completed_at = ?")
+        vals.append(now)
+    vals.append(job_id)
+    with get_db() as conn:
+        conn.execute(f"UPDATE download_jobs SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+
+
+def get_download_job(job_id: int) -> dict | None:
+    _ensure_download_jobs_table()
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM download_jobs WHERE id = ?", (job_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_recent_download_jobs(limit: int = 50) -> list[dict]:
+    _ensure_download_jobs_table()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM download_jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_pending_download_jobs() -> list[dict]:
+    _ensure_download_jobs_table()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM download_jobs WHERE status IN ('pending','failed') ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_active_download_jobs() -> list[dict]:
+    _ensure_download_jobs_table()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM download_jobs WHERE status IN ('pending','running') ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_download_record(tidal_id: str = "", artist: str = "", title: str = "",
+                        url: str = "", quality: str = "high",
+                        source: str = "", platform: str = "") -> None:
+    """Voeg toe aan de legacy downloads tabel (zelfde schema als db.js)."""
+    with get_db() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO downloads (tidal_id, artist, title, url, quality, queued_at, source, platform) "
+                "VALUES (?, ?, ?, ?, ?, strftime('%s','now'), ?, ?)",
+                (tidal_id, artist, title, url, quality, source, platform),
+            )
+            conn.commit()
+        except Exception:
+            pass  # downloads tabel bestaat misschien nog niet — Node maakt hem aan
+
+
 def get_enrichment_artists() -> list[str]:
     """
     Geeft alle unieke artiestennamen terug die enrichment data hebben.

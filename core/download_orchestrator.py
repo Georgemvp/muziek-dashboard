@@ -1,0 +1,326 @@
+"""
+download_orchestrator.py — Unified download orchestrator voor de Core backend.
+
+Port van services/downloadOrchestrator.js: accepteert generieke quality-waarden
+(flac / mp3_320 / mp3_128), probeert bronnen in volgorde (Tidarr → OrpheusDL)
+en slaat job-status op in de gedeelde SQLite DB.
+"""
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any
+
+import core.database as db
+import core.tidarr_client  as tidarr
+import core.orpheus_client as orpheus
+from core.plex_service import _fuzzy_score
+
+log = logging.getLogger(__name__)
+
+# ── Quality mapping ────────────────────────────────────────────────────────────
+_QUALITY_MAP: dict[str, dict[str, str]] = {
+    "tidarr":           {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
+                         "atmos": "atmos",   "hifi": "hifi",        "lossless": "lossless",
+                         "high": "high",     "low": "low"},
+    "orpheus_tidal":    {"flac": "hifi",     "mp3_320": "high",     "mp3_128": "low",
+                         "hifi": "hifi",     "lossless": "lossless","high": "high", "low": "low", "atmos": "atmos"},
+    "orpheus_qobuz":    {"flac": "hifi",     "mp3_320": "high",     "mp3_128": "high",
+                         "hifi": "hifi",     "lossless": "lossless","high": "high"},
+    "orpheus_deezer":   {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
+                         "lossless": "lossless", "high": "high",    "low": "low"},
+    "orpheus_spotify":  {"flac": "high",     "mp3_320": "high",     "mp3_128": "low",
+                         "high": "high",     "low": "low"},
+    "orpheus_soundcloud":{"flac": "high",    "mp3_320": "high",     "mp3_128": "high", "high": "high"},
+    "orpheus_applemusic":{"flac": "high",    "mp3_320": "high",     "mp3_128": "high", "high": "high"},
+    "orpheus_beatport": {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
+                         "lossless": "lossless", "high": "high",    "low": "low"},
+    "orpheus_beatsource":{"flac": "lossless","mp3_320": "high",     "mp3_128": "low",
+                         "lossless": "lossless", "high": "high",    "low": "low"},
+    "orpheus_youtube":  {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
+                         "lossless": "lossless", "high": "high",    "low": "low"},
+}
+
+DEFAULT_SOURCE_PRIORITY = [
+    "tidarr",
+    "orpheus_qobuz",
+    "orpheus_tidal",
+    "orpheus_deezer",
+    "orpheus_spotify",
+    "orpheus_soundcloud",
+    "orpheus_applemusic",
+    "orpheus_beatport",
+    "orpheus_beatsource",
+    "orpheus_youtube",
+]
+
+_PLATFORM_LABELS = {
+    "tidal": "Tidal", "qobuz": "Qobuz", "deezer": "Deezer",
+    "spotify": "Spotify", "soundcloud": "SoundCloud", "applemusic": "Apple Music",
+    "beatport": "Beatport", "beatsource": "Beatsource", "youtube": "YouTube",
+}
+
+# In-memory fout-trackers (herstart = reset)
+_source_errors: dict[str, dict] = {}
+
+
+def _map_quality(source: str, quality: str) -> str:
+    m = _QUALITY_MAP.get(source)
+    if not m:
+        return quality or "high"
+    return m.get(quality) or m.get("flac") or quality or "high"
+
+
+def _platform_label(platform: str) -> str:
+    return _PLATFORM_LABELS.get(platform, platform)
+
+
+def _get_source_priority() -> list[str]:
+    val = db.get_setting("download", "source_priority")
+    return val if isinstance(val, list) and val else DEFAULT_SOURCE_PRIORITY
+
+
+def _is_hybrid_mode() -> bool:
+    val = db.get_setting("download", "hybrid_mode")
+    return True if val is None else bool(val)
+
+
+def _is_source_enabled(source: str) -> bool:
+    val = db.get_setting("download", f"source_enabled_{source}")
+    return True if val is None else bool(val)
+
+
+# ── Tidarr download ────────────────────────────────────────────────────────────
+
+def _download_via_tidarr(artist: str, album: str, track: str,
+                          item_type: str, quality: str) -> dict:
+    q = _map_quality("tidarr", quality)
+    if item_type == "album" or (not track and album):
+        found = tidarr.find_best_album(artist, album)
+        if not found:
+            raise RuntimeError(f"Tidarr: geen album gevonden voor '{artist} - {album}'")
+        tidarr.add_to_queue(found.get("url", ""), "album",
+                            found.get("title", ""), found.get("artist", ""),
+                            str(found.get("id", "")), q)
+        return {"source": "tidarr", "title": found.get("title"), "artist": found.get("artist"),
+                "url": found.get("url")}
+    # Track
+    data   = tidarr.search(f"{artist} {track}".strip())
+    tracks = [r for r in (data.get("results") or []) if r.get("type") == "track"]
+    if not tracks:
+        raise RuntimeError(f"Tidarr: geen track gevonden voor '{artist} - {track}'")
+    best = tracks[0]
+    tidarr.add_to_queue(best.get("url", ""), "track",
+                        best.get("title", ""), best.get("artist", ""),
+                        str(best.get("id", "")), q)
+    return {"source": "tidarr", "title": best.get("title"), "artist": best.get("artist"),
+            "url": best.get("url")}
+
+
+# ── OrpheusDL download ────────────────────────────────────────────────────────
+
+def _download_via_orpheus(artist: str, album: str, track: str,
+                           item_type: str, quality: str, platform: str) -> dict:
+    src = f"orpheus_{platform}"
+    q   = _map_quality(src, quality)
+    query = f"{artist} {track}".strip() if item_type == "track" else f"{artist} {album}".strip()
+    search_type = "track" if item_type == "track" else "album"
+
+    data    = orpheus.search(query, platform, search_type)
+    results = data.get("results") or []
+    job_id  = data.get("jobId")
+
+    if not results:
+        raise RuntimeError(f"OrpheusDL ({platform}): geen resultaten voor '{query}'")
+
+    # Score resultaten op artiest + titel match
+    want_title = track if item_type == "track" else album
+    scored = sorted(
+        [
+            {**r, "_score": (_fuzzy_score(artist, r.get("artist") or "")
+                             + _fuzzy_score(want_title, r.get("title") or "")) / 2}
+            for r in results
+        ],
+        key=lambda x: -x["_score"],
+    )
+    best = scored[0]
+
+    dl_job_id = None
+    if best.get("url"):
+        dl = orpheus.download(best["url"], q)
+        dl_job_id = dl.get("jobId")
+    elif job_id:
+        dl = orpheus.download_from_search(job_id, best.get("index", 0), q)
+        dl_job_id = dl.get("jobId")
+    else:
+        raise RuntimeError(f"OrpheusDL ({platform}): geen URL of jobId voor download")
+
+    return {
+        "source": src,
+        "title":  best.get("title"),
+        "artist": best.get("artist"),
+        "url":    best.get("url", ""),
+        "jobId":  dl_job_id,
+    }
+
+
+# ── Publieke API ───────────────────────────────────────────────────────────────
+
+def download(artist: str, album: str = "", track: str = "",
+             item_type: str = "", quality: str = "flac",
+             source: str = "auto") -> dict:
+    """
+    Start een download via de orchestrator.
+
+    Returns { id, status, source, result? }
+    """
+    if not item_type:
+        item_type = "album" if album else "track"
+
+    job_id = db.create_download_job(
+        artist=artist, album=album, track=track,
+        job_type=item_type, quality=quality, source_requested=source,
+    )
+    db.update_download_job(job_id, "running", attempts=1)
+    log.info("Download gestart — job %d: %s - %s [%s]", job_id, artist, album or track, source)
+
+    priority = _get_source_priority()
+    hybrid   = _is_hybrid_mode()
+
+    if source == "auto":
+        sources_to_try = [s for s in priority if _is_source_enabled(s)]
+    else:
+        sources_to_try = [source]
+
+    if not sources_to_try:
+        db.update_download_job(job_id, "failed", error_log="Geen download-bronnen geconfigureerd")
+        return {"id": job_id, "status": "failed", "source": "none",
+                "error": "Geen download-bronnen geconfigureerd"}
+
+    last_error: Exception | None = None
+    attempts = 0
+
+    for src in sources_to_try:
+        attempts += 1
+        try:
+            if src == "tidarr":
+                result = _download_via_tidarr(artist, album, track, item_type, quality)
+            elif src.startswith("orpheus_"):
+                platform = src[len("orpheus_"):]
+                result   = _download_via_orpheus(artist, album, track, item_type, quality, platform)
+            else:
+                raise RuntimeError(f"Onbekende bron: {src}")
+
+            db.update_download_job(job_id, "completed", source_used=src,
+                                   attempts=attempts, error_log=None)
+            try:
+                db.add_download_record(
+                    tidal_id=result.get("url") or "",
+                    artist=result.get("artist") or artist,
+                    title=result.get("title") or album or track,
+                    url=result.get("url") or "",
+                    quality=_map_quality(src, quality),
+                    source=src,
+                    platform=src[len("orpheus_"):] if src.startswith("orpheus_") else "tidal",
+                )
+            except Exception:
+                pass
+            _source_errors.pop(src, None)
+            log.info("✓ Download succesvol via %s — job %d", src, job_id)
+            return {"id": job_id, "status": "completed", "source": src, "result": result}
+
+        except Exception as exc:
+            last_error = exc
+            _source_errors[src] = {"count": _source_errors.get(src, {}).get("count", 0) + 1,
+                                   "lastMsg": str(exc), "lastAt": time.time()}
+            db.update_download_job(job_id, "running", attempts=attempts, error_log=str(exc))
+            log.warning("✗ Bron %s mislukt (job %d): %s", src, job_id, exc)
+            if not hybrid:
+                break
+
+    error_msg = str(last_error) if last_error else "Alle download-bronnen mislukt"
+    db.update_download_job(job_id, "failed", attempts=attempts, error_log=error_msg)
+    log.error("✗ Download volledig mislukt — job %d: %s", job_id, error_msg)
+    return {"id": job_id, "status": "failed", "error": error_msg}
+
+
+def search_all(query: str, search_type: str = "album") -> dict:
+    """Zoek parallel over alle enabled bronnen."""
+    q = (query or "").strip()
+    if len(q) < 2:
+        return {"results": []}
+
+    priority = _get_source_priority()
+    enabled  = [s for s in priority if _is_source_enabled(s)]
+    all_results: list[dict] = []
+
+    for src in enabled:
+        try:
+            if src == "tidarr":
+                data = tidarr.search(q)
+                for r in (data.get("results") or []):
+                    all_results.append({**r, "source": "tidarr", "sourceName": "Tidal (Tidarr)"})
+            elif src.startswith("orpheus_"):
+                platform = src[len("orpheus_"):]
+                data = orpheus.search(q, platform, search_type)
+                for r in (data.get("results") or []):
+                    all_results.append({**r, "source": src,
+                                        "sourceName": _platform_label(platform),
+                                        "platform": platform})
+        except Exception as exc:
+            log.debug("Zoekbron %s mislukt: %s", src, exc)
+
+    return {"results": all_results}
+
+
+def get_source_status() -> dict:
+    sources = []
+    priority = _get_source_priority()
+    for src in DEFAULT_SOURCE_PRIORITY:
+        enabled   = _is_source_enabled(src)
+        errors    = _source_errors.get(src, {"count": 0})
+        available = None
+        if enabled:
+            try:
+                if src == "tidarr":
+                    s = tidarr.get_status()
+                    available = s.get("connected")
+                elif src.startswith("orpheus_"):
+                    s = orpheus.get_status()
+                    available = s.get("connected")
+            except Exception:
+                available = False
+
+        label = "Tidal (Tidarr)" if src == "tidarr" else _platform_label(src[len("orpheus_"):])
+        sources.append({
+            "name":       src,
+            "label":      label,
+            "enabled":    enabled,
+            "available":  available,
+            "errorCount": errors.get("count", 0),
+            "lastError":  errors.get("lastMsg"),
+            "priority":   priority.index(src) if src in priority else -1,
+        })
+    return {"sources": sources}
+
+
+def retry_failed() -> dict:
+    jobs = db.get_pending_download_jobs()
+    if not jobs:
+        return {"retried": 0}
+    retried = 0
+    for job in jobs:
+        try:
+            result = download(
+                artist=job.get("artist") or "",
+                album=job.get("album") or "",
+                track=job.get("track") or "",
+                item_type=job.get("type") or "album",
+                quality=job.get("quality") or "flac",
+                source=job.get("source_requested") or "auto",
+            )
+            if result.get("status") == "completed":
+                retried += 1
+        except Exception as exc:
+            log.warning("Retry mislukt voor job %s: %s", job.get("id"), exc)
+    return {"retried": retried}
