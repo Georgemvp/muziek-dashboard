@@ -34,7 +34,7 @@ let discExpandedCards = new Set();
 // ────────────────────────────────────────────────────────────────────────────
 export async function checkSpotifyStatus() {
   try {
-    const data = await apiFetch('/api/spotify/status');
+    const data = await apiFetch('/api/core/spotify/status');
     state.spotifyEnabled = !!data.enabled;
   } catch { state.spotifyEnabled = false; }
 }
@@ -73,7 +73,7 @@ export async function loadSpotifyRecs(mood) {
     const spotifyCacheKey = `spotify:${mood}`;
     let tracks = getCached(spotifyCacheKey, 5 * 60 * 1000);
     if (!tracks) {
-      tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
+      tracks = await apiFetch(`/api/core/spotify/recs?mood=${encodeURIComponent(mood)}`);
       setCache(spotifyCacheKey, tracks);
     }
     if (!tracks.length) { section.innerHTML = `<div class="empty">Geen Spotify-aanbevelingen gevonden.</div>`; return; }
@@ -246,7 +246,7 @@ async function renderRecsTab() {
 
     // Parallel fetch artist info
     const results = await Promise.allSettled(recs.map((r, i) =>
-      apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`)
+      apiFetch(`/api/core/artist/${encodeURIComponent(r.name)}/info`)
         .then(info => ({ i, info }))
     ));
 

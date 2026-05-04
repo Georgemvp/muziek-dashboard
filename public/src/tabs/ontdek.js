@@ -12,7 +12,7 @@ import { hideTidarrUI, stopTidarrQueuePolling } from './downloads.js';
 // ── Spotify ───────────────────────────────────────────────────────────────
 export async function checkSpotifyStatus() {
   try {
-    const data = await apiFetch('/api/spotify/status');
+    const data = await apiFetch('/api/core/spotify/status');
     state.spotifyEnabled = !!data.enabled;
     const tb = document.getElementById('tb-mood');
     if (state.spotifyEnabled && state.activeView === 'ontdek') {
@@ -65,7 +65,7 @@ export async function loadSpotifyRecs(mood) {
     const spotifyCacheKey = `spotify:${mood}`;
     let tracks = getCached(spotifyCacheKey, 5 * 60 * 1000);
     if (!tracks) {
-      tracks = await apiFetch(`/api/spotify/recs?mood=${encodeURIComponent(mood)}`);
+      tracks = await apiFetch(`/api/core/spotify/recs?mood=${encodeURIComponent(mood)}`);
       setCache(spotifyCacheKey, tracks);
     }
 
@@ -275,7 +275,7 @@ export async function loadRecs() {
       ).join('')}${recs.length > 8 ? `<span class="collapsed-thumbs-more">+${recs.length - 8}</span>` : ''}</div>`;
       previewItems.forEach(async (r, i) => {
         try {
-          const info = await apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`);
+          const info = await apiFetch(`/api/core/artist/${encodeURIComponent(r.name)}/info`);
           const el = document.getElementById(`recs-thumb-${i}`);
           if (el && info.image) el.innerHTML = `<img src="${esc(proxyImg(info.image, 48) || info.image)}" alt="${esc(r.name)}" loading="lazy" decoding="async" onerror="this.remove()">`;
         } catch {}
@@ -284,7 +284,7 @@ export async function loadRecs() {
 
     // Parallel fetch artist info voor alle recs met Promise.allSettled() (progressive rendering)
     const artistInfoRequests = recs.map((r, i) =>
-      apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`)
+      apiFetch(`/api/core/artist/${encodeURIComponent(r.name)}/info`)
         .then(info => ({ success: true, i, info }))
         .catch(e => ({ success: false, i, error: e }))
     );
@@ -334,7 +334,7 @@ export async function loadRecs() {
     if (previewEl) {
       const previewItems = recs.slice(0, 8);
       const previewRequests = previewItems.map((r, i) =>
-        apiFetch(`/api/artist/${encodeURIComponent(r.name)}/info`)
+        apiFetch(`/api/core/artist/${encodeURIComponent(r.name)}/info`)
           .then(info => {
             const el = document.getElementById(`recs-thumb-${i}`);
             if (el && info.image) {

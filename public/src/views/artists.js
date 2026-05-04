@@ -186,7 +186,7 @@ async function renderArtistsGrid() {
       // Fetch Last.fm top artists
       let lastfmArtists = {};
       try {
-        const lastfmRes = await apiFetch('/api/top/artists?period=overall');
+        const lastfmRes = await apiFetch('/api/core/top/artists?period=overall');
         if (lastfmRes && Array.isArray(lastfmRes)) {
           lastfmRes.forEach(a => {
             lastfmArtists[a.name.toLowerCase()] = {

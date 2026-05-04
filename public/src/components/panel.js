@@ -26,8 +26,8 @@ export function openArtistPanel(name) {
   }
 
   Promise.allSettled([
-    apiFetch(`/api/artist/${encodeURIComponent(name)}/info`),
-    apiFetch(`/api/artist/${encodeURIComponent(name)}/similar`)
+    apiFetch(`/api/core/artist/${encodeURIComponent(name)}/info`),
+    apiFetch(`/api/core/artist/${encodeURIComponent(name)}/similar`)
   ]).then(([infoR, simR]) => {
     const info    = infoR.status === 'fulfilled' ? infoR.value : {};
     const similar = simR.status === 'fulfilled' ? (simR.value.similar || []) : [];

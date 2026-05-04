@@ -584,7 +584,7 @@ async function renderFeaturedArtist(topArtists) {
   // Fallback naar Last.fm/Deezer als Plex geen albums heeft
   if (!albums.length) {
     try {
-      const artistData  = await apiFetch(`/api/artist/${encodeURIComponent(featuredArtist.name)}`);
+      const artistData  = await apiFetch(`/api/core/artist/${encodeURIComponent(featuredArtist.name)}`);
       const artistAlbums = artistData?.topalbums?.album || artistData?.albums || [];
       albums = artistAlbums.slice(0, 3);
     } catch {
@@ -690,7 +690,7 @@ async function renderRecommendedArtists(topArtistsRaw) {
     if (recommendedList.length === 0) {
       const similarPromises = topArtists.slice(0, 3).map(async (a) => {
         try {
-          const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`, {
+          const data = await apiFetch(`/api/core/artist/${encodeURIComponent(a.name)}/similar`, {
             signal: AbortSignal.timeout(5000)
           });
           return {
@@ -883,7 +883,7 @@ async function loadDailyMixFeaturing(topArtists) {
       const timeout = setTimeout(() => controller.abort(), 5000);
 
       try {
-        const data = await apiFetch(`/api/artist/${encodeURIComponent(a.name)}/similar`, {
+        const data = await apiFetch(`/api/core/artist/${encodeURIComponent(a.name)}/similar`, {
           signal: controller.signal
         });
         clearTimeout(timeout);
@@ -1149,7 +1149,7 @@ async function loadAndRenderGenres(period) {
 
     // FALLBACK: Last.fm groepering op topTag
     if (!genres) {
-      const data = await apiFetch(`/api/top/artists?period=${period}`);
+      const data = await apiFetch(`/api/core/top/artists?period=${period}`);
       const artists = (data?.topartists?.artist || []).slice(0, 8);
 
       // Groepeer op topTag, tel playcounts op
@@ -1356,15 +1356,15 @@ async function reloadStats(period) {
     } else {
       // Fallback naar Last.fm
       [topArtists, topTracks] = await Promise.all([
-        apiFetch(`/api/topartists?period=${period}`).catch(() => null),
-        apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
+        apiFetch(`/api/core/top/artists?period=${period}`).catch(() => null),
+        apiFetch(`/api/core/top/tracks?period=${period}`).catch(() => null),
       ]);
     }
   } catch {
     // Last.fm fallback bij fout
     [topArtists, topTracks] = await Promise.all([
-      apiFetch(`/api/topartists?period=${period}`).catch(() => null),
-      apiFetch(`/api/toptracks?period=${period}`).catch(() => null),
+      apiFetch(`/api/core/top/artists?period=${period}`).catch(() => null),
+      apiFetch(`/api/core/top/tracks?period=${period}`).catch(() => null),
     ]);
   }
 
@@ -1509,7 +1509,7 @@ async function resolveUsername() {
   // Probeer state eerst (al geladen via loadUser())
   if (state.user?.name) return state.user.name;
   try {
-    const data = await apiFetch('/api/user');
+    const data = await apiFetch('/api/core/user');
     return data?.user?.name || data?.name || null;
   } catch {
     return null;
@@ -1569,8 +1569,8 @@ export async function loadHome() {
     apiFetch('/api/plex/stats?period=7day').catch(() => null),
     apiFetch('/api/wishlist').catch(() => null),
     apiFetch('/api/core/releases').catch(() => null),
-    apiFetch('/api/user').catch(() => null),  // For Last.fm status
-    apiFetch('/api/loved').catch(() => null),  // For loved tracks
+    apiFetch('/api/core/user').catch(() => null),  // For Last.fm status
+    apiFetch('/api/core/loved').catch(() => null),  // For loved tracks
   ]);
 
   // Fallback naar Last.fm als Plex stats niet beschikbaar zijn
@@ -1582,9 +1582,9 @@ export async function loadHome() {
   } else {
     // Last.fm fallback
     [topArtistsRaw, topTracksRaw, recentRaw] = await Promise.all([
-      apiFetch('/api/topartists?period=7day').catch(() => null),
-      apiFetch('/api/toptracks?period=7day').catch(() => null),
-      apiFetch('/api/recent?limit=200').catch(() => null),
+      apiFetch('/api/core/top/artists?period=7day').catch(() => null),
+      apiFetch('/api/core/top/tracks?period=7day').catch(() => null),
+      apiFetch('/api/core/recent?limit=200').catch(() => null),
     ]);
   }
 
@@ -1632,7 +1632,7 @@ export async function loadHome() {
     } catch {
       // Stap 3: Pure Last.fm fallback
       try {
-        const lastfmRecent = await apiFetch('/api/recent?limit=200');
+        const lastfmRecent = await apiFetch('/api/core/recent?limit=200');
         activityMatrixTracks = lastfmRecent?.recenttracks?.track || tracks;
       } catch {
         // Gebruik bestaande tracks als alles faalt

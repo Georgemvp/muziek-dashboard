@@ -1336,7 +1336,7 @@ export async function loadTopArtists(period) {
     const cacheKey = `topartists:${period}`;
     let d = getCached(cacheKey, 5 * 60 * 1000);
     if (!d) {
-      d = await apiFetch(`/api/topartists?period=${period}`, { signal });
+      d = await apiFetch(`/api/core/top/artists?period=${period}`, { signal });
       if (signal?.aborted) return;
       setCache(cacheKey, d);
     }
@@ -1365,7 +1365,7 @@ export async function loadTopArtists(period) {
 
     // Parallel fetch artist images met Promise.allSettled() (progressive rendering)
     const artistImageRequests = artists.map((a, i) =>
-      apiFetch(`/api/artist/${encodeURIComponent(a.name)}/info`)
+      apiFetch(`/api/core/artist/${encodeURIComponent(a.name)}/info`)
         .then(info => {
           if (info.image) {
             const el = document.getElementById(`agp-${i}`);
@@ -1422,7 +1422,7 @@ export async function loadLoved() {
   try {
     let d = getCached('loved', 10 * 60 * 1000);
     if (!d) {
-      d = await apiFetch('/api/loved', { signal });
+      d = await apiFetch('/api/core/loved', { signal });
       if (signal?.aborted) return;
       setCache('loved', d);
     }

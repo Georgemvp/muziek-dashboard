@@ -112,7 +112,7 @@ export async function loadUser() {
     // TTL: 10 minuten
     let d = getCached('user', 10 * 60 * 1000);
     if (!d) {
-      d = await apiFetch('/api/user');
+      d = await apiFetch('/api/core/user');
       setCache('user', d);
     }
 

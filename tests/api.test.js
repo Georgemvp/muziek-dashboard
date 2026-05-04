@@ -60,37 +60,99 @@ describe('GET /health', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// Last.fm endpoints
+// Last.fm redirect-stubs (gemigreerd naar /api/core/*)
+// ══════════════════════════════════════════════════════════════════════════
+// Deze routes zijn stubs die doorverwijzen naar de Python Core backend.
+// We controleren dat ze een 302 redirect teruggeven naar /api/core/*.
+
+describe('GET /api/user (redirect-stub)', () => {
+  it('geeft 302 redirect naar /api/core/user', async () => {
+    const res = await request(app).get('/api/user').redirects(0);
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.location?.includes('/api/core/user'), 'redirect moet naar /api/core/user wijzen');
+  });
+});
+
+describe('GET /api/recent (redirect-stub)', () => {
+  it('geeft 302 redirect naar /api/core/recent', async () => {
+    const res = await request(app).get('/api/recent').redirects(0);
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.location?.includes('/api/core/recent'), 'redirect moet naar /api/core/recent wijzen');
+  });
+});
+
+describe('GET /api/topartists (redirect-stub)', () => {
+  it('geeft 302 redirect naar /api/core/top/artists', async () => {
+    const res = await request(app).get('/api/topartists?period=7day').redirects(0);
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.location?.includes('/api/core/top/artists'), 'redirect moet naar /api/core/top/artists wijzen');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Last.fm Core endpoints (Python backend)
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('GET /api/user', () => {
-  it('geeft 200 met een .user object', async () => {
-    const res = await request(app).get('/api/user');
-    assert.equal(res.status, 200);
-    assert.ok(res.body.user, 'response moet een .user property hebben');
-    assert.ok(typeof res.body.user.name === 'string', '.user.name moet een string zijn');
+describe('GET /api/core/user', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait (CI-omgeving)', async () => {
+    const res = await request(app).get('/api/core/user');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
   });
 });
 
-describe('GET /api/recent', () => {
-  it('geeft 200 met een .recenttracks property', async () => {
-    const res = await request(app).get('/api/recent');
-    assert.equal(res.status, 200);
-    assert.ok(res.body.recenttracks, 'response moet .recenttracks bevatten');
+describe('GET /api/core/recent', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/recent');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
   });
 });
 
-describe('GET /api/topartists', () => {
-  it('geeft 200 met .topartists voor period=7day', async () => {
-    const res = await request(app).get('/api/topartists?period=7day');
-    assert.equal(res.status, 200);
-    assert.ok(res.body.topartists, 'response moet .topartists bevatten');
+describe('GET /api/core/top/artists', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/top/artists');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
   });
+});
 
-  it('gebruikt standaard period=7day als geen query-parameter opgegeven', async () => {
-    const res = await request(app).get('/api/topartists');
-    assert.equal(res.status, 200);
-    assert.ok(res.body.topartists, 'response moet .topartists bevatten');
+describe('GET /api/core/top/tracks', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/top/tracks');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
+  });
+});
+
+describe('GET /api/core/top/albums', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/top/albums');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
+  });
+});
+
+describe('GET /api/core/loved', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/loved');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
+  });
+});
+
+describe('GET /api/core/artist/search', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/artist/search?q=test');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
+  });
+});
+
+describe('GET /api/core/spotify/status', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/spotify/status');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
+  });
+});
+
+describe('GET /api/core/spotify/recs', () => {
+  it('geeft 502 of 503 als de Python Core backend niet draait', async () => {
+    const res = await request(app).get('/api/core/spotify/recs?mood=chill');
+    assert.ok(res.status === 502 || res.status === 503, `verwacht 502/503, kreeg: ${res.status}`);
   });
 });
 
@@ -432,23 +494,11 @@ describe('GET /api/plex/status', () => {
 // Zoeken
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('GET /api/search', () => {
-  it('geeft 200 met een .results array', async () => {
-    const res = await request(app).get('/api/search?q=test');
-    assert.equal(res.status, 200);
-    assert.ok(Array.isArray(res.body.results), '.results moet een array zijn');
-  });
-
-  it('geeft lege .results voor een te korte query (< 2 tekens)', async () => {
-    const res = await request(app).get('/api/search?q=a');
-    assert.equal(res.status, 200);
-    assert.deepEqual(res.body.results, []);
-  });
-
-  it('geeft lege .results als geen query opgegeven', async () => {
-    const res = await request(app).get('/api/search');
-    assert.equal(res.status, 200);
-    assert.deepEqual(res.body.results, []);
+describe('GET /api/search (redirect-stub)', () => {
+  it('geeft 302 redirect naar /api/core/artist/search', async () => {
+    const res = await request(app).get('/api/search?q=test').redirects(0);
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.location?.includes('/api/core/artist/search'), 'redirect naar /api/core/artist/search');
   });
 });
 
@@ -655,14 +705,14 @@ describe('POST /api/orpheus/job/:id/stop', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe('Cache-Control headers', () => {
-  it('/api/user heeft een Cache-Control header', async () => {
-    const res = await request(app).get('/api/user');
-    assert.ok(res.headers['cache-control'], 'Cache-Control header moet aanwezig zijn');
+  it('/api/user geeft 302 redirect (gemigreerd naar /api/core/user)', async () => {
+    const res = await request(app).get('/api/user').redirects(0);
+    assert.equal(res.status, 302, '/api/user moet 302 redirect zijn');
   });
 
-  it('/api/recent heeft een Cache-Control header', async () => {
-    const res = await request(app).get('/api/recent');
-    assert.ok(res.headers['cache-control'], 'Cache-Control header moet aanwezig zijn');
+  it('/api/recent geeft 302 redirect (gemigreerd naar /api/core/recent)', async () => {
+    const res = await request(app).get('/api/recent').redirects(0);
+    assert.equal(res.status, 302, '/api/recent moet 302 redirect zijn');
   });
 
   it('/api/plex/status heeft een Cache-Control header', async () => {

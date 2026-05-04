@@ -86,23 +86,26 @@ def get_cache(key: str, max_age_ms: float = float("inf")) -> Any | None:
     -------
     De gedeserialiseerde waarde, of None als niet gevonden / verlopen.
     """
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT data, updated_at FROM cache WHERE key = ?", (key,)
-        ).fetchone()
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT data, updated_at FROM cache WHERE key = ?", (key,)
+            ).fetchone()
 
-        if row is None:
-            return None
-
-        if max_age_ms != float("inf"):
-            age_ms = int(time.time() * 1000) - row["updated_at"]
-            if age_ms > max_age_ms:
+            if row is None:
                 return None
 
-        try:
-            return json.loads(row["data"])
-        except (json.JSONDecodeError, TypeError):
-            return None
+            if max_age_ms != float("inf"):
+                age_ms = int(time.time() * 1000) - row["updated_at"]
+                if age_ms > max_age_ms:
+                    return None
+
+            try:
+                return json.loads(row["data"])
+            except (json.JSONDecodeError, TypeError):
+                return None
+    except sqlite3.OperationalError:
+        return None
 
 
 def set_cache(key: str, data: Any) -> None:
@@ -116,12 +119,15 @@ def set_cache(key: str, data: Any) -> None:
     now_ms = int(time.time() * 1000)
     data_str = json.dumps(data, ensure_ascii=False)
 
-    with get_db() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO cache (key, data, updated_at) VALUES (?, ?, ?)",
-            (key, data_str, now_ms),
-        )
-        conn.commit()
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO cache (key, data, updated_at) VALUES (?, ?, ?)",
+                (key, data_str, now_ms),
+            )
+            conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 # ── Enrichment data ────────────────────────────────────────────────────────────

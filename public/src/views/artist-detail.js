@@ -33,7 +33,7 @@ export async function loadArtistDetail() {
 
   // ── STAP 1: Laad snel /api/artist/:name/info en render hero + albums ────
   try {
-    const info = await apiFetch(`/api/artist/${encodeURIComponent(artistName)}/info`);
+    const info = await apiFetch(`/api/core/artist/${encodeURIComponent(artistName)}/info`);
 
     // Render hero + albums direct (niet showLoading() die hele pagina blokkeert)
     renderHeroAndAlbums(artistName, info);
@@ -154,7 +154,7 @@ async function loadAdditionalSections(artistName, info) {
   // Load all sections in parallel
   const [wikipediaData, similarData, gapsData, tracksData] = await Promise.allSettled([
     apiFetch(`/api/artist/${encodeURIComponent(artistName)}/wikipedia`).catch(() => null),
-    apiFetch(`/api/artist/${encodeURIComponent(artistName)}/similar`).catch(() => null),
+    apiFetch(`/api/core/artist/${encodeURIComponent(artistName)}/similar`).catch(() => null),
     apiFetch(`/api/gaps/${encodeURIComponent(artistName)}`).catch(() => null),
     apiFetch(`/api/artist/${encodeURIComponent(artistName)}/tracks`).catch(() => null),
   ]);
