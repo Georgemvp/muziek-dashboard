@@ -17,3 +17,8 @@ lyricsgenius==3.0.1          # Genius worker
 # ── Native download clients ────────────────────────────────────────────────────
 pycryptodome==3.21.0         # Blowfish + AES decryptie voor deezer_download_client.py
 yt-dlp>=2024.12.13           # YouTube audio downloader voor youtube_client.py
+
+# ── Post-processing pipeline ───────────────────────────────────────────────────
+mutagen==1.47.0              # Tag writing: MP3 (ID3), FLAC, OGG, M4A — tag_writer.py
+#   AcoustID fingerprinting gebruikt fpcalc binary (libchromaprint-tools in Dockerfile)
+#   ReplayGain + lossy conversie gebruiken ffmpeg binary (al aanwezig in Docker image)
