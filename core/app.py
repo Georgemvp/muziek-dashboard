@@ -48,11 +48,15 @@ def create_app() -> Flask:
     )
     app.logger.setLevel(log_level)
 
-    # ── Blueprints: Last.fm & Spotify routes ─────────────────────────────────
-    from core.routes.lastfm import lastfm_bp
-    from core.routes.spotify import spotify_bp
+    # ── Blueprints ────────────────────────────────────────────────────────────
+    from core.routes.lastfm    import lastfm_bp
+    from core.routes.spotify   import spotify_bp
+    from core.routes.plex      import plex_bp
+    from core.routes.downloads import downloads_bp
     app.register_blueprint(lastfm_bp)
     app.register_blueprint(spotify_bp)
+    app.register_blueprint(plex_bp)
+    app.register_blueprint(downloads_bp)
 
     # ── Health endpoint ────────────────────────────────────────────────────────
     @app.get("/api/core/health")
@@ -724,6 +728,20 @@ def create_app() -> Flask:
             app.logger.error("GET /api/core/stats/timeline mislukt: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    # ── Periodieke Plex sync (elke 30 minuten) ────────────────────────────────
+    def _schedule_plex_sync(flask_app) -> None:
+        def _run():
+            while True:
+                time.sleep(30 * 60)
+                flask_app.logger.debug("Core: achtergrond Plex sync...")
+                try:
+                    import core.plex_service as plex_svc
+                    plex_svc.sync_library(True)
+                except Exception as exc:
+                    flask_app.logger.warning("Core: periodieke Plex sync mislukt: %s", exc)
+        t = threading.Thread(target=_run, name="plex-sync-bg", daemon=True)
+        t.start()
+
     # ── Background thread: Plex sync + discovery init ─────────────────────────
     # Wacht 15 seconden zodat de database-verbinding en enrichment workers
     # eerst kunnen opstarten. Identiek aan initDiscover/initGaps/initReleases.
@@ -737,10 +755,15 @@ def create_app() -> Flask:
         except Exception as exc:
             app.logger.warning("Core: genre whitelist seeding mislukt: %s", exc)
         try:
-            import core.plex_client as plex
-            plex.sync()
+            import core.plex_client as plex_client
+            plex_client.sync()
         except Exception as exc:
-            app.logger.warning("Core: Plex sync bij startup mislukt: %s", exc)
+            app.logger.warning("Core: Plex (discovery) sync bij startup mislukt: %s", exc)
+        try:
+            import core.plex_service as plex_svc
+            plex_svc.sync_library(True)
+        except Exception as exc:
+            app.logger.warning("Core: Plex (service) sync bij startup mislukt: %s", exc)
         try:
             from core.discovery import builder
             builder.init(delay_seconds=0)
@@ -751,6 +774,8 @@ def create_app() -> Flask:
             manager.start_all(blocking=False)
         except Exception as exc:
             app.logger.warning("Core: enrichment workers starten mislukt: %s", exc)
+        # ── Achtergrond-sync Plex elke 30 minuten ──────────────────────────────
+        _schedule_plex_sync(app)
 
     startup_thread = threading.Thread(
         target=_startup_background,

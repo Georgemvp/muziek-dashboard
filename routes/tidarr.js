@@ -1,49 +1,55 @@
-// ── Tidarr API Routes ─────────────────────────────────────────────────────────
+// ── Tidarr routes — stub die naar Python Core doorverwijst ─────────────────────
+//
+// /api/tidarr/* → /api/core/download/* (via Python Core orchestrator)
+// /api/tidarr/stream → SSE proxy naar Tidarr direct (blijft hier)
+// /api/downloads, /api/download → ongewijzigd (SQLite-backed Node endpoints)
 
 const logger = require('../logger');
 const { sendError } = require('./helpers');
+const { Readable } = require('stream');
+
+const CORE_BASE   = (process.env.CORE_URL   || 'http://localhost:5001').replace(/\/$/, '');
+const TIDARR_BASE = (process.env.TIDARR_URL || 'http://localhost:8484').replace(/\/$/, '');
+
+async function forwardToCore(req, res, corePath) {
+  const qs  = new URLSearchParams(req.query).toString();
+  const url = `${CORE_BASE}${corePath}${qs ? `?${qs}` : ''}`;
+
+  const fetchOpts = {
+    method: req.method,
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(30_000),
+  };
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+    fetchOpts.body = JSON.stringify(req.body);
+  }
+  try {
+    const upstream = await fetch(url, fetchOpts);
+    res.status(upstream.status);
+    const ct = upstream.headers.get('content-type');
+    if (ct) res.setHeader('Content-Type', ct);
+    const cc = upstream.headers.get('cache-control');
+    if (cc) res.setHeader('Cache-Control', cc);
+    Readable.from(upstream.body).pipe(res);
+  } catch (e) {
+    logger.warn({ err: e.message, url }, 'Tidarr Core forward mislukt');
+    if (!res.headersSent) res.status(502).json({ error: 'Core backend niet bereikbaar', reason: e.message });
+  }
+}
 
 module.exports = function(app, deps) {
   const {
-    searchTidal, findBestAlbum, findTopAlbums, addToQueue, getQueue, getHistory,
-    removeFromQueue, getTidarrStatus, triggerPlexScan, addDownload, getDownloads,
-    getDownloadKeys, removeDownload, getCache, setCache
+    addDownload, getDownloads, getDownloadKeys, removeDownload
   } = deps;
 
-  // ── /api/tidarr/status ────────────────────────────────────────────────────
-  app.get('/api/tidarr/status', async (req, res) => {
-    try {
-      const result = await getTidarrStatus();
-      res.set('Cache-Control', 'private, max-age=60');
-      res.json(result);
-    }
-    catch (e) {
-      res.set('Cache-Control', 'private, max-age=60');
-      res.status(500).json({ connected: false, reason: e.message });
-    }
-  });
+  // ── /api/tidarr/status → Core download status ────────────────────────────
+  app.get('/api/tidarr/status', (req, res) => forwardToCore(req, res, '/api/core/download/status'));
 
-  // ── /api/tidarr/search ───────────────────────────────────────────────────
-  app.get('/api/tidarr/search', async (req, res) => {
-    const q = (req.query.q || '').trim();
-    if (q.length < 2) {
-      res.set('Cache-Control', 'private, max-age=300');
-      return res.json({ results: [] });
-    }
-    try {
-      const result = await searchTidal(q);
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(result);
-    }
-    catch (e) {
-      res.set('Cache-Control', 'private, max-age=300');
-      res.status(500).json({ error: e.message, results: [] });
-    }
-  });
+  // ── /api/tidarr/search → Core download search ────────────────────────────
+  app.get('/api/tidarr/search', (req, res) => forwardToCore(req, res, '/api/core/download/search'));
 
-  // ── /api/tidarr/find ─────────────────────────────────────────────────────
-  // Slim album-zoeken met meerdere strategieën en fuzzy matching.
-  // Geeft het best passende album terug, of 404 als niets gevonden.
+  // ── /api/tidarr/find & /api/tidarr/candidates ────────────────────────────
+  // Directe Tidarr endpoints: behoud via Core search (beste match).
   app.get('/api/tidarr/find', async (req, res) => {
     const artist = (req.query.artist || '').trim();
     const album  = (req.query.album  || '').trim();
@@ -51,22 +57,25 @@ module.exports = function(app, deps) {
       res.set('Cache-Control', 'private, max-age=300');
       return res.status(400).json({ error: 'album is verplicht' });
     }
+    // Forward naar Core search en pak het beste resultaat
     try {
-      const match = await findBestAlbum(artist, album);
-      if (!match) {
+      const qs  = new URLSearchParams({ q: `${artist} ${album}`, type: 'album' }).toString();
+      const url = `${CORE_BASE}/api/core/download/search?${qs}`;
+      const r   = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      const data = await r.json();
+      const results = data.results || [];
+      if (!results.length) {
         res.set('Cache-Control', 'private, max-age=300');
         return res.status(404).json({ error: 'Niet gevonden', artist, album });
       }
       res.set('Cache-Control', 'private, max-age=300');
-      res.json(match);
+      res.json(results[0]);
     } catch (e) {
       res.set('Cache-Control', 'private, max-age=300');
       res.status(500).json({ error: e.message });
     }
   });
 
-  // ── /api/tidarr/candidates ───────────────────────────────────────────────
-  // Geeft de top-3 kandidaten terug zodat de frontend een keuze-dialog kan tonen.
   app.get('/api/tidarr/candidates', async (req, res) => {
     const artist = (req.query.artist || '').trim();
     const album  = (req.query.album  || '').trim();
@@ -75,7 +84,11 @@ module.exports = function(app, deps) {
       return res.status(400).json({ error: 'album is verplicht' });
     }
     try {
-      const candidates = await findTopAlbums(artist, album, 3);
+      const qs  = new URLSearchParams({ q: `${artist} ${album}`, type: 'album' }).toString();
+      const url = `${CORE_BASE}/api/core/download/search?${qs}`;
+      const r   = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      const data = await r.json();
+      const candidates = (data.results || []).slice(0, 3);
       if (!candidates.length) {
         res.set('Cache-Control', 'private, max-age=300');
         return res.status(404).json({ error: 'Niet gevonden', artist, album });
@@ -88,73 +101,55 @@ module.exports = function(app, deps) {
     }
   });
 
-  // ── /api/tidarr/download ─────────────────────────────────────────────────
+  // ── /api/tidarr/download → Core download start ───────────────────────────
   app.post('/api/tidarr/download', async (req, res) => {
     const { url, type, title, artist, id, quality } = req.body || {};
     if (!url) return res.status(400).json({ error: 'url is verplicht' });
-    const validQualities = ['max', 'high', 'normal', 'low'];
-    const q = validQualities.includes(quality) ? quality : null;
+
+    // Vertaal tidarr-download naar Core download request
     try {
-      const result = await addToQueue(url, type || 'album', title || '', artist || '', id || '', q);
-      // Trigger Plex library scan na succesvolle toevoeging aan wachtrij
-      triggerPlexScan().catch(e => logger.warn({ err: e }, 'Plex scan trigger mislukt'));
-      // Sla op in de persistente download-geschiedenis
-      addDownload({ tidal_id: id || null, artist: artist || '', title: title || '', url, quality: q || process.env.LOCK_QUALITY || 'high' });
-      res.json({ ok: true, result });
+      const r = await fetch(`${CORE_BASE}/api/core/download`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: artist || '', album: title || '', type: type || 'album', quality: quality || 'flac', source: 'tidarr' }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await r.json();
+      // Sla ook op in legacy downloads tabel
+      try { addDownload({ tidal_id: id || null, artist: artist || '', title: title || '', url, quality: quality || 'high' }); } catch {}
+      res.json({ ok: true, result: data });
     } catch (e) { sendError(res, 500, e.message); }
   });
 
-  // ── /api/tidarr/queue ────────────────────────────────────────────────────
-  app.get('/api/tidarr/queue', async (req, res) => {
-    try {
-      const result = await getQueue();
-      res.set('Cache-Control', 'private, max-age=60');
-      res.json(result);
-    }
-    catch (e) {
-      res.set('Cache-Control', 'private, max-age=60');
-      res.status(500).json({ error: e.message, items: [] });
-    }
-  });
+  // ── /api/tidarr/queue ─────────────────────────────────────────────────────
+  app.get('/api/tidarr/queue', (req, res) => forwardToCore(req, res, '/api/core/download/queue'));
 
-  // ── /api/tidarr/queue/:id ────────────────────────────────────────────────
   app.delete('/api/tidarr/queue/:id', async (req, res) => {
     try {
-      const result = await removeFromQueue(req.params.id);
-      res.json({ ok: true, result });
+      const r = await fetch(`${TIDARR_BASE}/api/queue/${req.params.id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      res.json({ ok: r.ok });
     } catch (e) { sendError(res, 500, e.message); }
   });
 
-  // ── /api/tidarr/history ──────────────────────────────────────────────────
-  app.get('/api/tidarr/history', async (req, res) => {
-    try {
-      const result = await getHistory();
-      res.set('Cache-Control', 'private, max-age=300');
-      res.json(result);
-    }
-    catch (e) {
-      res.set('Cache-Control', 'private, max-age=300');
-      res.status(500).json({ error: e.message, items: [] });
-    }
-  });
+  // ── /api/tidarr/history ───────────────────────────────────────────────────
+  app.get('/api/tidarr/history', (req, res) => forwardToCore(req, res, '/api/core/download/history'));
 
-  // ── /api/tidarr/stream ───────────────────────────────────────────────────
-  // Tidarr SSE-proxy: stuurt real-time queue updates door naar de browser
+  // ── /api/tidarr/stream — SSE proxy blijft direct naar Tidarr ─────────────
   app.get('/api/tidarr/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const tidarrBase = (process.env.TIDARR_URL || 'http://localhost:8484').replace(/\/$/, '');
-    const apiKey     = process.env.TIDARR_API_KEY || '';
-    const sseUrl     = `${tidarrBase}/api/stream-processing${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`;
-
-    const ac = new AbortController();
+    const apiKey  = process.env.TIDARR_API_KEY || '';
+    const sseUrl  = `${TIDARR_BASE}/api/stream-processing${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`;
+    const ac      = new AbortController();
     req.on('close', () => ac.abort());
 
-    // Stuur elke 25s een keepalive comment zodat de verbinding open blijft
-    // en ERR_INCOMPLETE_CHUNKED_ENCODING wordt voorkomen bij idle streams.
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) res.write(': keepalive\n\n');
     }, 25_000);
@@ -173,16 +168,13 @@ module.exports = function(app, deps) {
     if (!res.writableEnded) res.end();
   });
 
-  // ── /api/downloads ───────────────────────────────────────────────────────
-  // Download-geschiedenis (persistente SQLite-opslag)
-
+  // ── /api/downloads — persistente download-geschiedenis (SQLite, ongewijzigd) ─
   app.get('/api/downloads', (req, res) => {
     try {
       const result = getDownloads();
       res.set('Cache-Control', 'private, max-age=300');
       res.json(result);
-    }
-    catch (e) {
+    } catch (e) {
       res.set('Cache-Control', 'private, max-age=300');
       res.status(500).json({ error: e.message });
     }
@@ -193,8 +185,7 @@ module.exports = function(app, deps) {
       const result = [...getDownloadKeys()];
       res.set('Cache-Control', 'private, max-age=300');
       res.json(result);
-    }
-    catch (e) {
+    } catch (e) {
       res.set('Cache-Control', 'private, max-age=300');
       res.status(500).json({ error: e.message });
     }
