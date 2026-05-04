@@ -645,10 +645,18 @@ def update_download_job(job_id: int, status: str, source_used: str | None = None
     now = int(time.time())
     parts = ["status = ?"]
     vals: list = [status]
-    if source_used  is not None: parts.append("source_used = ?");  vals.append(source_used)
-    if attempts     is not None: parts.append("attempts = ?");     vals.append(attempts)
-    if error_log    is not None: parts.append("error_log = ?");    vals.append(error_log)
-    if file_path    is not None: parts.append("file_path = ?");    vals.append(file_path)
+    if source_used is not None:
+        parts.append("source_used = ?")
+        vals.append(source_used)
+    if attempts is not None:
+        parts.append("attempts = ?")
+        vals.append(attempts)
+    if error_log is not None:
+        parts.append("error_log = ?")
+        vals.append(error_log)
+    if file_path is not None:
+        parts.append("file_path = ?")
+        vals.append(file_path)
     if status in ("completed", "failed"):
         parts.append("completed_at = ?")
         vals.append(now)

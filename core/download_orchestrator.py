@@ -7,13 +7,13 @@ en slaat job-status op in de gedeelde SQLite DB.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
-from typing import Any
 
 import core.database as db
-import core.tidarr_client  as tidarr
 import core.orpheus_client as orpheus
+import core.tidarr_client as tidarr
 from core.plex_service import _fuzzy_score
 
 log = logging.getLogger(__name__)
@@ -187,10 +187,7 @@ def download(artist: str, album: str = "", track: str = "",
     priority = _get_source_priority()
     hybrid   = _is_hybrid_mode()
 
-    if source == "auto":
-        sources_to_try = [s for s in priority if _is_source_enabled(s)]
-    else:
-        sources_to_try = [source]
+    sources_to_try = [s for s in priority if _is_source_enabled(s)] if source == "auto" else [source]
 
     if not sources_to_try:
         db.update_download_job(job_id, "failed", error_log="Geen download-bronnen geconfigureerd")
@@ -213,7 +210,7 @@ def download(artist: str, album: str = "", track: str = "",
 
             db.update_download_job(job_id, "completed", source_used=src,
                                    attempts=attempts, error_log=None)
-            try:
+            with contextlib.suppress(Exception):
                 db.add_download_record(
                     tidal_id=result.get("url") or "",
                     artist=result.get("artist") or artist,
@@ -223,8 +220,6 @@ def download(artist: str, album: str = "", track: str = "",
                     source=src,
                     platform=src[len("orpheus_"):] if src.startswith("orpheus_") else "tidal",
                 )
-            except Exception:
-                pass
             _source_errors.pop(src, None)
             log.info("✓ Download succesvol via %s — job %d", src, job_id)
             return {"id": job_id, "status": "completed", "source": src, "result": result}
