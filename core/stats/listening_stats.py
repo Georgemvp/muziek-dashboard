@@ -11,8 +11,7 @@ Ondersteunde perioden (zelfde als Last.fm API):
 
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -50,12 +49,12 @@ def _lfm(method: str, extra: dict) -> dict:
     return data
 
 
-def _norm_period(period: Optional[str]) -> str:
+def _norm_period(period: str | None) -> str:
     p = (period or "1month").lower()
     return p if p in VALID_PERIODS else "1month"
 
 
-def _period_seconds(period: str) -> Optional[int]:
+def _period_seconds(period: str) -> int | None:
     return {
         "7day":    7  * 86400,
         "1month":  30 * 86400,
@@ -65,7 +64,7 @@ def _period_seconds(period: str) -> Optional[int]:
     }[period]
 
 
-def _first_image(images: list, size: str = "medium") -> Optional[str]:
+def _first_image(images: list, size: str = "medium") -> str | None:
     """Geef de URL van het eerste afbeelding met de opgegeven maat."""
     for img in images:
         if img.get("size") == size and img.get("#text"):
@@ -82,7 +81,7 @@ def _as_list(value) -> list:
 
 # ── Publieke functies ──────────────────────────────────────────────────────────
 
-def get_overview(period: Optional[str] = None) -> dict:
+def get_overview(period: str | None = None) -> dict:
     """
     Gecombineerd overzicht: totaal plays, luistertijd, unieke artiesten.
 
@@ -135,7 +134,7 @@ def get_overview(period: Optional[str] = None) -> dict:
         }
 
 
-def get_top_artists(period: Optional[str] = None, limit: int = 20) -> dict:
+def get_top_artists(period: str | None = None, limit: int = 20) -> dict:
     """
     Top artiesten voor de opgegeven periode.
 
@@ -170,7 +169,7 @@ def get_top_artists(period: Optional[str] = None, limit: int = 20) -> dict:
         return {"artists": []}
 
 
-def get_top_albums(period: Optional[str] = None, limit: int = 10) -> dict:
+def get_top_albums(period: str | None = None, limit: int = 10) -> dict:
     """
     Top albums voor de opgegeven periode.
 
@@ -204,7 +203,7 @@ def get_top_albums(period: Optional[str] = None, limit: int = 10) -> dict:
         return {"albums": []}
 
 
-def get_top_tracks(period: Optional[str] = None, limit: int = 10) -> dict:
+def get_top_tracks(period: str | None = None, limit: int = 10) -> dict:
     """
     Top tracks voor de opgegeven periode.
 
@@ -238,7 +237,7 @@ def get_top_tracks(period: Optional[str] = None, limit: int = 10) -> dict:
         return {"tracks": []}
 
 
-def get_genres(period: Optional[str] = None) -> dict:
+def get_genres(period: str | None = None) -> dict:
     """
     Genre-breakdown op basis van enrichment-data van top-artiesten.
 
@@ -286,7 +285,7 @@ def get_genres(period: Optional[str] = None) -> dict:
         return {"labels": [], "values": []}
 
 
-def get_timeline(period: Optional[str] = None) -> dict:
+def get_timeline(period: str | None = None) -> dict:
     """
     Plays-per-tijdseenheid voor de opgegeven periode.
 
@@ -351,7 +350,7 @@ def _build_timeline(
         dated = [t for t in tracks if t.get("date")]
         for track in dated:
             ts = int(track["date"]["uts"])
-            dt = datetime.utcfromtimestamp(ts)
+            dt = datetime.fromtimestamp(ts, tz=UTC)
 
             if granularity == "day":
                 label = dt.strftime("%-d %b")

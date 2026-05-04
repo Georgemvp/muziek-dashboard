@@ -8,7 +8,6 @@ Standaardlijst (~270 genres) wordt automatisch ingezaaid als de tabel leeg is.
 """
 
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -138,7 +137,7 @@ def get_whitelist_set() -> set[str]:
 
 def filter_genres(
     genre_list: list[str],
-    whitelist: Optional[set[str]] = None,
+    whitelist: set[str] | None = None,
 ) -> list[str]:
     """
     Filter genres die niet in de whitelist staan (case-insensitive matching).
