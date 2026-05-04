@@ -2,18 +2,32 @@
 download_orchestrator.py — Unified download orchestrator voor de Core backend.
 
 Port van services/downloadOrchestrator.js: accepteert generieke quality-waarden
-(flac / mp3_320 / mp3_128), probeert bronnen in volgorde (Tidarr → OrpheusDL)
-en slaat job-status op in de gedeelde SQLite DB.
+(flac / mp3_320 / mp3_128), probeert bronnen in volgorde en slaat job-status op
+in de gedeelde SQLite DB.
+
+Bronnen:
+  tidarr        — Tidarr (Tidal)
+  soulseek      — Soulseek via slskd REST API
+  hifi          — HiFi publieke API instances (lossless, geen account)
+  orpheus_*     — OrpheusDL platforms (tidal, qobuz, deezer, spotify, ...)
+
+Priority volgorde is configureerbaar via:
+  1. DB-instelling  download.source_priority  (UI drag-to-reorder)
+  2. Env var        DOWNLOAD_SOURCES          (komma-gescheiden, bijv. soulseek,tidarr,hifi)
+  3. Ingebouwde     DEFAULT_SOURCE_PRIORITY
 """
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
 import core.database as db
 import core.tidarr_client  as tidarr
 import core.orpheus_client as orpheus
+import core.soulseek_client as soulseek
+import core.hifi_client     as hifi_client
 from core.plex_service import _fuzzy_score
 
 log = logging.getLogger(__name__)
@@ -23,6 +37,10 @@ _QUALITY_MAP: dict[str, dict[str, str]] = {
     "tidarr":           {"flac": "lossless", "mp3_320": "high",     "mp3_128": "low",
                          "atmos": "atmos",   "hifi": "hifi",        "lossless": "lossless",
                          "high": "high",     "low": "low"},
+    "soulseek":         {"flac": "flac",     "mp3_320": "mp3_320",  "mp3_128": "mp3_128",
+                         "lossless": "flac", "high": "mp3_320",     "low": "mp3_128"},
+    "hifi":             {"flac": "flac",     "mp3_320": "flac",     "mp3_128": "flac",
+                         "lossless": "flac", "high": "flac"},
     "orpheus_tidal":    {"flac": "hifi",     "mp3_320": "high",     "mp3_128": "low",
                          "hifi": "hifi",     "lossless": "lossless","high": "high", "low": "low", "atmos": "atmos"},
     "orpheus_qobuz":    {"flac": "hifi",     "mp3_320": "high",     "mp3_128": "high",
@@ -41,8 +59,11 @@ _QUALITY_MAP: dict[str, dict[str, str]] = {
                          "lossless": "lossless", "high": "high",    "low": "low"},
 }
 
+# Ingebouwde standaard volgorde — overschrijfbaar via DOWNLOAD_SOURCES env var of DB-instelling
 DEFAULT_SOURCE_PRIORITY = [
     "tidarr",
+    "soulseek",
+    "hifi",
     "orpheus_qobuz",
     "orpheus_tidal",
     "orpheus_deezer",
@@ -53,6 +74,14 @@ DEFAULT_SOURCE_PRIORITY = [
     "orpheus_beatsource",
     "orpheus_youtube",
 ]
+
+# Pas DEFAULT_SOURCE_PRIORITY aan op basis van DOWNLOAD_SOURCES env var
+_ENV_SOURCES = os.environ.get("DOWNLOAD_SOURCES") or ""
+if _ENV_SOURCES.strip():
+    _env_list = [s.strip() for s in _ENV_SOURCES.split(",") if s.strip()]
+    # Voeg bronnen toe die in env staan maar nog niet in de lijst (inclusief orpheus_* varianten)
+    _extra = [s for s in DEFAULT_SOURCE_PRIORITY if s not in _env_list]
+    DEFAULT_SOURCE_PRIORITY = _env_list + _extra
 
 _PLATFORM_LABELS = {
     "tidal": "Tidal", "qobuz": "Qobuz", "deezer": "Deezer",
@@ -117,6 +146,59 @@ def _download_via_tidarr(artist: str, album: str, track: str,
             "url": best.get("url")}
 
 
+# ── Soulseek download ──────────────────────────────────────────────────────────
+
+def _download_via_soulseek(artist: str, album: str, track: str,
+                            item_type: str, quality: str) -> dict:
+    query = f"{artist} {track}".strip() if item_type == "track" else f"{artist} {album}".strip()
+    results = soulseek.search(query)
+    if not results:
+        raise RuntimeError(f"Soulseek: geen resultaten voor '{query}'")
+
+    # Kies het best gerangschikte bestand
+    best = results[0]
+    transfer_id = soulseek.download(best)
+    log.info("Soulseek: download gestart — transfer %s", transfer_id)
+    return {
+        "source":      "soulseek",
+        "title":       track or album,
+        "artist":      artist,
+        "url":         best.filename,
+        "transferId":  transfer_id,
+        "peer":        best.username,
+    }
+
+
+# ── HiFi download ──────────────────────────────────────────────────────────────
+
+def _download_via_hifi(artist: str, album: str, track: str,
+                        item_type: str, quality: str) -> dict:
+    query = f"{artist} {track}".strip() if item_type == "track" else f"{artist} {album}".strip()
+    want_title = track if item_type == "track" else album
+
+    results = hifi_client.search(query, artist=artist)
+    if not results:
+        raise RuntimeError(f"HiFi: geen resultaten voor '{query}'")
+
+    # Kies de best overeenkomende track op titel-score
+    scored = sorted(
+        results,
+        key=lambda t: -(
+            _fuzzy_score(artist, t.artist) + _fuzzy_score(want_title, t.title)
+        ) / 2,
+    )
+    best = scored[0]
+
+    output_dir = db.get_setting("download", "downloadPath") or "/data/downloads/hifi"
+    path = hifi_client.download(best, output_dir)
+    return {
+        "source": "hifi",
+        "title":  best.title,
+        "artist": best.artist,
+        "url":    path,
+    }
+
+
 # ── OrpheusDL download ────────────────────────────────────────────────────────
 
 def _download_via_orpheus(artist: str, album: str, track: str,
@@ -133,7 +215,6 @@ def _download_via_orpheus(artist: str, album: str, track: str,
     if not results:
         raise RuntimeError(f"OrpheusDL ({platform}): geen resultaten voor '{query}'")
 
-    # Score resultaten op artiest + titel match
     want_title = track if item_type == "track" else album
     scored = sorted(
         [
@@ -205,6 +286,10 @@ def download(artist: str, album: str = "", track: str = "",
         try:
             if src == "tidarr":
                 result = _download_via_tidarr(artist, album, track, item_type, quality)
+            elif src == "soulseek":
+                result = _download_via_soulseek(artist, album, track, item_type, quality)
+            elif src == "hifi":
+                result = _download_via_hifi(artist, album, track, item_type, quality)
             elif src.startswith("orpheus_"):
                 platform = src[len("orpheus_"):]
                 result   = _download_via_orpheus(artist, album, track, item_type, quality, platform)
@@ -221,7 +306,8 @@ def download(artist: str, album: str = "", track: str = "",
                     url=result.get("url") or "",
                     quality=_map_quality(src, quality),
                     source=src,
-                    platform=src[len("orpheus_"):] if src.startswith("orpheus_") else "tidal",
+                    platform=(src[len("orpheus_"):] if src.startswith("orpheus_")
+                              else src),
                 )
             except Exception:
                 pass
@@ -260,6 +346,32 @@ def search_all(query: str, search_type: str = "album") -> dict:
                 data = tidarr.search(q)
                 for r in (data.get("results") or []):
                     all_results.append({**r, "source": "tidarr", "sourceName": "Tidal (Tidarr)"})
+            elif src == "soulseek":
+                results = soulseek.search(q, timeout=15)
+                for r in results[:20]:  # Begrens Soulseek resultaten
+                    all_results.append({
+                        "source":     "soulseek",
+                        "sourceName": "Soulseek",
+                        "title":      r.filename.rsplit("/", 1)[-1],
+                        "artist":     "",
+                        "filename":   r.filename,
+                        "size":       r.size,
+                        "bitrate":    r.bitrate,
+                        "peer":       r.username,
+                        "score":      r.score,
+                    })
+            elif src == "hifi":
+                tracks = hifi_client.search(q)
+                for t in tracks:
+                    all_results.append({
+                        "source":     "hifi",
+                        "sourceName": "HiFi",
+                        "title":      t.title,
+                        "artist":     t.artist,
+                        "album":      t.album,
+                        "format":     t.format,
+                        "trackId":    t.track_id,
+                    })
             elif src.startswith("orpheus_"):
                 platform = src[len("orpheus_"):]
                 data = orpheus.search(q, platform, search_type)
@@ -276,7 +388,8 @@ def search_all(query: str, search_type: str = "album") -> dict:
 def get_source_status() -> dict:
     sources = []
     priority = _get_source_priority()
-    for src in DEFAULT_SOURCE_PRIORITY:
+    all_sources = DEFAULT_SOURCE_PRIORITY
+    for src in all_sources:
         enabled   = _is_source_enabled(src)
         errors    = _source_errors.get(src, {"count": 0})
         available = None
@@ -285,13 +398,27 @@ def get_source_status() -> dict:
                 if src == "tidarr":
                     s = tidarr.get_status()
                     available = s.get("connected")
+                elif src == "soulseek":
+                    s = soulseek.get_status()
+                    available = s.get("connected")
+                elif src == "hifi":
+                    s = hifi_client.get_status()
+                    available = s.get("connected")
                 elif src.startswith("orpheus_"):
                     s = orpheus.get_status()
                     available = s.get("connected")
             except Exception:
                 available = False
 
-        label = "Tidal (Tidarr)" if src == "tidarr" else _platform_label(src[len("orpheus_"):])
+        if src == "tidarr":
+            label = "Tidal (Tidarr)"
+        elif src == "soulseek":
+            label = "Soulseek (slskd)"
+        elif src == "hifi":
+            label = "HiFi"
+        else:
+            label = _platform_label(src[len("orpheus_"):])
+
         sources.append({
             "name":       src,
             "label":      label,

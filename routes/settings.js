@@ -30,6 +30,13 @@ module.exports = function(app, deps) {
     orpheus: {
       url: process.env.ORPHEUS_URL || 'http://localhost:5000',
     },
+    slskd: {
+      url:     process.env.SLSKD_URL     || 'http://localhost:5030',
+      api_key: process.env.SLSKD_API_KEY ? '••••' : null,
+    },
+    hifi: {
+      instances: process.env.HIFI_INSTANCES || '',
+    },
   };
 
   // ── GET /api/settings ─────────────────────────────────────────────────────

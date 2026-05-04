@@ -405,6 +405,54 @@ function renderVerbindingen() {
         ).join('')}
       </div>
     </div>
+
+    <div class="settings-card">
+      <h3 class="settings-card-title">Soulseek (slskd)</h3>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>URL</strong><span>slskd instance adres</span></div>
+          <div class="settings-row-control">
+            <input class="settings-input" type="url" value="${esc(_env.slskd && _env.slskd.url || 'http://localhost:5030')}" readonly>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>API Key</strong></div>
+          <div class="settings-row-control">
+            <input class="settings-input settings-input-sm" type="text" value="${esc(_env.slskd && _env.slskd.api_key || '—')}" readonly>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Verbindingsstatus</strong></div>
+          <div class="settings-row-control">
+            <span id="slskd-status-dot">${statusDot('idle')}</span>
+            <button class="settings-btn settings-btn-secondary" id="test-slskd-btn">Test</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3 class="settings-card-title">HiFi</h3>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <strong>Instances</strong>
+            <span>Komma-gescheiden lijst van publieke HiFi API URL's (via HIFI_INSTANCES in .env)</span>
+          </div>
+          <div class="settings-row-control">
+            <input class="settings-input settings-input-full" type="text"
+              value="${esc(_env.hifi && _env.hifi.instances || '—')}" readonly>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Verbindingsstatus</strong></div>
+          <div class="settings-row-control">
+            <span id="hifi-status-dot">${statusDot('idle')}</span>
+            <button class="settings-btn settings-btn-secondary" id="test-hifi-btn">Test</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -413,13 +461,15 @@ function renderDownloads() {
   const priority = (() => {
     try {
       const raw = get('downloads', 'sourcePriority', null);
-      return raw ? JSON.parse(raw) : ['orpheus', 'tidarr'];
-    } catch { return ['orpheus', 'tidarr']; }
+      return raw ? JSON.parse(raw) : ['tidarr', 'soulseek', 'hifi', 'orpheus'];
+    } catch { return ['tidarr', 'soulseek', 'hifi', 'orpheus']; }
   })();
 
   const sources = [
-    { id: 'orpheus', label: 'OrpheusDL', badge: '9 platforms' },
-    { id: 'tidarr',  label: 'Tidarr',    badge: 'Tidal' },
+    { id: 'tidarr',   label: 'Tidarr',    badge: 'Tidal' },
+    { id: 'soulseek', label: 'Soulseek',   badge: 'slskd' },
+    { id: 'hifi',     label: 'HiFi',       badge: 'Lossless' },
+    { id: 'orpheus',  label: 'OrpheusDL',  badge: '9 platforms' },
   ];
 
   // Sorteer op prioriteit
@@ -1516,6 +1566,26 @@ function attachListeners() {
     try {
       const data = await apiFetch('/api/orpheus/status');
       if (dot) dot.innerHTML = statusDot(data?.online ? 'ok' : 'error');
+    } catch { if (dot) dot.innerHTML = statusDot('error'); }
+  });
+
+  document.getElementById('test-slskd-btn')?.addEventListener('click', async () => {
+    const dot = document.getElementById('slskd-status-dot');
+    if (dot) dot.innerHTML = statusDot('loading');
+    try {
+      const data = await apiFetch('/api/core/download/status');
+      const src = (data?.sources || []).find(s => s.name === 'soulseek');
+      if (dot) dot.innerHTML = statusDot(src?.available ? 'ok' : 'error');
+    } catch { if (dot) dot.innerHTML = statusDot('error'); }
+  });
+
+  document.getElementById('test-hifi-btn')?.addEventListener('click', async () => {
+    const dot = document.getElementById('hifi-status-dot');
+    if (dot) dot.innerHTML = statusDot('loading');
+    try {
+      const data = await apiFetch('/api/core/download/status');
+      const src = (data?.sources || []).find(s => s.name === 'hifi');
+      if (dot) dot.innerHTML = statusDot(src?.available ? 'ok' : 'error');
     } catch { if (dot) dot.innerHTML = statusDot('error'); }
   });
 
